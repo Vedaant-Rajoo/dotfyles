@@ -59,7 +59,7 @@ brew "supabase/tap/supabase", trusted: true
 # tldr: simplified and community-driven man pages
 brew "tldr"
 # Opeencode
-brew "sst/tap/opencode", trusted: true
+brew "anomalyco/tap/opencode", trusted: true
 # pnpm: fast, disk space efficient package manager
 brew "pnpm"
 # OpenAI's coding agent that runs in your terminal
