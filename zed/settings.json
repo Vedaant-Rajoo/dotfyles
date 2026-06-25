@@ -1,0 +1,71 @@
+// Zed settings
+//
+// For information on how to configure Zed, see the Zed
+// documentation: https://zed.dev/docs/configuring-zed
+//
+// To see all of Zed's default settings without changing your
+// custom settings, run `zed: open default settings` from the
+// command palette (cmd-shift-p / ctrl-shift-p)
+{
+  "edit_predictions": {
+    "provider": "copilot"
+  },
+  "project_panel": {
+    "dock": "left"
+  },
+  "outline_panel": {
+    "dock": "left"
+  },
+  "collaboration_panel": {
+    "dock": "left"
+  },
+  "agent": {
+    "dock": "right",
+    "favorite_models": [],
+    "model_parameters": []
+  },
+  "git_panel": {
+    "dock": "left"
+  },
+  "context_servers": {
+    "mcp-server-context7": {
+      "enabled": true,
+      "remote": false,
+      "settings": {
+        "context7_api_key": ""
+      }
+    }
+  },
+  "which_key": {
+    "enabled": true
+  },
+  "autosave": {
+    "after_delay": {
+      "milliseconds": 1000
+    }
+  },
+  "redact_private_values": true,
+  "icon_theme": "Material Icon Theme",
+  "session": {
+    "trust_all_worktrees": true
+  },
+  "agent_servers": {
+    "auggie": {
+      "type": "registry"
+    },
+    "claude-acp": {
+      "type": "registry"
+    },
+    "codex-acp": {
+      "type": "registry"
+    }
+  },
+  "base_keymap": "Cursor",
+  "ui_font_size": 16,
+  "buffer_font_size": 15,
+  "theme": {
+    "mode": "system",
+    "light": "Gruvbox Light",
+    "dark": "Tokyo Night",
+  },
+}

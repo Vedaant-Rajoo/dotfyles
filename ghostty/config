@@ -1,0 +1,47 @@
+theme = Poimandres
+auto-update-channel = tip
+
+# --- clipboard -----------------------------------------------------------
+# Copy selected text to the system clipboard (Cmd+V elsewhere).
+copy-on-select = clipboard
+
+font-family = JetBrainsMono Nerd Font
+font-family-bold = JetBrainsMono Nerd Font
+font-family-italic = JetBrainsMono Nerd Font
+font-family-bold-italic = JetBrainsMono Nerd Font
+font-size = 14
+font-thicken = true
+font-thicken-strength = 64
+
+background-opacity = 0.95
+background-blur = macos-glass-regular
+
+
+# --- window & padding ------------------------------------------------------
+# generous padding prevents text from touching edges — especially important
+# with cmux's vertical tab sidebar on the left.
+window-padding-x = 16
+window-padding-y = 12
+window-padding-balance = true
+window-padding-color = extend
+
+# default window size: comfortable for 2 side-by-side splits
+window-height = 35
+window-width = 120
+
+# transparent titlebar integrates cleanly with cmux's own chrome
+macos-titlebar-style = transparent
+window-decoration = auto
+window-theme = dark
+window-colorspace = display-p3
+window-save-state = always
+
+# critical: hide ghostty's tab bar — cmux provides its own vertical tabs
+window-show-tab-bar = never
+
+# --- split panes -----------------------------------------------------------
+# dimmed unfocused panes help you instantly see which agent you're
+# interacting with. essential when running 3-4 agents side by side.
+unfocused-split-opacity = 0.65
+unfocused-split-fill = 181825
+split-divider-color = 45475a

@@ -1,0 +1,8 @@
+status is-interactive
+or return
+
+# Pure prompt: keep it two-line and avoid release checks on shell startup.
+set -g pure_enable_single_line_prompt false
+set -g fish_transient_prompt 1
+set -g pure_threshold_command_duration 3
+set -g pure_check_for_new_release false

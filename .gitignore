@@ -1,0 +1,35 @@
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+*.swn
+*.bak
+*.backup
+*.orig
+*.tmp
+.99.debug
+
+# --- Backup directories ---
+*-backup*/
+.codex-backup*/
+
+# --- Secrets / auth (never public) ---
+github-copilot/
+
+# --- Nested upstream repo ---
+init.lua/
+
+# --- Machine-local runtime state ---
+fish/fish_variables
+nvim/tmp/
+zed/prompts/
+
+# --- Large / downloaded app data ---
+raycast-x/extensions/
+node_modules/
+
+# --- Logs / caches (defensive) ---
+*.log
+.cache/
