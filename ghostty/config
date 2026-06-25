@@ -1,47 +1,39 @@
-theme = Poimandres
-auto-update-channel = tip
-
-# --- clipboard -----------------------------------------------------------
-# Copy selected text to the system clipboard (Cmd+V elsewhere).
-copy-on-select = clipboard
-
+# Fonts, underlines
+# font-family = SFMono Nerd Font
+# font-style-italic = Regular Italic
+# font-family = Lilex Nerd Font
 font-family = JetBrainsMono Nerd Font
 font-family-bold = JetBrainsMono Nerd Font
 font-family-italic = JetBrainsMono Nerd Font
 font-family-bold-italic = JetBrainsMono Nerd Font
-font-size = 14
-font-thicken = true
-font-thicken-strength = 64
+font-size = 16
+font-feature = -calt, -liga, -dlig
+adjust-cell-height = -1
+cursor-style = block
+cursor-style-blink = true
 
-background-opacity = 0.95
-background-blur = macos-glass-regular
-
-
-# --- window & padding ------------------------------------------------------
-# generous padding prevents text from touching edges — especially important
-# with cmux's vertical tab sidebar on the left.
-window-padding-x = 16
-window-padding-y = 12
+# Windows, colors and styles
+macos-titlebar-style = hidden
+window-padding-y = 2
+window-padding-x = 2
 window-padding-balance = true
-window-padding-color = extend
+theme = Rose Pine
+# background = #000000
+# background-blur = 30
+# background-opacity = 0.80
 
-# default window size: comfortable for 2 side-by-side splits
-window-height = 35
-window-width = 120
+# macOS stuff
+macos-option-as-alt = left
+macos-window-shadow = false
+shell-integration-features = no-cursor
 
-# transparent titlebar integrates cleanly with cmux's own chrome
-macos-titlebar-style = transparent
-window-decoration = auto
-window-theme = dark
-window-colorspace = display-p3
-window-save-state = always
+# Keys
+# Ascii device control codes: https://www3.rocketsoftware.com/bluezone/help/v42/en/bzadmin/APPENDIX_C/ASCII_Character_Set.htm
+keybind = alt+left=unbind
+keybind = alt+right=unbind
+keybind = super+enter=unbind
 
-# critical: hide ghostty's tab bar — cmux provides its own vertical tabs
-window-show-tab-bar = never
-
-# --- split panes -----------------------------------------------------------
-# dimmed unfocused panes help you instantly see which agent you're
-# interacting with. essential when running 3-4 agents side by side.
-unfocused-split-opacity = 0.65
-unfocused-split-fill = 181825
-split-divider-color = 45475a
+# Tmux-sessionizer: Ctrl-f+S (.zshrc binds this to `s\n`, since `s` is an alias
+# for tmux-sessionizer)
+# tmux-sessionizer
+keybind = cmd+s=text:\x06\x53

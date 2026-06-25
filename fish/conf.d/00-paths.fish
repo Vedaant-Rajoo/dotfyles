@@ -7,6 +7,7 @@
 fish_add_path -gP /opt/homebrew/bin
 fish_add_path -gP /usr/local/go/bin
 fish_add_path -gP $HOME/.local/bin
+fish_add_path -gP $HOME/.config/bin
 
 if test -d $HOME/.node_modules/bin
 	fish_add_path -gP $HOME/.node_modules/bin

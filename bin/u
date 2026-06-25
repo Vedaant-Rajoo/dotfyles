@@ -1,0 +1,63 @@
+#!/usr/bin/env fish
+# Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
+
+gum style \
+    --foreground 12 --border-foreground 12 --border double \
+    --margin "1 0" --padding "0 2" \
+    '
+██╗   ██╗██████╗ ██████╗  █████╗ ████████╗███████╗
+██║   ██║██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝
+██║   ██║██████╔╝██║  ██║███████║   ██║   █████╗
+██║   ██║██╔═══╝ ██║  ██║██╔══██║   ██║   ██╔══╝
+╚██████╔╝██║     ██████╔╝██║  ██║   ██║   ███████╗
+ ╚═════╝ ╚═╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
+ '
+
+set -l NOW (date +%Y-%m-%d-%H-%M-%S)
+echo -e "$NOW\n" >>/tmp/u-$NOW.txt
+
+if not gum confirm "Do you wish to update your scripts?"
+    exit 1
+end
+
+gum spin --spinner globe --title "🪟 tpm plugins updating..." --show-output -- ~/.config/tmux/plugins/tpm/bin/update_plugins all >>/tmp/u-$NOW.txt
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 🪟 tpm plugins updated"
+
+gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 💤 lazy.nvim synced"
+
+gum spin --spinner globe --title "🧰 mason.nvim updating" -- nvim --headless "+MasonUpdate" +qa
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 🧰 mason.nvim updated"
+
+gum spin --spinner globe --title "🌳 nvim-treesitter updating" -- nvim --headless "+TSUpdate" +qa
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 🌳 nvim-treesitter updated"
+
+gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update >>/tmp/u-$NOW.txt
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 🍻 brew updated"
+
+set -l OUTDATED (brew outdated)
+echo $OUTDATED >>/tmp/u-$NOW.txt
+
+if test -n "$OUTDATED"
+    gum spin --spinner globe --title "🍻 brew upgrading" --show-output -- brew upgrade >>/tmp/u-$NOW.txt
+    echo "" >>/tmp/u-$NOW.txt
+    echo "✅ 🍻 brew upgraded"
+
+    gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all >>/tmp/u-$NOW.txt
+    echo "" >>/tmp/u-$NOW.txt
+    echo "✅ 🍻 brew cleaned up"
+else
+    echo "No outdated brew packages" >>/tmp/u-$NOW.txt
+end
+
+gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor >>/tmp/u-$NOW.txt
+echo "" >>/tmp/u-$NOW.txt
+echo "✅ 🍻 brew doctored"
+
+echo "✅ 🧾 logged to /tmp/u-$NOW.txt"
+bat /tmp/u-$NOW.txt

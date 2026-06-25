@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+
+import sys
+import textwrap
+
+insert_mode_tips = [
+    ["<C-t>", "Indents the current line"],
+    ["<C-d>", "De-indents the current line"],
+    ["<C-y>", "Inserts character above"],
+    ["<C-e>", "Inserts character below"],
+    ["<C-i>", "Inserts tab"],
+    ["<C-w>", "Delete word"],
+    ["<C-h>", "Delete character"],
+    [
+        "<C-o>",
+        "One-shot mode: go into normal mode, execute a command and go back to insert mode",
+    ],
+    ["<C-m>", "Insert new-line"],
+    ["<C-g>j", "Go one line above"],
+    ["<C-g>k", "Go one line below"],
+    ["<C-a>", "Inserts last inserted text"],
+    ["<C-u>", "Delete until start of line"],
+    ["<C-x><C-p>", "Completes words that are used in the current file"],
+    ["<C-x><C-n>", "Completes with completion suggestion"],
+]
+
+command_mode_tips = [
+    ["<C-r><C-w>", "Inserts the word the cursor is on"],
+    ["<C-r><C-a>", "Inserts the WORD the cursor is on"],
+    ["<C-r>/", "Inserts the last searched pattern"],
+    ["<C-d>", "Displays all available commands"],
+    [":s//newword", "Replaces the last searched word"],
+    [":g", "Execute command on lines where pattern matches"],
+    [":v", "Execute command on lines where pattern does not match"],
+    [":g!", "Execute command on lines where pattern does not match"],
+    [":s//&-s", "Appends -s to pattern"],
+    [":g//norm", "norm can be a flag to go into normal mode"],
+    [
+        ":args",
+        "Loads files where you can perform a command. :args file1.md file2.md. Or :args *.md",
+    ],
+    [":argdo", "Executes commands on :args files. :argdo %s/apple/orange/g | update"],
+    [":read", "Puts the contents of the given file into the buffer"],
+    [
+        ":redir",
+        "Writes messages from vim and put them in files, registers, variables (:redir > out.txt, :redir @+)",
+    ],
+    [":redir END", "Ends redir command"],
+]
+
+normal_mode_tips = [
+    ["@:", "Repeats the last : command"],
+    ["gi", "Go to last insert position"],
+    ["ga", "Ascii represnetation of current character"],
+    ["g8", "Hex representation of current character"],
+    ["<C-w>H", "Move horizontal split to vertical split"],
+    ["<C-w>K", "Move vertical split to horizontal split"],
+    ["<C-w>o", "Close all other windows"],
+    ["<C-w>T", "Move split into a new tab"],
+    ["<C-w>x", "Swap splits"],
+    ["<C-w>=", "Resize splits equally"],
+    ["<C-]>", "Navigate to tag. Useful on man pages to navigate to tags (links)"],
+]
+
+key_width = 12
+desc_width = 60
+padding = 2
+
+
+def print_border():
+    print("+" + "-" * (key_width + padding) + "+" + "-" * (desc_width + padding) + "+")
+
+
+def print_title(title: str):
+    total_width = key_width + padding + desc_width + padding + 1
+    print("+" + "-" * (total_width) + "+")
+    print("|" + title.center(total_width) + "|")
+
+
+def print_body(key: str, desc: str):
+    wrapped = textwrap.wrap(desc, width=desc_width)
+    for i, line in enumerate(wrapped):
+        if i == 0:
+            print("| " + key.ljust(key_width) + " | " + line.ljust(desc_width) + " |")
+        else:
+            print("| " + " " * key_width + " | " + line.ljust(desc_width) + " |")
+
+
+def print_header():
+    print_border()
+    print(
+        "| " + "Key".ljust(key_width) + " | " + "Description".ljust(desc_width) + " |"
+    )
+    print_border()
+
+
+def print_tips(tips: list[list[str]], title: str):
+    print_title(title)
+    print_header()
+    for key, desc in tips:
+        print_body(key, desc)
+    print_border()
+    print()
+
+
+if len(sys.argv) == 2:
+    arg = sys.argv[1]
+    if arg == "--insert":
+        print_tips(insert_mode_tips, "Insert mode tips")
+    elif arg == "--command":
+        print_tips(command_mode_tips, "Command mode tips")
+    elif arg == "--normal":
+        print_tips(normal_mode_tips, "Normal mode tips")
+    else:
+        print("Unknown argument: {}".format(arg))
+        print("Valid options: --insert, --command, --normal")
+else:
+    print_tips(insert_mode_tips, "Insert mode tips")
+    print_tips(command_mode_tips, "Command mode tips")
+    print_tips(normal_mode_tips, "Normal mode tips")

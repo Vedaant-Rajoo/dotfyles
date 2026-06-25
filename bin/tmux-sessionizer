@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# tmux-sessionizer — fuzzy-find a project dir and open/switch to a tmux session.
+# Inspired by:
+#   https://github.com/ThePrimeagen/tmux-sessionizer
+#   https://github.com/gonstoll/dotfiles/blob/master/.config/bin/tmux-sessionizer
+
+set -euo pipefail
+
+# Directories to search for projects. Append :DEPTH to override the depth for
+# a single path (e.g. "$HOME/work:3").
+SEARCH_PATHS=(
+    "$HOME/Development"
+    "$HOME/dev"
+    "$HOME/projects"
+    "$HOME/.config"
+)
+DEFAULT_DEPTH=2
+
+find_dirs() {
+    # Existing sessions first, so you can also jump between open ones.
+    if tmux info &>/dev/null; then
+        tmux list-sessions -F '#{session_name}' 2>/dev/null || true
+    fi
+
+    local entry path depth
+    for entry in "${SEARCH_PATHS[@]}"; do
+        path="$entry"
+        depth="$DEFAULT_DEPTH"
+        if [[ "$entry" == *:* ]]; then
+            path="${entry%:*}"
+            depth="${entry##*:}"
+        fi
+        [[ -d "$path" ]] || continue
+        if command -v fd &>/dev/null; then
+            fd . "$path" --min-depth 1 --max-depth "$depth" --type d
+        else
+            find "$path" -mindepth 1 -maxdepth "$depth" -type d
+        fi
+    done
+}
+
+if [[ $# -eq 1 ]]; then
+    selected="$1"
+else
+    selected="$(find_dirs | fzf --prompt='  ' --height=40% --reverse --border || true)"
+fi
+
+[[ -z "$selected" ]] && exit 0
+
+# A path (contains "/") becomes a new session named after its basename.
+# Otherwise treat the selection as an already-existing session name.
+if [[ "$selected" == */* ]]; then
+    selected_name="$(basename "$selected" | tr ' .:' '___')"
+    start_dir="$selected"
+else
+    selected_name="$selected"
+    start_dir="$HOME"
+fi
+
+tmux_running="$(pgrep tmux || true)"
+
+# Outside tmux with no server running: bootstrap a detached session.
+if [[ -z "${TMUX:-}" && -z "$tmux_running" ]]; then
+    tmux new-session -ds "$selected_name" -c "$start_dir"
+fi
+
+# Create the session if it doesn't exist yet.
+if ! tmux has-session -t="$selected_name" 2>/dev/null; then
+    tmux new-session -ds "$selected_name" -c "$start_dir"
+fi
+
+# Attach (outside tmux) or switch (inside tmux).
+if [[ -z "${TMUX:-}" ]]; then
+    tmux attach-session -t "$selected_name"
+else
+    tmux switch-client -t "$selected_name"
+fi
