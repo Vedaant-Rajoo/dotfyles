@@ -34,7 +34,3 @@ if command -q nvim
     alias vim nvim
     alias vi nvim
 end
-
-if command -q claude
-    abbr --add -g csol 'claude --model=gpt-5.6-sol'
-end
