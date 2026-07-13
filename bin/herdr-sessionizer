@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# herdr-sessionizer — fuzzy-find a project dir and open/focus a Herdr workspace.
+# Port of tmux-sessionizer for the Herdr trial (workspaces ≈ sessions).
+
+set -euo pipefail
+
+SEARCH_PATHS=(
+	"$HOME/Development"
+	"$HOME/dev"
+	"$HOME/projects"
+	"$HOME/.config"
+)
+DEFAULT_DEPTH=2
+
+herdr_bin="${HERDR_BIN_PATH:-$(command -v herdr)}"
+if [[ -z "$herdr_bin" ]]; then
+	echo "herdr not found on PATH" >&2
+	exit 1
+fi
+
+ensure_server() {
+	if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
+		return 0
+	fi
+	nohup "$herdr_bin" server >/dev/null 2>&1 &
+	local i
+	for i in $(seq 1 40); do
+		if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
+			return 0
+		fi
+		sleep 0.05
+	done
+	echo "failed to start herdr server" >&2
+	exit 1
+}
+
+workspace_list_json() {
+	"$herdr_bin" workspace list
+}
+
+pane_list_json() {
+	"$herdr_bin" pane list
+}
+
+find_dirs() {
+	# Existing workspaces first (label\tid), then project dirs.
+	if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
+		workspace_list_json | jq -r '
+			.result.workspaces[]?
+			| "\(.label)\tworkspace:\(.workspace_id)"
+		' 2>/dev/null || true
+	fi
+
+	local entry path depth
+	for entry in "${SEARCH_PATHS[@]}"; do
+		path="$entry"
+		depth="$DEFAULT_DEPTH"
+		if [[ "$entry" == *:* ]]; then
+			path="${entry%:*}"
+			depth="${entry##*:}"
+		fi
+		[[ -d "$path" ]] || continue
+		if command -v fd &>/dev/null; then
+			fd . "$path" --min-depth 1 --max-depth "$depth" --type d
+		else
+			find "$path" -mindepth 1 -maxdepth "$depth" -type d
+		fi
+	done
+}
+
+resolve_dir() {
+	(cd "$1" && pwd -P)
+}
+
+workspace_id_for_cwd() {
+	local dir="$1"
+	pane_list_json | jq -r --arg d "$dir" '
+		.result.panes[]?
+		| select(.cwd == $d or .foreground_cwd == $d)
+		| .workspace_id
+	' | head -n 1
+}
+
+workspace_id_for_label() {
+	local label="$1"
+	workspace_list_json | jq -r --arg l "$label" '
+		.result.workspaces[]?
+		| select(.label == $l)
+		| .workspace_id
+	' | head -n 1
+}
+
+focus_workspace() {
+	local id="$1"
+	"$herdr_bin" workspace focus "$id" >/dev/null
+}
+
+create_workspace() {
+	local dir="$1"
+	local label="$2"
+	"$herdr_bin" workspace create --cwd "$dir" --label "$label" --focus >/dev/null
+}
+
+maybe_attach() {
+	# Already inside a Herdr client — focus is enough.
+	[[ -n "${HERDR_ENV:-}" ]] && return 0
+	# Temp sessionizer pane inside Herdr — don't nest another client.
+	[[ -n "${HERDR_SOCKET_PATH:-}" && -n "${HERDR_ACTIVE_PANE_ID:-}" ]] && return 0
+	# Non-interactive callers (scripts, tests) should not try to open the TUI.
+	[[ -t 0 && -t 1 ]] || return 0
+	exec "$herdr_bin"
+}
+
+ensure_server
+
+if [[ $# -eq 1 ]]; then
+	selected="$1"
+else
+	selected="$(
+		find_dirs | fzf --prompt='  ' --height=40% --reverse --border --delimiter=$'\t' --with-nth=1 || true
+	)"
+fi
+
+[[ -z "${selected:-}" ]] && exit 0
+
+# Existing workspace row from fzf: "label<TAB>workspace:ID"
+if [[ "$selected" == *$'\t'workspace:* ]]; then
+	ws_id="${selected##*$'\t'workspace:}"
+	focus_workspace "$ws_id"
+	maybe_attach
+	exit 0
+fi
+
+# Path → focus existing by cwd, else create.
+if [[ "$selected" == */* ]]; then
+	start_dir="$(resolve_dir "$selected")"
+	selected_name="$(basename "$start_dir" | tr ' .:' '___')"
+
+	existing="$(workspace_id_for_cwd "$start_dir" || true)"
+	if [[ -n "$existing" ]]; then
+		focus_workspace "$existing"
+	else
+		create_workspace "$start_dir" "$selected_name"
+	fi
+	maybe_attach
+	exit 0
+fi
+
+# Bare label (CLI arg or legacy): focus by label if present.
+ws_id="$(workspace_id_for_label "$selected" || true)"
+if [[ -n "$ws_id" ]]; then
+	focus_workspace "$ws_id"
+	maybe_attach
+	exit 0
+fi
+
+echo "no herdr workspace named '$selected'" >&2
+exit 1

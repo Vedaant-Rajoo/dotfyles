@@ -1,0 +1,36 @@
+# Herdr trial config (A2 + soft tmux replace).
+# Docs: https://herdr.dev/docs/configuration/
+onboarding = false
+
+[theme]
+name = "rose-pine"
+
+[keys]
+# A2: keep default prefix (ctrl+b), add Herdr's vetted ctrl+alt chords.
+# prefix+? shows the live keymap.
+focus_pane_left = ["prefix+h", "ctrl+alt+h"]
+focus_pane_down = ["prefix+j", "ctrl+alt+j"]
+focus_pane_up = ["prefix+k", "ctrl+alt+k"]
+focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+previous_tab = ["prefix+p", "ctrl+alt+["]
+next_tab = ["prefix+n", "ctrl+alt+]"]
+new_tab = ["prefix+c", "ctrl+alt+c"]
+split_vertical = ["prefix+v", "ctrl+alt+d"]
+split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
+zoom = ["prefix+z", "ctrl+alt+z"]
+
+# Fuzzy project → workspace jumper (also bound in Fish as Ctrl-o).
+[[keys.command]]
+key = "ctrl+alt+s"
+type = "pane"
+command = "$HOME/.config/bin/herdr-sessionizer"
+description = "sessionizer"
+
+[ui]
+hide_tab_bar_when_single_tab = true
+agent_panel_sort = "priority"
+
+[ui.toast]
+# Ghostty supports terminal notifications over the local client.
+delivery = "terminal"
+delay_seconds = 1

@@ -33,3 +33,8 @@ node_modules/
 # --- Logs / caches (defensive) ---
 *.log
 .cache/
+
+# --- Herdr runtime (keep config.toml) ---
+herdr/*.sock
+herdr/session.json
+herdr/session-history.json
