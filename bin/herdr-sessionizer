@@ -18,14 +18,21 @@ if [[ -z "$herdr_bin" ]]; then
 	exit 1
 fi
 
+# Herdr is Rust: never pipe it into grep -q / head — early pipe close → panic.
+server_running() {
+	local out
+	out="$("$herdr_bin" status server 2>/dev/null || true)"
+	[[ "$out" == *'status: running'* ]]
+}
+
 ensure_server() {
-	if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
+	if server_running; then
 		return 0
 	fi
 	nohup "$herdr_bin" server >/dev/null 2>&1 &
 	local i
 	for i in $(seq 1 40); do
-		if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
+		if server_running; then
 			return 0
 		fi
 		sleep 0.05
@@ -35,20 +42,24 @@ ensure_server() {
 }
 
 workspace_list_json() {
-	"$herdr_bin" workspace list
+	"$herdr_bin" workspace list 2>/dev/null
 }
 
 pane_list_json() {
-	"$herdr_bin" pane list
+	"$herdr_bin" pane list 2>/dev/null
 }
 
 find_dirs() {
 	# Existing workspaces first (label\tid), then project dirs.
-	if "$herdr_bin" status server 2>/dev/null | grep -q '^status: running$'; then
-		workspace_list_json | jq -r '
-			.result.workspaces[]?
-			| "\(.label)\tworkspace:\(.workspace_id)"
-		' 2>/dev/null || true
+	if server_running; then
+		local list
+		list="$(workspace_list_json || true)"
+		if [[ -n "$list" ]]; then
+			jq -r '
+				.result.workspaces[]?
+				| "\(.label)\tworkspace:\(.workspace_id)"
+			' <<<"$list" 2>/dev/null || true
+		fi
 	fi
 
 	local entry path depth
@@ -61,9 +72,11 @@ find_dirs() {
 		fi
 		[[ -d "$path" ]] || continue
 		if command -v fd &>/dev/null; then
-			fd . "$path" --min-depth 1 --max-depth "$depth" --type d
+			fd . "$path" --min-depth 1 --max-depth "$depth" --type d \
+				--exclude .git --exclude node_modules
 		else
-			find "$path" -mindepth 1 -maxdepth "$depth" -type d
+			find "$path" -mindepth 1 -maxdepth "$depth" \
+				\( -name .git -o -name node_modules \) -prune -o -type d -print
 		fi
 	done
 }
@@ -74,20 +87,26 @@ resolve_dir() {
 
 workspace_id_for_cwd() {
 	local dir="$1"
-	pane_list_json | jq -r --arg d "$dir" '
+	local list
+	list="$(pane_list_json || true)"
+	[[ -n "$list" ]] || return 0
+	jq -r --arg d "$dir" '
 		.result.panes[]?
 		| select(.cwd == $d or .foreground_cwd == $d)
 		| .workspace_id
-	' | head -n 1
+	' <<<"$list" | head -n 1
 }
 
 workspace_id_for_label() {
 	local label="$1"
-	workspace_list_json | jq -r --arg l "$label" '
+	local list
+	list="$(workspace_list_json || true)"
+	[[ -n "$list" ]] || return 0
+	jq -r --arg l "$label" '
 		.result.workspaces[]?
 		| select(.label == $l)
 		| .workspace_id
-	' | head -n 1
+	' <<<"$list" | head -n 1
 }
 
 focus_workspace() {
