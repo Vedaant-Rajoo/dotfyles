@@ -17,6 +17,7 @@ Thumbs.db
 
 # --- Secrets / auth (never public) ---
 github-copilot/
+fish/local/
 
 # --- Nested upstream repo ---
 init.lua/

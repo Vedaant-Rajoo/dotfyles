@@ -78,6 +78,7 @@ These are **not** tracked (see `.gitignore`). Configure or regenerate on each ma
 | Path | Why |
 |------|-----|
 | `github-copilot/` | OAuth tokens and Copilot app state |
+| `fish/local/` | Machine-local Fish secrets (e.g. Claude Code / CLIProxyAPI auth) |
 | `fish/fish_variables` | Universal variables (Fish writes this at runtime) |
 | `nvim/tmp/` | Neovim session / plugin temp state |
 | `zed/prompts/` | Zed prompt library database (regenerated at runtime) |

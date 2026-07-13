@@ -26,7 +26,15 @@ abbr --add -g gc 'git commit -v'
 abbr --add -g gd 'git diff'
 abbr --add -g gs 'git status --short --branch'
 
+if command -q lazygit
+    abbr --add -g lg lazygit
+end
+
 if command -q nvim
     alias vim nvim
     alias vi nvim
+end
+
+if command -q claude
+    abbr --add -g csol 'claude --model=gpt-5.6-sol'
 end

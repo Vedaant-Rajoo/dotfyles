@@ -24,6 +24,8 @@ brew "gofumpt"
 brew "goimports"
 # Tool for glamorous shell scripts
 brew "gum"
+# Simple terminal UI for git commands
+brew "lazygit"
 # Package manager for the Lua programming language
 brew "luarocks"
 # Ambitious Vim-fork focused on extensibility and agility
