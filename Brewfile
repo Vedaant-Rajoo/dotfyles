@@ -50,8 +50,6 @@ brew "shfmt"
 brew "shellcheck"
 # Opinionated Lua code formatter
 brew "stylua"
-# Terminal multiplexer
-brew "tmux"
 # CLI tool that moves files or folder to the trash
 brew "trash"
 # Shell extension to navigate your filesystem faster

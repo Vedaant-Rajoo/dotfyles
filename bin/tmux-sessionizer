@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-# Soft-replaced by herdr-sessionizer during the Herdr trial.
-# Original tmux implementation lives in git history; tmux/ is left unused.
+# Compatibility stub: tmux is retired, this forwards to herdr-sessionizer.
+# Kept so muscle-memory / external callers of `tmux-sessionizer` still work.
+# The original tmux implementation lives in git history.
 exec "$(dirname "$0")/herdr-sessionizer" "$@"

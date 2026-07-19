@@ -28,7 +28,7 @@ nvim/tmp/
 zed/prompts/
 
 # --- Large / downloaded app data ---
-raycast-x/extensions/
+raycast-x/
 node_modules/
 
 # --- Logs / caches (defensive) ---
@@ -39,3 +39,5 @@ node_modules/
 herdr/*.sock
 herdr/session.json
 herdr/session-history.json
+herdr/release-notes.json
+.claude/plans

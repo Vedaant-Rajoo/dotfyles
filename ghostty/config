@@ -33,6 +33,6 @@ keybind = alt+left=unbind
 keybind = alt+right=unbind
 keybind = super+enter=unbind
 
-# Herdr sessionizer (trial soft-replace for tmux). Prefer Ctrl-o in Fish,
-# or Ctrl-Alt-s inside Herdr. Cmd-s types the command at a shell prompt.
+# Herdr sessionizer. Cmd-s types the command at a shell prompt; also reachable
+# via Ctrl-o in Fish, prefix+f inside Herdr, or the herdr-sessionizer CLI.
 keybind = cmd+s=text:herdr-sessionizer\r

@@ -1,4 +1,4 @@
-# Herdr trial config (A2 + soft tmux replace).
+# Herdr config — primary terminal workspace manager (tmux retired).
 # Docs: https://herdr.dev/docs/configuration/
 onboarding = false
 
@@ -6,8 +6,9 @@ onboarding = false
 name = "rose-pine"
 
 [keys]
-# A2: keep default prefix (ctrl+b), add Herdr's vetted ctrl+alt chords.
-# prefix+? shows the live keymap.
+# ctrl+a prefix; pane/tab/zoom actions also get direct ctrl+alt chords so
+# they work without the prefix. prefix+? shows the live keymap.
+prefix = "ctrl+a"
 focus_pane_left = ["prefix+h", "ctrl+alt+h"]
 focus_pane_down = ["prefix+j", "ctrl+alt+j"]
 focus_pane_up = ["prefix+k", "ctrl+alt+k"]
@@ -19,9 +20,16 @@ split_vertical = ["prefix+v", "ctrl+alt+d"]
 split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
 zoom = ["prefix+z", "ctrl+alt+z"]
 
-# Fuzzy project → workspace jumper (also bound in Fish as Ctrl-o).
+# Agent keyboard navigation over the sidebar agent rows.
+# agent_panel_sort (below) decides their order; these move through them.
+previous_agent = "prefix+shift+k" # up the agent list
+next_agent = "prefix+shift+j"     # down the agent list
+focus_agent = "prefix+alt+1..9"   # jump straight to agent N
+
+# Fuzzy project → workspace jumper. Prefix-only inside Herdr (prefix+f);
+# also reachable from Fish (Ctrl-o), Ghostty (cmd+s), and the CLI.
 [[keys.command]]
-key = "ctrl+alt+s"
+key = "prefix+f"
 type = "pane"
 command = "$HOME/.config/bin/herdr-sessionizer"
 description = "sessionizer"
@@ -29,6 +37,25 @@ description = "sessionizer"
 [ui]
 hide_tab_bar_when_single_tab = true
 agent_panel_sort = "priority"
+
+# Expanded agent-sidebar rows (0.7.4). Tokens: state_icon, state_text,
+# workspace, tab, pane, agent, terminal_title, terminal_title_stripped;
+# pane metadata as $name. Packed (row_gap = 0) keeps the attention queue tight.
+[ui.sidebar.agents]
+row_gap = 0
+rows = [["state_icon", "workspace", "tab"], ["agent", "state_text"]]
+
+# Per-agent override: give Claude panes a third row with the stripped
+# terminal title so the current turn/task is visible in the sidebar.
+[ui.sidebar.agents.rows_by_agent]
+claude = [["state_icon", "workspace", "tab"], ["terminal_title_stripped"], ["agent"]]
+
+# Expanded space-sidebar rows (0.7.4). Tokens: state_icon, state_text,
+# workspace, branch, git_status; workspace metadata as $name. row_gap = 1
+# adds a blank line between spaces (independent from the agents setting above).
+[ui.sidebar.spaces]
+row_gap = 1
+rows = [["state_icon", "workspace"], ["branch", "git_status"]]
 
 [ui.toast]
 # Ghostty supports terminal notifications over the local client.

@@ -20,10 +20,6 @@ if not gum confirm "Do you wish to update your scripts?"
     exit 1
 end
 
-gum spin --spinner globe --title "🪟 tpm plugins updating..." --show-output -- ~/.config/tmux/plugins/tpm/bin/update_plugins all >>/tmp/u-$NOW.txt
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 🪟 tpm plugins updated"
-
 gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 💤 lazy.nvim synced"

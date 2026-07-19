@@ -12,3 +12,10 @@ source ~/.orbstack/shell/init2.fish 2>/dev/null || :
 # bun
 set --export BUN_INSTALL "$HOME/.bun"
 set --export PATH $BUN_INSTALL/bin $PATH
+
+# Claude Code → CLIProxyAPI.
+# Secrets (BASE_URL / AUTH_TOKEN) live in local/ — not versioned.
+set -l secrets $__fish_config_dir/local/claude-code.fish
+if test -f $secrets
+    source $secrets
+end

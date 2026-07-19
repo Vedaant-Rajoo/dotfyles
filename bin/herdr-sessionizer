@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # herdr-sessionizer — fuzzy-find a project dir and open/focus a Herdr workspace.
-# Port of tmux-sessionizer for the Herdr trial (workspaces ≈ sessions).
+# The tmux→Herdr cutover replacement for tmux-sessionizer (workspaces ≈ sessions).
+# Launch surfaces: Fish Ctrl-o, Ghostty cmd+s, prefix+f inside Herdr, or direct CLI.
 
 set -euo pipefail
 
@@ -12,13 +13,36 @@ SEARCH_PATHS=(
 )
 DEFAULT_DEPTH=2
 
-herdr_bin="${HERDR_BIN_PATH:-$(command -v herdr)}"
-if [[ -z "$herdr_bin" ]]; then
-	echo "herdr not found on PATH" >&2
+# Seconds to wait for a freshly-spawned server to report running.
+START_TIMEOUT="${HERDR_SESSIONIZER_START_TIMEOUT:-5}"
+
+die() {
+	echo "herdr-sessionizer: $*" >&2
 	exit 1
+}
+
+# --- Preflight -------------------------------------------------------------
+# Resolve herdr (HERDR_BIN_PATH wins) and hard-fail on any missing dependency.
+herdr_bin="${HERDR_BIN_PATH:-$(command -v herdr || true)}"
+if [[ -z "$herdr_bin" || ! -x "$herdr_bin" ]]; then
+	echo "herdr-sessionizer: 'herdr' not found on PATH (set HERDR_BIN_PATH to override)" >&2
+	exit 127
 fi
 
-# Herdr is Rust: never pipe it into grep -q / head — early pipe close → panic.
+# fzf + jq are required; fd is optional (find fallback below).
+missing=()
+for tool in fzf jq; do
+	command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+	echo "herdr-sessionizer: missing required tool(s): ${missing[*]}" >&2
+	echo "  install them and retry (required: herdr, fzf, jq; optional: fd)" >&2
+	exit 127
+fi
+
+# --- Herdr helpers ---------------------------------------------------------
+# Herdr is Rust: NEVER pipe its CLI output into grep -q / head — an early pipe
+# close can SIGPIPE and panic it. Always capture full output, then parse with jq.
 server_running() {
 	local out
 	out="$("$herdr_bin" status server 2>/dev/null || true)"
@@ -30,15 +54,14 @@ ensure_server() {
 		return 0
 	fi
 	nohup "$herdr_bin" server >/dev/null 2>&1 &
-	local i
-	for i in $(seq 1 40); do
+	local deadline=$(( SECONDS + START_TIMEOUT ))
+	while (( SECONDS < deadline )); do
 		if server_running; then
 			return 0
 		fi
-		sleep 0.05
+		sleep 0.1
 	done
-	echo "failed to start herdr server" >&2
-	exit 1
+	die "herdr server did not come up within ${START_TIMEOUT}s; try 'herdr status' and check herdr-server.log"
 }
 
 workspace_list_json() {
@@ -82,31 +105,35 @@ find_dirs() {
 }
 
 resolve_dir() {
-	(cd "$1" && pwd -P)
+	( cd "$1" 2>/dev/null && pwd -P )
 }
 
+# First workspace id whose pane cwd/foreground_cwd matches $1 (jq first(): no head → no SIGPIPE).
 workspace_id_for_cwd() {
-	local dir="$1"
-	local list
+	local dir="$1" list
 	list="$(pane_list_json || true)"
 	[[ -n "$list" ]] || return 0
 	jq -r --arg d "$dir" '
-		.result.panes[]?
-		| select(.cwd == $d or .foreground_cwd == $d)
-		| .workspace_id
-	' <<<"$list" | head -n 1
+		first(
+			.result.panes[]?
+			| select(.cwd == $d or .foreground_cwd == $d)
+			| .workspace_id
+		) // empty
+	' <<<"$list" 2>/dev/null || true
 }
 
+# First workspace id whose label matches $1.
 workspace_id_for_label() {
-	local label="$1"
-	local list
+	local label="$1" list
 	list="$(workspace_list_json || true)"
 	[[ -n "$list" ]] || return 0
 	jq -r --arg l "$label" '
-		.result.workspaces[]?
-		| select(.label == $l)
-		| .workspace_id
-	' <<<"$list" | head -n 1
+		first(
+			.result.workspaces[]?
+			| select(.label == $l)
+			| .workspace_id
+		) // empty
+	' <<<"$list" 2>/dev/null || true
 }
 
 focus_workspace() {
@@ -115,8 +142,7 @@ focus_workspace() {
 }
 
 create_workspace() {
-	local dir="$1"
-	local label="$2"
+	local dir="$1" label="$2"
 	"$herdr_bin" workspace create --cwd "$dir" --label "$label" --focus >/dev/null
 }
 
@@ -130,6 +156,7 @@ maybe_attach() {
 	exec "$herdr_bin"
 }
 
+# --- Main ------------------------------------------------------------------
 ensure_server
 
 if [[ $# -eq 1 ]]; then
@@ -140,6 +167,7 @@ else
 	)"
 fi
 
+# fzf cancelled / empty selection → soft exit.
 [[ -z "${selected:-}" ]] && exit 0
 
 # Existing workspace row from fzf: "label<TAB>workspace:ID"
@@ -150,12 +178,17 @@ if [[ "$selected" == *$'\t'workspace:* ]]; then
 	exit 0
 fi
 
-# Path → focus existing by cwd, else create.
+# Path → focus an existing workspace (matched by cwd, then label) else create.
 if [[ "$selected" == */* ]]; then
-	start_dir="$(resolve_dir "$selected")"
+	start_dir="$(resolve_dir "$selected" || true)"
+	[[ -n "$start_dir" ]] || die "cannot resolve directory '$selected'"
 	selected_name="$(basename "$start_dir" | tr ' .:' '___')"
 
 	existing="$(workspace_id_for_cwd "$start_dir" || true)"
+	if [[ -z "$existing" ]]; then
+		existing="$(workspace_id_for_label "$selected_name" || true)"
+	fi
+
 	if [[ -n "$existing" ]]; then
 		focus_workspace "$existing"
 	else
@@ -173,5 +206,4 @@ if [[ -n "$ws_id" ]]; then
 	exit 0
 fi
 
-echo "no herdr workspace named '$selected'" >&2
-exit 1
+die "no herdr workspace named '$selected'"
