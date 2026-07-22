@@ -70,11 +70,11 @@ Sign in to GitHub Copilot inside Zed for edit predictions (`edit_predictions.pro
 
 ### Claude Code
 
-Run `bin/claude_link` once after cloning. It symlinks `~/.claude/CLAUDE.md`, `~/.claude/skills`, `~/.claude/statusline-command.sh`, and `~/.claude/settings.json` to their counterparts under `claude/`, and seeds `~/.claude/settings.local.json` from `claude/settings.local.json.example` if it doesn't already exist.
+Run `bin/claude_link` once after cloning. It symlinks `~/.claude/CLAUDE.md`, `~/.claude/skills`, and `~/.claude/statusline-command.sh` to their counterparts under `claude/`, seeds `~/.claude/settings.local.json` from `claude/settings.local.json.example` if needed, and materializes `~/.claude/settings.json` as a regular file.
 
-`claude/settings.json` intentionally omits the top-level `env` block — the CLIProxyAPI auth token, base URL, and default-model vars come from [`fish/local/claude-code.fish`](#machine-local--ignored-files) instead, so the secret has exactly one home.
+`claude/settings.json` intentionally omits the top-level `env` block. Put the CLIProxyAPI auth token, base URL, and default-model vars in machine-local `~/.claude/settings.local.json` (see the example). `claude_link` merges that `env` into live `~/.claude/settings.json`, which is what Claude Code actually injects on every launch — including SDK/IDE and background agents. Mirror the same exports in [`fish/local/claude-code.fish`](#machine-local--ignored-files) for shell tools and scripts; Fish loads that file for interactive and non-interactive sessions.
 
-Because the config is symlinked, editing either `~/.claude/...` or `claude/...` edits the same file — run `git diff` from the repo root to see what changed before committing. Run `bin/claude_link --check` any time to verify the symlinks are still intact (Claude Code occasionally rewrites `settings.json` in place, which can silently replace the symlink with a regular file).
+For the symlinked files, editing either `~/.claude/...` or `claude/...` edits the same file — run `git diff` from the repo root to see what changed before committing. After editing `settings.local.json` or if Claude Code rewrites `settings.json`, re-run `bin/claude_link` (and use `bin/claude_link --check` to verify).
 
 `~/.claude` holds substantially more private state than what's mirrored here — conversation transcripts, telemetry, OAuth/account data, session history — and none of that broader state is meant to ever enter this repo (see the ignore rules in `.gitignore` and `git/ignore`).
 
@@ -104,7 +104,7 @@ These are **not** tracked (see `.gitignore`). Configure or regenerate on each ma
 |------|-----|
 | `github-copilot/` | OAuth tokens and Copilot app state |
 | `fish/local/` | Machine-local Fish secrets (e.g. Claude Code / CLIProxyAPI auth) |
-| `claude/settings.local.json` | Local Claude Code permission allow-list, generated from `claude/settings.local.json.example` |
+| `claude/settings.local.json` | Local Claude Code `env` (CLIProxyAPI) + permission allow-list, generated from `claude/settings.local.json.example` |
 | `fish/fish_variables` | Universal variables (Fish writes this at runtime) |
 | `nvim/tmp/` | Neovim session / plugin temp state |
 | `zed/prompts/` | Zed prompt library database (regenerated at runtime) |

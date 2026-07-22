@@ -3,17 +3,19 @@
 # ~/.config/claude/, so editing either side edits the same file and `git diff`
 # from the repo root shows what changed.
 #
+# settings.json is special: Claude Code only injects `env` from that file (not
+# from ~/.claude/settings.local.json). Secrets stay in settings.local.json;
+# this script materializes ~/.claude/settings.json as a regular file =
+# tracked sanitized settings + `env` merged from settings.local.json.
+#
 # Usage:
-#   claude_link          Create/repair the symlinks (idempotent).
-#   claude_link --check  Report link status only; make no changes.
+#   claude_link          Create/repair the symlinks and materialize settings.
+#   claude_link --check  Report link/settings status only; make no changes.
 #
 # Caveat: Claude Code itself writes settings.json.backup.* files on disk,
-# meaning it rewrites/backs up settings.json at times. Depending on whether
-# it writes in place or replaces the file, that could silently replace the
-# settings.json symlink with a fresh regular file. Run `claude_link --check`
-# occasionally (e.g. after a Claude Code self-update) to catch this; if it
-# reports a broken link, re-run `claude_link` to restore it, then `git diff`
-# from the repo root to see whether anything meaningful changed.
+# meaning it rewrites/backs up settings.json at times. Re-run `claude_link`
+# after a self-update if proxy auth stops working — that re-merges `env`
+# from settings.local.json into the live settings.json.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,7 +35,6 @@ LINKS=(
     "$LIVE_CLAUDE/CLAUDE.md|$REPO_CLAUDE/CLAUDE.md|CLAUDE.md"
     "$LIVE_CLAUDE/skills|$REPO_CLAUDE/skills|skills/"
     "$LIVE_CLAUDE/statusline-command.sh|$REPO_CLAUDE/statusline-command.sh|statusline-command.sh"
-    "$LIVE_CLAUDE/settings.json|$REPO_CLAUDE/settings.json|settings.json"
 )
 
 check_one() {
@@ -77,9 +78,34 @@ link_one() {
 check_local_settings() {
     local live="$LIVE_CLAUDE/settings.local.json"
     if [[ -e "$live" ]]; then
-        echo "OK      settings.local.json (exists, machine-local, not symlinked)"
+        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("env"), dict) and d["env"].get("ANTHROPIC_BASE_URL") and d["env"].get("ANTHROPIC_AUTH_TOKEN") else 1)' "$live"; then
+            echo "OK      settings.local.json (has CLIProxyAPI env)"
+        else
+            echo "BROKEN  settings.local.json (missing env.ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN)"
+        fi
     else
         echo "MISSING settings.local.json (run claude_link to seed from settings.local.json.example)"
+    fi
+}
+
+check_materialized_settings() {
+    local live="$LIVE_CLAUDE/settings.json"
+    local repo="$REPO_CLAUDE/settings.json"
+    if [[ -L "$live" ]]; then
+        echo "BROKEN  settings.json (still a symlink — run claude_link to materialize with env merge)"
+        return
+    fi
+    if [[ ! -e "$live" ]]; then
+        echo "MISSING settings.json"
+        return
+    fi
+    if python3 -c 'import json,sys
+live=json.load(open(sys.argv[1]))
+env=live.get("env") or {}
+sys.exit(0 if env.get("ANTHROPIC_BASE_URL") and env.get("ANTHROPIC_AUTH_TOKEN") else 1)' "$live"; then
+        echo "OK      settings.json (materialized with CLIProxyAPI env)"
+    else
+        echo "BROKEN  settings.json (missing env — run claude_link to re-merge from settings.local.json)"
     fi
 }
 
@@ -91,7 +117,44 @@ bootstrap_local_settings() {
     else
         cp "$example" "$live"
         echo "seeded: settings.local.json from settings.local.json.example"
+        echo "note:   replace REPLACE_WITH_LOCAL_CLIPROXY_TOKEN in $live, then re-run claude_link"
     fi
+}
+
+materialize_settings() {
+    local live="$LIVE_CLAUDE/settings.json"
+    local repo="$REPO_CLAUDE/settings.json"
+    local local_settings="$LIVE_CLAUDE/settings.local.json"
+
+    if [[ ! -f "$local_settings" ]]; then
+        echo "error:  settings.local.json missing — seed it before materializing settings.json" >&2
+        return 1
+    fi
+
+    if [[ -L "$live" ]]; then
+        echo "unlink: settings.json (was symlink -> $(readlink "$live"))"
+        rm "$live"
+    elif [[ -e "$live" ]] && [[ ! -f "$live" ]]; then
+        echo "error:  settings.json exists and is not a regular file" >&2
+        return 1
+    fi
+
+    python3 - "$repo" "$local_settings" "$live" <<'PY'
+import json, sys
+repo_path, local_path, live_path = sys.argv[1:4]
+base = json.load(open(repo_path))
+local = json.load(open(local_path))
+env = local.get("env")
+if not isinstance(env, dict) or not env.get("ANTHROPIC_BASE_URL") or not env.get("ANTHROPIC_AUTH_TOKEN"):
+    raise SystemExit(
+        "settings.local.json must include env.ANTHROPIC_BASE_URL and env.ANTHROPIC_AUTH_TOKEN"
+    )
+base["env"] = env
+with open(live_path, "w", encoding="utf-8") as f:
+    json.dump(base, f, indent=2)
+    f.write("\n")
+PY
+    echo "wrote:  settings.json (sanitized repo settings + env from settings.local.json)"
 }
 
 for entry in "${LINKS[@]}"; do
@@ -105,6 +168,8 @@ done
 
 if [[ "$CHECK" -eq 1 ]]; then
     check_local_settings
+    check_materialized_settings
 else
     bootstrap_local_settings
+    materialize_settings
 fi
