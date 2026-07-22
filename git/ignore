@@ -1,1 +1,27 @@
 **/.claude/settings.local.json
+
+# --- Claude Code: never let sensitive ~/.claude subpaths land in any repo ---
+**/.claude.json
+**/.claude.json.backup.*
+**/.claude/backups/
+**/.claude/projects/
+**/.claude/sessions/
+**/.claude/session-env/
+**/.claude/shell-snapshots/
+**/.claude/daemon/
+**/.claude/daemon.log
+**/.claude/telemetry/
+**/.claude/debug/
+**/.claude/history.jsonl
+**/.claude/tasks/
+**/.claude/jobs/
+**/.claude/file-history/
+**/.claude/downloads/
+**/.claude/cache/
+**/.claude/.last-cleanup
+**/.claude/.last-update-result.json
+**/.claude/mcp-needs-auth-cache.json
+**/.claude/plugins/cache/
+**/.claude/plugins/marketplaces/
+**/.claude/plugins/plugin-catalog-cache.json
+**/.claude/settings.json.backup.*
