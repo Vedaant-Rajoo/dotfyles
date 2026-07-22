@@ -1,0 +1,25 @@
+{
+  "title": "Add resilient invoice export",
+  "summary": "Introduce a queued CSV export that reuses the existing job and storage abstractions.",
+  "objective": "Let administrators request large invoice exports without holding an HTTP request open.",
+  "status": "Proposed",
+  "scope": "Medium",
+  "risk": "Medium",
+  "sourceRevision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "successCriteria": [
+    {"text": "Exports complete asynchronously", "check": "Drive the request through the worker and download the CSV"},
+    {"text": "Failures are visible and retryable", "check": "Force storage failure and observe retry state"}
+  ],
+  "requirements": ["Reuse the existing queue", "Preserve current authorization checks"],
+  "nonGoals": ["New analytics UI", "Changing invoice calculations"],
+  "currentImplementation": ["src/exports/http.ts:41 performs synchronous generation", "src/jobs/worker.ts:18 owns retry policy"],
+  "design": [{"heading": "Job boundary", "body": "Persist an export request, enqueue its identifier, and let the worker stream rows to existing object storage."}],
+  "files": [{"path": "src/exports/http.ts:41", "change": "Create and enqueue export requests", "reason": "This is the existing authenticated entry point"}],
+  "phases": [{"title": "Persist requests", "prerequisite": "Existing database migration framework", "deliverable": "Export request state model", "steps": ["Add migration", "Add repository methods"], "verification": ["Repository integration test"]}],
+  "failureHandling": ["Use the worker retry policy for transient storage errors"],
+  "verification": ["Run focused unit and integration tests", "Drive one export end to end"],
+  "rollout": ["Ship behind the existing export feature flag", "Rollback by disabling the flag"],
+  "risks": [{"risk": "Large datasets exhaust memory", "impact": "Worker crash", "mitigation": "Stream rows and cap concurrency"}],
+  "assumptions": ["The current object store supports multipart uploads"],
+  "openDecisions": [{"question": "How long should downloads remain available?", "why": "It changes cleanup policy", "needed": "Product retention requirement"}]
+}
