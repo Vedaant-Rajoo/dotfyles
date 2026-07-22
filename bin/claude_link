@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# claude_link — symlink the live ~/.claude config to the tracked copies under
+# ~/.config/claude/, so editing either side edits the same file and `git diff`
+# from the repo root shows what changed.
+#
+# Usage:
+#   claude_link          Create/repair the symlinks (idempotent).
+#   claude_link --check  Report link status only; make no changes.
+#
+# Caveat: Claude Code itself writes settings.json.backup.* files on disk,
+# meaning it rewrites/backs up settings.json at times. Depending on whether
+# it writes in place or replaces the file, that could silently replace the
+# settings.json symlink with a fresh regular file. Run `claude_link --check`
+# occasionally (e.g. after a Claude Code self-update) to catch this; if it
+# reports a broken link, re-run `claude_link` to restore it, then `git diff`
+# from the repo root to see whether anything meaningful changed.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_CLAUDE="$REPO_ROOT/claude"
+LIVE_CLAUDE="$HOME/.claude"
+
+CHECK=0
+if [[ "${1:-}" == "--check" ]]; then
+    CHECK=1
+elif [[ "${1:-}" != "" ]]; then
+    echo "usage: claude_link [--check]" >&2
+    exit 1
+fi
+
+# live path | repo path | display name
+LINKS=(
+    "$LIVE_CLAUDE/CLAUDE.md|$REPO_CLAUDE/CLAUDE.md|CLAUDE.md"
+    "$LIVE_CLAUDE/skills|$REPO_CLAUDE/skills|skills/"
+    "$LIVE_CLAUDE/statusline-command.sh|$REPO_CLAUDE/statusline-command.sh|statusline-command.sh"
+    "$LIVE_CLAUDE/settings.json|$REPO_CLAUDE/settings.json|settings.json"
+)
+
+check_one() {
+    local live="$1" repo="$2" name="$3"
+    if [[ -L "$live" ]] && [[ "$live" -ef "$repo" ]]; then
+        echo "OK      $name"
+    elif [[ -L "$live" ]]; then
+        echo "STALE   $name (symlink points elsewhere: $(readlink "$live"))"
+    elif [[ -e "$live" ]]; then
+        echo "BROKEN  $name (regular file/dir, not a symlink — run claude_link to relink)"
+    else
+        echo "MISSING $name (does not exist)"
+    fi
+}
+
+link_one() {
+    local live="$1" repo="$2" name="$3"
+
+    if [[ -L "$live" ]] && [[ "$live" -ef "$repo" ]]; then
+        echo "ok:     $name already linked"
+        return
+    fi
+
+    if [[ -L "$live" ]]; then
+        echo "relink: $name (stale symlink -> $(readlink "$live"))"
+        rm "$live"
+    elif [[ -e "$live" ]]; then
+        local backup="${live}.pre-symlink-backup"
+        if [[ -e "$backup" ]]; then
+            echo "error:  $name — backup already exists at $backup, refusing to overwrite. Resolve manually." >&2
+            return 1
+        fi
+        echo "backup: $name -> $backup"
+        mv "$live" "$backup"
+    fi
+
+    ln -s "$repo" "$live"
+    echo "linked: $name -> $repo"
+}
+
+check_local_settings() {
+    local live="$LIVE_CLAUDE/settings.local.json"
+    if [[ -e "$live" ]]; then
+        echo "OK      settings.local.json (exists, machine-local, not symlinked)"
+    else
+        echo "MISSING settings.local.json (run claude_link to seed from settings.local.json.example)"
+    fi
+}
+
+bootstrap_local_settings() {
+    local live="$LIVE_CLAUDE/settings.local.json"
+    local example="$REPO_CLAUDE/settings.local.json.example"
+    if [[ -e "$live" ]]; then
+        echo "ok:     settings.local.json already exists (left as-is)"
+    else
+        cp "$example" "$live"
+        echo "seeded: settings.local.json from settings.local.json.example"
+    fi
+}
+
+for entry in "${LINKS[@]}"; do
+    IFS='|' read -r live repo name <<<"$entry"
+    if [[ "$CHECK" -eq 1 ]]; then
+        check_one "$live" "$repo" "$name"
+    else
+        link_one "$live" "$repo" "$name"
+    fi
+done
+
+if [[ "$CHECK" -eq 1 ]]; then
+    check_local_settings
+else
+    bootstrap_local_settings
+fi
