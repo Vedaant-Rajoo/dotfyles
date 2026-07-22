@@ -16,6 +16,8 @@ brew "fd"
 brew "fnm"
 # Command-line fuzzy finder written in Go
 brew "fzf"
+# Scan git repos for hardcoded secrets before they're committed
+brew "gitleaks"
 # Open source programming language to build simple/reliable/efficient software
 brew "go"
 # Stricter gofmt

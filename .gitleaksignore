@@ -1,0 +1,3 @@
+# Synthetic secrets used by the html-planning skill's own redaction tests —
+# not real credentials, exist to verify sanitize-and-validate.mjs catches them.
+claude/skills/html-planning/tests/fixtures/unsafe-plan.json:jwt:11
