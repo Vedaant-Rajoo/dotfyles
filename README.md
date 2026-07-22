@@ -19,6 +19,7 @@ Install the apps below, then finish per-app setup in [Post-install](#post-instal
 |------|-----|-------|
 | `nvim/` | [Neovim](https://neovim.io/) | Lua config with [lazy.nvim](https://github.com/folke/lazy.nvim); plugins pinned in `lazy-lock.json` |
 | `fish/` | [Fish](https://fishshell.com/) | Modular `conf.d/` layout, Fisher plugins — see [fish/README.md](fish/README.md) |
+| `claude/` | [Claude Code](https://claude.com/claude-code) | Sanitized copy of `~/.claude` config, symlinked back in — see [Post-install](#claude-code) |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | Terminal theme, fonts, window settings |
 | `zed/` | [Zed](https://zed.dev/) | Editor settings (secrets redacted) |
 | `linearmouse/` | [LinearMouse](https://linearmouse.app/) | Per-device pointer and scroll settings |
@@ -67,6 +68,30 @@ Set machine-local values in `zed/settings.json` after clone — at minimum:
 
 Sign in to GitHub Copilot inside Zed for edit predictions (`edit_predictions.provider` is `copilot`).
 
+### Claude Code
+
+Run `bin/claude_link` once after cloning. It symlinks `~/.claude/CLAUDE.md`, `~/.claude/skills`, `~/.claude/statusline-command.sh`, and `~/.claude/settings.json` to their counterparts under `claude/`, and seeds `~/.claude/settings.local.json` from `claude/settings.local.json.example` if it doesn't already exist.
+
+`claude/settings.json` intentionally omits the top-level `env` block — the CLIProxyAPI auth token, base URL, and default-model vars come from [`fish/local/claude-code.fish`](#machine-local--ignored-files) instead, so the secret has exactly one home.
+
+Because the config is symlinked, editing either `~/.claude/...` or `claude/...` edits the same file — run `git diff` from the repo root to see what changed before committing. Run `bin/claude_link --check` any time to verify the symlinks are still intact (Claude Code occasionally rewrites `settings.json` in place, which can silently replace the symlink with a regular file).
+
+`~/.claude` holds substantially more private state than what's mirrored here — conversation transcripts, telemetry, OAuth/account data, session history — and none of that broader state is meant to ever enter this repo (see the ignore rules in `.gitignore` and `git/ignore`).
+
+### Git hooks (secret scanning)
+
+This repo ships a `gitleaks`-based pre-commit hook in `git/hooks/pre-commit`, but hooks are opt-in — nothing here applies itself automatically. Enable it once per clone:
+
+```bash
+git config core.hooksPath git/hooks
+```
+
+Before the first commit that touches `claude/`, it's also worth running an independent one-off check:
+
+```bash
+gitleaks detect --source . -v
+```
+
 ### Ghostty & LinearMouse
 
 No extra steps. Config is picked up automatically on launch.
@@ -79,6 +104,7 @@ These are **not** tracked (see `.gitignore`). Configure or regenerate on each ma
 |------|-----|
 | `github-copilot/` | OAuth tokens and Copilot app state |
 | `fish/local/` | Machine-local Fish secrets (e.g. Claude Code / CLIProxyAPI auth) |
+| `claude/settings.local.json` | Local Claude Code permission allow-list, generated from `claude/settings.local.json.example` |
 | `fish/fish_variables` | Universal variables (Fish writes this at runtime) |
 | `nvim/tmp/` | Neovim session / plugin temp state |
 | `zed/prompts/` | Zed prompt library database (regenerated at runtime) |
