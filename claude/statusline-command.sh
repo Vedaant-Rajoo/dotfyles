@@ -79,17 +79,17 @@ line2_parts=()
 if [ -n "$used" ] && [ -n "$remaining" ]; then
   used_int=$(printf '%.0f' "$used")
   rem_int=$(printf '%.0f' "$remaining")
-  line2_parts+=("${DIM}ctx: ${used_int}%% used / ${rem_int}%% left${RESET}")
+  line2_parts+=("${DIM}ctx: ${used_int}% used / ${rem_int}% left${RESET}")
 fi
 
 if [ -n "$five_hour" ] || [ -n "$seven_day" ]; then
   rl=""
   if [ -n "$five_hour" ]; then
-    rl="5h:$(printf '%.0f' "$five_hour")%%"
+    rl="5h:$(printf '%.0f' "$five_hour")%"
   fi
   if [ -n "$seven_day" ]; then
     [ -n "$rl" ] && rl="$rl "
-    rl="${rl}7d:$(printf '%.0f' "$seven_day")%%"
+    rl="${rl}7d:$(printf '%.0f' "$seven_day")%"
   fi
   line2_parts+=("${DIM}${rl}${RESET}")
 fi
@@ -127,7 +127,7 @@ for part in "${line2_parts[@]}"; do
 done
 
 if [ -n "$line2" ]; then
-  printf "${line1}\n${line2}\n"
+  printf '%b\n%b\n' "$line1" "$line2"
 else
-  printf "${line1}\n"
+  printf '%b\n' "$line1"
 fi

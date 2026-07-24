@@ -30,6 +30,8 @@ brew "gofumpt"
 brew "goimports"
 # Tool for glamorous shell scripts
 brew "gum"
+# Agent multiplexer that lives in your terminal
+brew "herdr"
 # Simple terminal UI for git commands
 brew "lazygit"
 # Package manager for the Lua programming language

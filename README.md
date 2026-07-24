@@ -1,6 +1,6 @@
 # dotfyles
 
-Personal `~/.config` for macOS and Unix setups. This repo is the config directory itself — clone it directly to `~/.config` to bootstrap Neovim, Fish, Ghostty, Zed, and LinearMouse on a new machine.
+Personal `~/.config` for macOS and Unix setups. This repo is the config directory itself — clone it directly to `~/.config` to bootstrap Neovim, Fish, Ghostty, Herdr, Zed, and LinearMouse on a new machine.
 
 ## Quick start
 
@@ -21,6 +21,7 @@ Install the apps below, then finish per-app setup in [Post-install](#post-instal
 | `fish/` | [Fish](https://fishshell.com/) | Modular `conf.d/` layout, Fisher plugins — see [fish/README.md](fish/README.md) |
 | `claude/` | [Claude Code](https://claude.com/claude-code) | Sanitized copy of `~/.claude` config, symlinked back in — see [Post-install](#claude-code) |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | Terminal theme, fonts, window settings |
+| `herdr/` | [Herdr](https://herdr.dev) | Terminal workspace manager (replaces tmux); sessionizer bound to Ctrl-o in Fish and cmd+s in Ghostty via `bin/herdr-sessionizer` |
 | `zed/` | [Zed](https://zed.dev/) | Editor settings (secrets redacted) |
 | `linearmouse/` | [LinearMouse](https://linearmouse.app/) | Per-device pointer and scroll settings |
 | `Config.code-workspace` | VS Code / Cursor | Opens this repo as a workspace |
@@ -29,7 +30,7 @@ Install the apps below, then finish per-app setup in [Post-install](#post-instal
 
 **Apps** (install via Homebrew or each project's installer):
 
-- Neovim, Fish, Ghostty, Zed, LinearMouse
+- Neovim, Fish, Ghostty, Herdr, Zed, LinearMouse
 - `git` (required for lazy.nvim bootstrap and Fisher)
 
 **CLI tools** (used by Fish; optional modules skip cleanly if missing):

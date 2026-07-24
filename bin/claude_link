@@ -78,10 +78,10 @@ link_one() {
 check_local_settings() {
     local live="$LIVE_CLAUDE/settings.local.json"
     if [[ -e "$live" ]]; then
-        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("env"), dict) and d["env"].get("ANTHROPIC_BASE_URL") and d["env"].get("ANTHROPIC_AUTH_TOKEN") else 1)' "$live"; then
+        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=d.get("env") if isinstance(d.get("env"), dict) else {}; sys.exit(0 if e.get("ANTHROPIC_BASE_URL") and e.get("ANTHROPIC_AUTH_TOKEN") and e.get("ANTHROPIC_AUTH_TOKEN") != "REPLACE_WITH_LOCAL_CLIPROXY_TOKEN" else 1)' "$live"; then
             echo "OK      settings.local.json (has CLIProxyAPI env)"
         else
-            echo "BROKEN  settings.local.json (missing env.ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN)"
+            echo "BROKEN  settings.local.json (missing/placeholder env.ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN)"
         fi
     else
         echo "MISSING settings.local.json (run claude_link to seed from settings.local.json.example)"
@@ -102,10 +102,10 @@ check_materialized_settings() {
     if python3 -c 'import json,sys
 live=json.load(open(sys.argv[1]))
 env=live.get("env") or {}
-sys.exit(0 if env.get("ANTHROPIC_BASE_URL") and env.get("ANTHROPIC_AUTH_TOKEN") else 1)' "$live"; then
+sys.exit(0 if env.get("ANTHROPIC_BASE_URL") and env.get("ANTHROPIC_AUTH_TOKEN") and env.get("ANTHROPIC_AUTH_TOKEN") != "REPLACE_WITH_LOCAL_CLIPROXY_TOKEN" else 1)' "$live"; then
         echo "OK      settings.json (materialized with CLIProxyAPI env)"
     else
-        echo "BROKEN  settings.json (missing env — run claude_link to re-merge from settings.local.json)"
+        echo "BROKEN  settings.json (missing/placeholder env — set a real ANTHROPIC_AUTH_TOKEN in settings.local.json, then re-run claude_link)"
     fi
 }
 
@@ -148,6 +148,11 @@ env = local.get("env")
 if not isinstance(env, dict) or not env.get("ANTHROPIC_BASE_URL") or not env.get("ANTHROPIC_AUTH_TOKEN"):
     raise SystemExit(
         "settings.local.json must include env.ANTHROPIC_BASE_URL and env.ANTHROPIC_AUTH_TOKEN"
+    )
+if env.get("ANTHROPIC_AUTH_TOKEN") == "REPLACE_WITH_LOCAL_CLIPROXY_TOKEN":
+    raise SystemExit(
+        "settings.local.json still has the placeholder ANTHROPIC_AUTH_TOKEN — replace "
+        "REPLACE_WITH_LOCAL_CLIPROXY_TOKEN with your real CLIProxyAPI token, then re-run claude_link"
     )
 base["env"] = env
 with open(live_path, "w", encoding="utf-8") as f:
