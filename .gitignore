@@ -38,6 +38,7 @@ node_modules/
 
 # --- Herdr runtime (keep config.toml) ---
 herdr/*.sock
+herdr/.plugins.lock
 herdr/session.json
 herdr/session-history.json
 herdr/release-notes.json
