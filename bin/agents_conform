@@ -8,6 +8,13 @@ LIVE=0
 LIVE_SKILLS=0
 TIMEOUT_SECONDS="${AGENTS_CONFORM_TIMEOUT:-120}"
 
+# Pretty output through gum only when interactive; pipes and logs get the
+# plain deterministic format.
+USE_GUM=0
+if command -v gum >/dev/null 2>&1 && [[ -t 1 ]]; then
+	USE_GUM=1
+fi
+
 usage() {
 	cat <<'EOF'
 usage: agents_conform [--live] [--skills]
@@ -40,17 +47,51 @@ if [[ "$LIVE_SKILLS" -eq 1 && "$LIVE" -eq 0 ]]; then
 	exit 1
 fi
 
+say() {
+	local status="$1"
+	shift
+	if [[ "$USE_GUM" -eq 0 ]]; then
+		printf '%-8s%s\n' "$status" "$*"
+		return
+	fi
+	local color=7
+	case "$status" in
+	OK) color=2 ;;
+	BROKEN) color=1 ;;
+	esac
+	printf '%s%s\n' "$(CLICOLOR_FORCE=1 gum style --bold --foreground "$color" "$(printf '%-8s' "$status")")" "$*"
+}
+
+header() {
+	local title="$1"
+	if [[ "$USE_GUM" -eq 1 ]]; then
+		gum style --bold --border rounded --border-foreground 4 --padding "0 2" "$title"
+	else
+		printf '%s\n%s\n' "$title" "${title//?/=}"
+	fi
+}
+
+verdict() {
+	local color="$1"
+	shift
+	if [[ "$USE_GUM" -eq 1 ]]; then
+		printf '\n%s\n' "$(CLICOLOR_FORCE=1 gum style --bold --foreground "$color" "$*")"
+	else
+		printf '\n%s\n' "$*"
+	fi
+}
+
 static_failed=0
-printf 'Static conformance\n==================\n'
+header 'Static conformance'
 if ! "$REPO_ROOT/bin/agents_link" --check all; then
 	static_failed=1
 fi
 
 check_repo_link() {
 	if [[ -L "$REPO_ROOT/AGENTS.md" ]] && [[ "$REPO_ROOT/AGENTS.md" -ef "$REPO_ROOT/agents/AGENTS.md" ]]; then
-		printf 'OK      repository AGENTS.md\n'
+		say OK "repository AGENTS.md"
 	else
-		printf 'BROKEN  repository AGENTS.md\n'
+		say BROKEN "repository AGENTS.md"
 		static_failed=1
 	fi
 }
@@ -58,9 +99,9 @@ check_repo_link() {
 check_json() {
 	local path="$1" label="$2"
 	if python3 -m json.tool "$path" >/dev/null 2>&1; then
-		printf 'OK      %s parses\n' "$label"
+		say OK "$label parses"
 	else
-		printf 'BROKEN  %s is invalid JSON\n' "$label"
+		say BROKEN "$label is invalid JSON"
 		static_failed=1
 	fi
 }
@@ -74,27 +115,23 @@ fi
 
 if ! grep -q '^name: html-planning$' "$REPO_ROOT/agents/skills/html-planning/SKILL.md" ||
 	! grep -q '^description:' "$REPO_ROOT/agents/skills/html-planning/SKILL.md"; then
-	printf 'BROKEN  html-planning SKILL.md frontmatter\n'
+	say BROKEN "html-planning SKILL.md frontmatter"
 	static_failed=1
 else
-	printf 'OK      html-planning SKILL.md frontmatter\n'
+	say OK "html-planning SKILL.md frontmatter"
 fi
 
 if [[ "$static_failed" -ne 0 ]]; then
-	printf '\nStatic conformance: FAIL\n'
+	verdict 1 'Static conformance: FAIL'
 	exit 1
 fi
-printf '\nStatic conformance: PASS\n'
+verdict 2 'Static conformance: PASS'
 
 if [[ "$LIVE" -eq 0 ]]; then
 	exit 0
 fi
 
-run_capture() {
-	local output="$1"
-	shift
-	python3 - "$TIMEOUT_SECONDS" "$output" "$@" <<'PY'
-import subprocess, sys
+RUN_CAPTURE_PY='import subprocess, sys
 seconds, output, *command = sys.argv[1:]
 try:
     result = subprocess.run(
@@ -111,8 +148,16 @@ except subprocess.TimeoutExpired as exc:
     open(output, "w", encoding="utf-8").write(text)
     raise SystemExit(124)
 open(output, "w", encoding="utf-8").write(result.stdout)
-raise SystemExit(result.returncode)
-PY
+raise SystemExit(result.returncode)'
+
+run_capture() {
+	local title="$1" output="$2"
+	shift 2
+	if [[ "$USE_GUM" -eq 1 ]]; then
+		gum spin --title "$title" -- python3 -c "$RUN_CAPTURE_PY" "$TIMEOUT_SECONDS" "$output" "$@"
+	else
+		python3 -c "$RUN_CAPTURE_PY" "$TIMEOUT_SECONDS" "$output" "$@"
+	fi
 }
 
 matches_canary() {
@@ -149,7 +194,7 @@ check_rule() {
 	: >"$marker"
 	rule_status="FAIL"
 	while ((retries-- > 0)); do
-		if AGENTS_CONFORM_MARKER="$marker" run_capture "$output" "$@" && matches_canary "$output" "AGENTS-OK 1"; then
+		if AGENTS_CONFORM_MARKER="$marker" run_capture "$name: rule canary" "$output" "$@" && matches_canary "$output" "AGENTS-OK 1"; then
 			rule_status="PASS"
 			break
 		fi
@@ -171,7 +216,7 @@ check_skill() {
 	local output="$work/${name}-skill.txt" retries=2
 	skill_status="FAIL"
 	while ((retries-- > 0)); do
-		if run_capture "$output" "$@" && matches_canary "$output" "SKILL-OK html-planning 1"; then
+		if run_capture "$name: skill canary" "$output" "$@" && matches_canary "$output" "SKILL-OK html-planning 1"; then
 			skill_status="PASS"
 			break
 		fi
@@ -182,7 +227,8 @@ check_skill() {
 	done
 }
 
-printf '\nLive conformance\n================\n'
+echo
+header 'Live conformance'
 
 if command -v claude >/dev/null 2>&1; then
 	check_rule claude claude -p --permission-mode dontAsk "CANARY-CHECK"
@@ -222,18 +268,24 @@ if [[ -n "$cursor_cmd" ]]; then
 	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "rules are project-scoped; no verified global file path"
 fi
 
-printf '%-10s %-7s %-7s %-7s %s\n' "HARNESS" "RULES" "SKILL" "HOOK" "NOTES"
-printf '%-10s %-7s %-7s %-7s %s\n' "-------" "-----" "-----" "----" "-----"
-for row in "${rows[@]}"; do
-	IFS='|' read -r name rules skill hook note <<<"$row"
-	printf '%-10s %-7s %-7s %-7s %s\n' "$name" "$rules" "$skill" "$hook" "$note"
-done
+if [[ "${#rows[@]}" -gt 0 ]]; then
+	if [[ "$USE_GUM" -eq 1 ]]; then
+		printf '%s\n' "${rows[@]}" | gum table --print --separator '|' --columns 'HARNESS,RULES,SKILL,HOOK,NOTES'
+	else
+		printf '%-10s %-7s %-7s %-7s %s\n' "HARNESS" "RULES" "SKILL" "HOOK" "NOTES"
+		printf '%-10s %-7s %-7s %-7s %s\n' "-------" "-----" "-----" "----" "-----"
+		for row in "${rows[@]}"; do
+			IFS='|' read -r name rules skill hook note <<<"$row"
+			printf '%-10s %-7s %-7s %-7s %s\n' "$name" "$rules" "$skill" "$hook" "$note"
+		done
+	fi
+fi
 
 if [[ "$live_failed" -ne 0 ]]; then
-	printf '\nLive conformance: DRIFT DETECTED (informational)\n'
+	verdict 1 'Live conformance: DRIFT DETECTED (informational)'
 	if [[ "${AGENTS_LIVE_GATE:-0}" == "1" ]]; then exit 1; fi
 elif [[ "$live_blocked" -ne 0 ]]; then
-	printf '\nLive conformance: PASS FOR AUTHENTICATED HARNESSES; BLOCKED ROWS UNTESTED\n'
+	verdict 3 'Live conformance: PASS FOR AUTHENTICATED HARNESSES; BLOCKED ROWS UNTESTED'
 else
-	printf '\nLive conformance: PASS\n'
+	verdict 2 'Live conformance: PASS'
 fi

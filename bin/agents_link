@@ -8,6 +8,13 @@ AGENTS_ROOT="$REPO_ROOT/agents"
 CHECK=0
 TARGET="all"
 
+# Pretty output through gum only when interactive; pipes and logs get the
+# plain deterministic format.
+USE_GUM=0
+if command -v gum >/dev/null 2>&1 && [[ -t 1 ]]; then
+	USE_GUM=1
+fi
+
 usage() {
 	cat <<'EOF'
 usage: agents_link [--check] [all|claude|codex|opencode|cursor]
@@ -36,6 +43,23 @@ done
 
 failed=0
 
+say() {
+	local status="$1"
+	shift
+	if [[ "$USE_GUM" -eq 0 ]]; then
+		printf '%-8s%s\n' "$status" "$*"
+		return
+	fi
+	local color=7
+	case "$status" in
+	OK | ok: | linked: | wrote:) color=2 ;;
+	STALE | relink: | backup:) color=3 ;;
+	BROKEN | MISSING | error:) color=1 ;;
+	SKIP | INFO) color=4 ;;
+	esac
+	printf '%s%s\n' "$(CLICOLOR_FORCE=1 gum style --bold --foreground "$color" "$(printf '%-8s' "$status")")" "$*"
+}
+
 is_same_link() {
 	local live="$1" source="$2"
 	[[ -L "$live" ]] && [[ "$live" -ef "$source" ]]
@@ -44,15 +68,15 @@ is_same_link() {
 check_link() {
 	local live="$1" source="$2" label="$3"
 	if is_same_link "$live" "$source"; then
-		printf 'OK      %s\n' "$label"
+		say OK "$label"
 		return 0
 	fi
 	if [[ -L "$live" ]]; then
-		printf 'STALE   %s (points to %s)\n' "$label" "$(readlink "$live")"
+		say STALE "$label (points to $(readlink "$live"))"
 	elif [[ -e "$live" ]]; then
-		printf 'BROKEN  %s (not a symlink)\n' "$label"
+		say BROKEN "$label (not a symlink)"
 	else
-		printf 'MISSING %s\n' "$label"
+		say MISSING "$label"
 	fi
 	return 1
 }
@@ -61,23 +85,23 @@ link_one() {
 	local live="$1" source="$2" label="$3"
 	mkdir -p "$(dirname "$live")"
 	if is_same_link "$live" "$source"; then
-		printf 'ok:     %s already linked\n' "$label"
+		say 'ok:' "$label already linked"
 		return 0
 	fi
 	if [[ -L "$live" ]]; then
-		printf 'relink: %s (was %s)\n' "$label" "$(readlink "$live")"
+		say 'relink:' "$label (was $(readlink "$live"))"
 		rm "$live"
 	elif [[ -e "$live" ]]; then
 		local backup="${live}.pre-agents-link-backup"
 		if [[ -e "$backup" ]]; then
-			printf 'error:  %s exists and backup already exists at %s\n' "$label" "$backup" >&2
+			say 'error:' "$label exists and backup already exists at $backup" >&2
 			return 1
 		fi
-		printf 'backup: %s -> %s\n' "$label" "$backup"
+		say 'backup:' "$label -> $backup"
 		mv "$live" "$backup"
 	fi
 	ln -s "$source" "$live"
-	printf 'linked: %s -> %s\n' "$label" "$source"
+	say 'linked:' "$label -> $source"
 }
 
 project_link() {
@@ -92,7 +116,7 @@ project_skills() {
 	local root="$1" harness="$2" skill source live
 	if [[ "$CHECK" -eq 1 ]]; then
 		if [[ ! -d "$root" ]]; then
-			printf 'MISSING %s skills root (%s)\n' "$harness" "$root"
+			say MISSING "$harness skills root ($root)"
 			failed=1
 			return
 		fi
@@ -121,15 +145,15 @@ PY
 )"
 	if [[ "$CHECK" -eq 1 ]]; then
 		if [[ -f "$live" ]] && [[ "$(<"$live")" == "$expected" ]]; then
-			printf 'OK      Cursor portable hooks\n'
+			say OK "Cursor portable hooks"
 		else
-			printf 'STALE   Cursor portable hooks\n'
+			say STALE "Cursor portable hooks"
 			failed=1
 		fi
 		return
 	fi
 	if [[ -e "$live" ]] && [[ ! -f "$live" ]]; then
-		printf 'error:  Cursor hooks path is not a regular file: %s\n' "$live" >&2
+		say 'error:' "Cursor hooks path is not a regular file: $live" >&2
 		failed=1
 		return
 	fi
@@ -137,15 +161,15 @@ PY
 		local backup="${live}.pre-agents-link-backup"
 		if [[ ! -e "$backup" ]]; then
 			cp "$live" "$backup"
-			printf 'backup: Cursor hooks -> %s\n' "$backup"
+			say 'backup:' "Cursor hooks -> $backup"
 		else
-			printf 'error:  refusing to replace Cursor hooks; backup already exists at %s\n' "$backup" >&2
+			say 'error:' "refusing to replace Cursor hooks; backup already exists at $backup" >&2
 			failed=1
 			return
 		fi
 	fi
 	printf '%s' "$expected" >"$live"
-	printf 'wrote:  Cursor portable hooks\n'
+	say 'wrote:' "Cursor portable hooks"
 }
 
 link_shared_standard() {
@@ -154,7 +178,7 @@ link_shared_standard() {
 
 link_claude() {
 	if ! command -v claude >/dev/null 2>&1 && [[ ! -d "$HOME/.claude" ]]; then
-		printf 'SKIP    Claude Code is not installed\n'
+		say SKIP "Claude Code is not installed"
 		return
 	fi
 	if [[ "$CHECK" -eq 1 ]]; then
@@ -166,32 +190,32 @@ link_claude() {
 
 link_codex() {
 	if ! command -v codex >/dev/null 2>&1 && [[ ! -d "$HOME/.codex" ]]; then
-		printf 'SKIP    Codex is not installed\n'
+		say SKIP "Codex is not installed"
 		return
 	fi
 	project_link "$HOME/.codex/AGENTS.md" "$AGENTS_ROOT/AGENTS.md" "Codex global rules"
 	project_skills "$HOME/.codex/skills" "Codex"
-	printf 'INFO    Codex hooks are supported, but this adapter leaves them native until their TOML schema is stable.\n'
+	say INFO "Codex hooks are supported, but this adapter leaves them native until their TOML schema is stable."
 }
 
 link_opencode() {
 	if ! command -v opencode >/dev/null 2>&1 && [[ ! -d "$HOME/.config/opencode" ]]; then
-		printf 'SKIP    OpenCode is not installed\n'
+		say SKIP "OpenCode is not installed"
 		return
 	fi
 	project_link "$HOME/.config/opencode/AGENTS.md" "$AGENTS_ROOT/AGENTS.md" "OpenCode global rules"
 	project_skills "$HOME/.config/opencode/skills" "OpenCode"
-	printf 'INFO    OpenCode lifecycle extensions are plugins, not portable command hooks.\n'
+	say INFO "OpenCode lifecycle extensions are plugins, not portable command hooks."
 }
 
 link_cursor() {
 	if ! command -v cursor-agent >/dev/null 2>&1 && ! command -v agent >/dev/null 2>&1 && [[ ! -d "$HOME/.cursor" ]]; then
-		printf 'SKIP    Cursor Agent is not installed\n'
+		say SKIP "Cursor Agent is not installed"
 		return
 	fi
 	project_skills "$HOME/.cursor/skills" "Cursor"
 	write_cursor_hooks
-	printf 'INFO    Cursor has no verified filesystem-backed global rules path; project AGENTS.md remains required.\n'
+	say INFO "Cursor has no verified filesystem-backed global rules path; project AGENTS.md remains required."
 }
 
 link_shared_standard
