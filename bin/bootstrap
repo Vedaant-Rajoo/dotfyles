@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# Bootstrap a fresh macOS machine from this repository.
+
+set -euo pipefail
+
+NODE_VERSION="24.14.1"
+PYTHON_VERSION="3.14.4"
+POSTPLAN_VERSION="0.0.4"
+
+DRY_RUN=0
+WITH_DEFAULTS=0
+WITH_HERDR_SERVICE=0
+
+usage() {
+	cat <<'EOF'
+usage: bin/bootstrap [--dry-run] [--with-defaults] [--with-herdr-service]
+
+  --dry-run             Print mutations without running them.
+  --with-defaults       Apply bin/macdefaults after package setup.
+  --with-herdr-service  Start Herdr as a Homebrew service.
+EOF
+}
+
+quote_command() {
+	local arg
+	printf 'would run:'
+	for arg in "$@"; do
+		printf ' %q' "$arg"
+	done
+	printf '\n'
+}
+
+run() {
+	if [[ "$DRY_RUN" -eq 1 ]]; then
+		quote_command "$@"
+		return 0
+	fi
+	"$@"
+}
+
+warn() {
+	printf 'warning: %s\n' "$*" >&2
+}
+
+for arg in "$@"; do
+	case "$arg" in
+	--dry-run)
+		DRY_RUN=1
+		;;
+	--with-defaults)
+		WITH_DEFAULTS=1
+		;;
+	--with-herdr-service)
+		WITH_HERDR_SERVICE=1
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+	esac
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+EXPECTED_ROOT="$(cd "$HOME/.config" 2>/dev/null && pwd -P || true)"
+
+if [[ "$DRY_RUN" -eq 0 && "$REPO_ROOT" != "$EXPECTED_ROOT" ]]; then
+	echo "bootstrap: clone this repository directly to $HOME/.config before running bootstrap" >&2
+	exit 1
+fi
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+	echo "bootstrap: automatic setup currently supports macOS only; see README.md#linux" >&2
+	exit 1
+fi
+
+printf '\n==> Xcode Command Line Tools\n'
+if ! xcode-select -p >/dev/null 2>&1; then
+	run xcode-select --install
+	if [[ "$DRY_RUN" -eq 0 ]]; then
+		echo "Re-run bin/bootstrap after the Command Line Tools installation finishes."
+		exit 1
+	fi
+fi
+
+printf '\n==> Homebrew\n'
+if command -v brew >/dev/null 2>&1; then
+	BREW_PREFIX="$(brew --prefix)"
+	eval "$("$BREW_PREFIX/bin/brew" shellenv)"
+else
+	case "$(uname -m)" in
+	arm64) BREW_PREFIX="/opt/homebrew" ;;
+	x86_64) BREW_PREFIX="/usr/local" ;;
+	*)
+		echo "bootstrap: unsupported architecture: $(uname -m)" >&2
+		exit 1
+		;;
+	esac
+
+	run /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash'
+	if [[ "$DRY_RUN" -eq 1 ]]; then
+		printf 'would load: %s/bin/brew shellenv\n' "$BREW_PREFIX"
+	else
+		eval "$("$BREW_PREFIX/bin/brew" shellenv)"
+	fi
+fi
+
+if command -v brew >/dev/null 2>&1; then
+	if env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle check --file="$REPO_ROOT/Brewfile" >/dev/null 2>&1; then
+		echo "Brewfile formulae and casks are already satisfied."
+	else
+		run env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle install --file="$REPO_ROOT/Brewfile"
+	fi
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+	quote_command env HOMEBREW_BUNDLE_MAS_SKIP=1 "$BREW_PREFIX/bin/brew" bundle install --file="$REPO_ROOT/Brewfile"
+fi
+
+MAS_INSTALLED_IDS=""
+if command -v mas >/dev/null 2>&1; then
+	MAS_INSTALLED_IDS="$(mas list 2>/dev/null | awk '{print $1}')"
+fi
+
+install_mas_app() {
+	local id="$1"
+	local name="$2"
+
+	if grep -qx "$id" <<<"$MAS_INSTALLED_IDS"; then
+		return
+	fi
+
+	if [[ "$DRY_RUN" -eq 1 ]]; then
+		quote_command mas install "$id"
+		return
+	fi
+
+	if ! mas install "$id"; then
+		warn "could not install $name from the Mac App Store (id $id); sign in, then re-run bootstrap"
+	fi
+}
+
+if command -v mas >/dev/null 2>&1 || [[ "$DRY_RUN" -eq 1 ]]; then
+	while IFS= read -r line; do
+		if [[ "$line" =~ ^mas\ \"([^\"]+)\",\ id:\ ([0-9]+)$ ]]; then
+			install_mas_app "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
+		fi
+	done <"$REPO_ROOT/Brewfile"
+else
+	warn "mas is unavailable; sign in to the App Store and install the Brewfile before retrying"
+fi
+
+printf '\n==> Fish login shell\n'
+if [[ -x "$BREW_PREFIX/bin/fish" ]]; then
+	FISH_BIN="$BREW_PREFIX/bin/fish"
+elif [[ -x /usr/local/bin/fish ]]; then
+	FISH_BIN="/usr/local/bin/fish"
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+	FISH_BIN="$BREW_PREFIX/bin/fish"
+else
+	echo "bootstrap: Fish was not installed by the Brewfile" >&2
+	exit 1
+fi
+
+if ! grep -qxF "$FISH_BIN" /etc/shells; then
+	run sudo /bin/sh -c "printf '%s\\n' '$FISH_BIN' >> /etc/shells"
+fi
+
+CURRENT_SHELL="$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}')"
+if [[ "$CURRENT_SHELL" != "$FISH_BIN" ]]; then
+	run chsh -s "$FISH_BIN"
+fi
+
+printf '\n==> Node %s via fnm\n' "$NODE_VERSION"
+export FNM_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fnm"
+if command -v fnm >/dev/null 2>&1; then
+	if ! fnm list 2>/dev/null | grep -Eq "(^|[^0-9])v?${NODE_VERSION}([^0-9]|$)"; then
+		run fnm install "$NODE_VERSION"
+	fi
+	if ! fnm default 2>/dev/null | grep -q "$NODE_VERSION"; then
+		run fnm default "$NODE_VERSION"
+	fi
+	if [[ "$DRY_RUN" -eq 0 ]]; then
+		eval "$(fnm env --shell bash)"
+	fi
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+	quote_command fnm install "$NODE_VERSION"
+	quote_command fnm default "$NODE_VERSION"
+else
+	echo "bootstrap: fnm was not installed by the Brewfile" >&2
+	exit 1
+fi
+
+printf '\n==> Python %s via pyenv\n' "$PYTHON_VERSION"
+if command -v pyenv >/dev/null 2>&1; then
+	if ! pyenv versions --bare 2>/dev/null | grep -qx "$PYTHON_VERSION"; then
+		run pyenv install -s "$PYTHON_VERSION"
+	fi
+	if [[ "$(pyenv global 2>/dev/null || true)" != "$PYTHON_VERSION" ]]; then
+		run pyenv global "$PYTHON_VERSION"
+	fi
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+	quote_command pyenv install -s "$PYTHON_VERSION"
+	quote_command pyenv global "$PYTHON_VERSION"
+else
+	echo "bootstrap: pyenv was not installed by the Brewfile" >&2
+	exit 1
+fi
+
+printf '\n==> npm global tools\n'
+export npm_config_prefix="$HOME/.node_modules"
+NPM_GLOBALS=(
+	"postplan@$POSTPLAN_VERSION"
+	"@augmentcode/auggie"
+	"localtunnel"
+	"classy-cli"
+)
+
+install_npm_global() {
+	local spec="$1"
+	if npm list -g --depth=0 "$spec" >/dev/null 2>&1; then
+		return
+	fi
+	run npm install -g "$spec"
+}
+
+if command -v npm >/dev/null 2>&1; then
+	for spec in "${NPM_GLOBALS[@]}"; do
+		install_npm_global "$spec"
+	done
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+	for spec in "${NPM_GLOBALS[@]}"; do
+		quote_command npm install -g "$spec"
+	done
+else
+	warn "npm is unavailable; re-run bootstrap after fnm activates Node $NODE_VERSION"
+fi
+
+printf '\n==> Claude Code configuration\n'
+if ! command -v claude >/dev/null 2>&1; then
+	run /bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+fi
+if [[ "$DRY_RUN" -eq 1 ]]; then
+	quote_command "$REPO_ROOT/bin/claude_link"
+elif ! "$REPO_ROOT/bin/claude_link"; then
+	warn "Claude links were seeded, but settings could not be materialized"
+	warn "edit ~/.claude/settings.local.json, then re-run bin/claude_link"
+fi
+
+printf '\n==> Repository hooks\n'
+run git -C "$REPO_ROOT" config core.hooksPath git/hooks
+
+printf '\n==> Fisher plugins\n'
+run "$FISH_BIN" -c 'if not functions -q fisher; curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source; and fisher install jorgebucaran/fisher; end; and fisher update'
+
+if [[ "$WITH_DEFAULTS" -eq 1 ]]; then
+	printf '\n==> macOS defaults\n'
+	run "$FISH_BIN" "$REPO_ROOT/bin/macdefaults"
+fi
+
+if [[ "$WITH_HERDR_SERVICE" -eq 1 ]]; then
+	printf '\n==> Herdr service\n'
+	if command -v brew >/dev/null 2>&1 && brew services list 2>/dev/null | awk '$1 == "herdr" && $2 == "started" { found=1 } END { exit !found }'; then
+		echo "Herdr service is already running."
+	else
+		run brew services start herdr
+	fi
+fi
+
+cat <<'EOF'
+
+Bootstrap complete. Remaining machine-local steps:
+  - Sign in to the App Store and re-run bootstrap if any mas installs failed.
+  - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
+  - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
+  - Set ~/.claude/settings.local.json, then run bin/claude_link.
+  - Run `postplan login` and open Neovim once to install plugins.
+
+See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
+EOF
