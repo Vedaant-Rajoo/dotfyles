@@ -29,6 +29,7 @@ nvim/tmp/
 zed/prompts/
 
 # --- Large / downloaded app data ---
+raycast/
 raycast-x/
 node_modules/
 

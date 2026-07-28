@@ -223,7 +223,7 @@ gitleaks detect --source . -v
 | `opencode/opencode.json` | Provider configuration and API credentials |
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |
-| `raycast-x/` | Downloaded extensions and app data |
+| `raycast/`, `raycast-x/` | Downloaded extensions and app data |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |
