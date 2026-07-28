@@ -1,5 +1,7 @@
-# Global planning behavior
+# Planning
 
-For every request to plan technical work, invoke the globally installed `html-planning` skill before presenting the plan. This includes implementation, architecture, migration, refactor, rollout, integration, investigation, and requests such as “how should we build/change this?”
-
-Do not invoke it for non-technical uses of “plan” such as pricing plans, travel plans, or simple factual questions. If automatic discovery does not activate, use `/html-planning` explicitly.
+When asked to plan technical work — implementation, architecture, migration,
+refactor, rollout, integration, or investigation — invoke the `html-planning`
+skill and deliver its HTML plan page. Do not invoke it for non-technical
+"plans" (pricing, travel, scheduling) or questions that merely contain the
+word plan.

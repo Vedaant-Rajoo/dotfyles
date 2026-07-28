@@ -1,0 +1,149 @@
+{
+  "title": "Resumable uploads for large files",
+  "intent": "Uploads over ~50 MB restart from zero whenever the network drops. Add server-side upload sessions backed by S3 multipart so a client can resume from the last confirmed byte.",
+  "project": "file-host",
+  "branch": "resumable-uploads",
+  "rev": 2,
+  "status": "awaiting review",
+  "questions": [
+    {
+      "q": "Where do partial uploads live while a session is open?",
+      "consequence": "This decides what the reaper in step 04 talks to, and whether abandoned bytes cost us storage. Changing it later means rewriting steps 01 and 04.",
+      "options": [
+        "S3 multipart · native, no new storage",
+        "local disk staging · needs a volume + its own GC"
+      ],
+      "default": "S3 multipart, 7-day abort policy",
+      "blocksStep": 4
+    },
+    {
+      "q": "Should a resume work from a different device or browser?",
+      "consequence": "Cross-device resume means the session token has to be listable per user, which adds an endpoint and a permission check. Per-client keeps it to one opaque token.",
+      "default": "per-client token, 24h expiry, no listing endpoint"
+    }
+  ],
+  "approach": {
+    "thesis": "Use the native S3 multipart upload id as the session primitive.",
+    "rationale": "One upload id per session, chunk N maps to part N, completion is a single CompleteMultipartUpload call. No second storage path to reason about and per-part checksums come for free.",
+    "dropped": [
+      {
+        "what": "Chunk table in Postgres",
+        "why": "Another migration, hand-rolled checksums, and it doubles write volume for every upload."
+      },
+      {
+        "what": "tus protocol library",
+        "why": "Right shape, but it needs its own auth adapter and a fresh dependency review."
+      }
+    ]
+  },
+  "steps": [
+    {
+      "title": "Upload session record + store",
+      "rationale": "Holds upload id, object key, chunk size, confirmed part list, owner and expiry. Everything else reads from this row, so it lands first.",
+      "files": [
+        { "action": "new", "path": "db/migrations/0042_upload_sessions.sql" },
+        { "action": "new", "path": "src/upload/session.ts" }
+      ],
+      "verify": "pnpm test upload/session",
+      "diff": "+96 −0"
+    },
+    {
+      "title": "Session + chunk endpoints",
+      "rationale": "POST /uploads opens a session and returns the chunk size the client must use. PUT /uploads/:id/parts/:n is idempotent per part. HEAD /uploads/:id answers how far the client got.",
+      "files": [
+        { "action": "edit", "path": "src/routes/uploads.ts" },
+        { "action": "edit", "path": "src/upload/s3.ts" }
+      ],
+      "verify": "3-part upload, kill after part 2, resume, checksum match",
+      "diff": "+148 −34"
+    },
+    {
+      "title": "Client resume loop",
+      "rationale": "On any network error, HEAD the session, then continue from the first missing part with capped exponential backoff. The progress bar keeps its position instead of snapping to zero.",
+      "files": [
+        { "action": "edit", "path": "web/src/lib/uploader.ts" },
+        { "action": "edit", "path": "web/src/components/UploadTray.tsx" }
+      ],
+      "verify": "pnpm test web/uploader",
+      "diff": "+92 −18"
+    },
+    {
+      "title": "Abandoned session reaper",
+      "rationale": "Hourly job aborts multipart uploads older than 24h and deletes their session rows. Written against whichever store Q1 lands on.",
+      "files": [{ "action": "new", "path": "src/jobs/reapUploads.ts" }],
+      "verify": "seed 3 stale sessions, run job, bucket lists 0 parts",
+      "diff": "+58 −0",
+      "blockedOn": "Q1"
+    },
+    {
+      "title": "Remove legacy single-shot PUT path",
+      "rationale": "The old endpoint has no session semantics and would bypass the resume flow entirely once clients migrate.",
+      "files": [{ "action": "del", "path": "src/upload/legacyPut.ts" }],
+      "verify": "grep -r legacyPut src/ returns nothing, e2e suite green",
+      "diff": "+4 −120"
+    },
+    {
+      "title": "Feature flag + rollout guard",
+      "rationale": "upload.resume gates the new flow so it can ship dark and revert without a deploy.",
+      "files": [{ "action": "edit", "path": "src/flags.ts" }],
+      "verify": "flag off serves old flow, flag on serves sessions",
+      "diff": "+22 −2"
+    },
+    {
+      "title": "Metrics for resumed and abandoned uploads",
+      "rationale": "Without these two counters we cannot tell whether the feature worked in production, which is half of the done-when list.",
+      "files": [{ "action": "edit", "path": "src/metrics.ts" }],
+      "verify": "both counters visible in the staging dashboard",
+      "diff": "+16 −8"
+    }
+  ],
+  "tests": [
+    {
+      "kind": "auto",
+      "condition": "500 returned mid-chunk, client retries",
+      "expected": "upload completes, one object, checksum matches"
+    },
+    {
+      "kind": "auto",
+      "condition": "resume attempted 25h after session opened",
+      "expected": "410 Gone, client restarts from byte 0 without an error toast"
+    },
+    {
+      "kind": "auto",
+      "condition": "part 4 arrives before part 3",
+      "expected": "409, session untouched, no partial object written"
+    },
+    {
+      "kind": "manual",
+      "condition": "200 MB file on throttled 3G, airplane mode twice",
+      "expected": "resumes both times, progress never goes backwards"
+    }
+  ],
+  "doneWhen": [
+    "A 200 MB upload survives two network drops with no user action.",
+    "Success rate for files over 50 MB reaches 99% in staging over a week.",
+    "Bucket reports zero multipart uploads older than 24h."
+  ],
+  "risks": [
+    {
+      "risk": "Orphaned multipart parts keep billing after a user walks away.",
+      "mitigation": "reaper in step 04, plus a 7-day bucket lifecycle rule as a backstop"
+    },
+    {
+      "risk": "Client and server disagreeing on chunk size corrupts the assembled object.",
+      "mitigation": "server owns the number and echoes it in the session; client never guesses"
+    }
+  ],
+  "notInScope": [
+    "resume after a browser crash",
+    "parallel part upload",
+    "progress in email receipts"
+  ],
+  "effort": [
+    { "label": "session store", "share": 34, "fill": "accent" },
+    { "label": "chunk endpoint", "share": 28, "fill": "hatch" },
+    { "label": "client resume", "share": 26, "fill": "light" },
+    { "label": "reaper", "share": 12, "fill": "inert" }
+  ],
+  "callout": "Biggest risk is money, not correctness: abandoned sessions leave paid-for parts in the bucket. The reaper plus a lifecycle rule covers it twice."
+}
