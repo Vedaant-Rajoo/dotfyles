@@ -15,7 +15,7 @@ startup modules.
 This setup assumes Homebrew-managed tools when available:
 
 - `fzf`
-- `tide` via Fisher
+- `pure` via Fisher
 - `autopair.fish` via Fisher
 - `sponge` via Fisher
 - `zoxide`
