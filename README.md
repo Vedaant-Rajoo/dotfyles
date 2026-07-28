@@ -1,127 +1,241 @@
 # dotfyles
 
-Personal `~/.config` for macOS and Unix setups. This repo is the config directory itself — clone it directly to `~/.config` to bootstrap Neovim, Fish, Ghostty, Herdr, Zed, and LinearMouse on a new machine.
+Personal machine configuration for macOS, with Linux as a secondary target. The repository is the config directory itself: clone it directly to `~/.config`, then run one bootstrap command to install the declared software, configure Fish, restore pinned runtimes, and connect the tracked application settings.
 
-## Quick start
+The current machine inventory and intentional exceptions are recorded in [SYSTEM.md](SYSTEM.md).
 
-Back up any existing config, then clone:
+## Quick start (macOS)
+
+A new Mac does not have a GitHub SSH key yet, so the HTTPS clone is the easiest first step:
 
 ```bash
-mv ~/.config ~/.config.bak   # optional
-git clone <repo-url> ~/.config
+mv ~/.config ~/.config.bak  # optional: preserve an existing config directory
+git clone https://github.com/Vedaant-Rajoo/dotfyles.git ~/.config
+~/.config/bin/bootstrap
 ```
 
-Install the apps below, then finish per-app setup in [Post-install](#post-install).
+After GitHub authentication is configured, switch the clone to SSH:
+
+```bash
+gh auth login
+git -C ~/.config remote set-url origin git@github.com:Vedaant-Rajoo/dotfyles.git
+ssh -T git@github.com
+```
+
+If SSH is already configured, clone directly:
+
+```bash
+git clone git@github.com:Vedaant-Rajoo/dotfyles.git ~/.config
+~/.config/bin/bootstrap
+```
+
+### Bootstrap options
+
+```bash
+bin/bootstrap --dry-run             # print mutations only
+bin/bootstrap --with-defaults       # also apply bin/macdefaults
+bin/bootstrap --with-herdr-service  # also start Herdr through brew services
+```
+
+The bootstrap is safe to re-run. It:
+
+1. Checks Xcode Command Line Tools and Homebrew.
+2. Installs the full [`Brewfile`](Brewfile), including graphical and App Store apps.
+3. Installs Homebrew Fish, adds it to `/etc/shells`, and selects it as the login shell.
+4. Installs and selects Node `24.14.1` through fnm and Python `3.14.4` through pyenv.
+5. Installs the npm tools required by this configuration, including `postplan@0.0.4`.
+6. Installs/links Claude Code configuration, enables the gitleaks hook, and installs Fisher plugins.
+7. Optionally applies macOS defaults and starts the Herdr service.
+
+The App Store must be signed in before `mas` can install its entries. A failed App Store install is reported and can be resumed by signing in and re-running the bootstrap.
+
+> On this already-configured source machine, use `brew bundle check --file=Brewfile` to validate the manifest. Do not run `brew bundle install` merely as a check: casks such as DisplayLink invoke system package installers.
 
 ## What's included
 
-| Path | App | Notes |
-|------|-----|-------|
-| `nvim/` | [Neovim](https://neovim.io/) | Lua config with [lazy.nvim](https://github.com/folke/lazy.nvim); plugins pinned in `lazy-lock.json` |
-| `fish/` | [Fish](https://fishshell.com/) | Modular `conf.d/` layout, Fisher plugins — see [fish/README.md](fish/README.md) |
-| `claude/` | [Claude Code](https://claude.com/claude-code) | Sanitized copy of `~/.claude` config, symlinked back in — see [Post-install](#claude-code) |
-| `ghostty/` | [Ghostty](https://ghostty.org/) | Terminal theme, fonts, window settings |
-| `herdr/` | [Herdr](https://herdr.dev) | Terminal workspace manager (replaces tmux); sessionizer bound to Ctrl-o in Fish and cmd+s in Ghostty via `bin/herdr-sessionizer` |
-| `zed/` | [Zed](https://zed.dev/) | Editor settings (secrets redacted) |
-| `linearmouse/` | [LinearMouse](https://linearmouse.app/) | Per-device pointer and scroll settings |
-| `Config.code-workspace` | VS Code / Cursor | Opens this repo as a workspace |
+| Path | Purpose |
+|------|---------|
+| `Brewfile` | Full Homebrew formula, cask, tap, and Mac App Store manifest |
+| `bin/bootstrap` | Idempotent macOS bootstrap and runtime pinning |
+| `SYSTEM.md` | Dated snapshot of installed toolchain provenance and deliberate exceptions |
+| `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
+| `fish/` | Modular Fish config and Fisher plugin manifest — see [fish/README.md](fish/README.md) |
+| `claude/` | Sanitized Claude Code settings and the tracked HTML-planning skill |
+| `ghostty/` | Ghostty config and Rosé Pine theme |
+| `herdr/` | Herdr workspace manager config; replaces tmux |
+| `git/` | Global XDG Git identity, ignore rules, and opt-in repository hook |
+| `gh/` | GitHub CLI configuration (credentials remain in the keychain) |
+| `linearmouse/` | LinearMouse per-device settings |
+| `zed/` | Zed settings; the app itself is not currently installed |
+| `opencode/` | Sanitized OpenCode config; provider credentials remain local |
+| `bat/` | Bat configuration |
+| `Config.code-workspace` | Cursor / VS Code workspace for this repository |
 
-## Prerequisites
+## Manual setup after bootstrap
 
-**Apps** (install via Homebrew or each project's installer):
+A complete clone deliberately does **not** copy credentials, account sessions, conversation history, caches, or application databases. Complete these steps on each machine.
 
-- Neovim, Fish, Ghostty, Herdr, Zed, LinearMouse
-- `git` (required for lazy.nvim bootstrap and Fisher)
+### SSH and GitHub
 
-**CLI tools** (used by Fish; optional modules skip cleanly if missing):
+Generate or restore an SSH key, register it with GitHub, authenticate `gh`, and test the connection:
 
-- `fzf`, `zoxide`, `fnm`, `pyenv`, `pyenv-virtualenv`, `eza`, `bat`
+```bash
+ssh-keygen -t ed25519 -C "vedaant12345@gmail.com"
+gh auth login
+ssh -T git@github.com
+```
 
-**Fonts** (Ghostty): JetBrainsMono Nerd Font
+Recreate any private host aliases from `~/.ssh/config` manually. Private keys and `known_hosts` never belong in this repository.
 
-## Post-install
+### Git identity migration
 
-### Neovim
+Git identity and `push.autoSetupRemote` now live in tracked `git/config`. On an existing machine, `~/.gitconfig` loads later and shadows this XDG file. Remove the old file only after proving it contains the same values:
 
-Open Neovim once. lazy.nvim clones itself on first launch, then installs plugins from `lazy-lock.json`:
+```bash
+git config --global --list --show-origin
+rm ~/.gitconfig
+git config --show-origin --get user.email
+```
+
+The final command should resolve from `~/.config/git/config`. After this migration, `git config --global ...` writes to the tracked file; review `git diff` before committing.
+
+### Neovim and WakaTime
+
+Open Neovim once so lazy.nvim installs the pinned plugins:
 
 ```bash
 nvim
 ```
 
-Inside Neovim: `:Lazy sync` to verify or update plugins.
-
-### Fish
-
-Install [Fisher](https://github.com/jorgebucaran/fisher), then install plugins from the manifest:
-
-```bash
-fisher update
-```
-
-See [fish/README.md](fish/README.md) for layout, tooling, and module details.
-
-### Zed
-
-Set machine-local values in `zed/settings.json` after clone — at minimum:
-
-- `context_servers.mcp-server-context7.settings.context7_api_key` — Context7 API key (committed as `""`)
-
-Sign in to GitHub Copilot inside Zed for edit predictions (`edit_predictions.provider` is `copilot`).
+Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal authentication flow and never commit its API key.
 
 ### Claude Code
 
-Run `bin/claude_link` once after cloning. It symlinks `~/.claude/CLAUDE.md`, `~/.claude/skills`, and `~/.claude/statusline-command.sh` to their counterparts under `claude/`, seeds `~/.claude/settings.local.json` from `claude/settings.local.json.example` if needed, and materializes `~/.claude/settings.json` as a regular file.
+The bootstrap installs Claude Code with Anthropic's native self-updating installer when `claude` is missing. It then runs `bin/claude_link`, which:
 
-`claude/settings.json` intentionally omits the top-level `env` block. Put the CLIProxyAPI auth token, base URL, and default-model vars in machine-local `~/.claude/settings.local.json` (see the example). `claude_link` merges that `env` into live `~/.claude/settings.json`, which is what Claude Code actually injects on every launch — including SDK/IDE and background agents. Mirror the same exports in [`fish/local/claude-code.fish`](#machine-local--ignored-files) for shell tools and scripts; Fish loads that file for interactive and non-interactive sessions.
+- symlinks `~/.claude/CLAUDE.md`, `skills/`, and `statusline-command.sh` to `claude/`;
+- seeds `~/.claude/settings.local.json` from the tracked example;
+- materializes live `~/.claude/settings.json` by merging the local `env` block into the sanitized tracked settings.
 
-For the symlinked files, editing either `~/.claude/...` or `claude/...` edits the same file — run `git diff` from the repo root to see what changed before committing. After editing `settings.local.json` or if Claude Code rewrites `settings.json`, re-run `bin/claude_link` (and use `bin/claude_link --check` to verify).
+Replace the placeholder CLIProxyAPI values in `~/.claude/settings.local.json`, mirror the required shell exports in `fish/local/claude-code.fish`, and run:
 
-`~/.claude` holds substantially more private state than what's mirrored here — conversation transcripts, telemetry, OAuth/account data, session history — and none of that broader state is meant to ever enter this repo (see the ignore rules in `.gitignore` and `git/ignore`).
+```bash
+bin/claude_link
+bin/claude_link --check
+```
 
-### Git hooks (secret scanning)
+Everything else under `~/.claude` — authentication, sessions, projects, transcripts, telemetry, and caches — remains local.
 
-This repo ships a `gitleaks`-based pre-commit hook in `git/hooks/pre-commit`, but hooks are opt-in — nothing here applies itself automatically. Enable it once per clone:
+### HTML planning / Postplan
+
+`bin/bootstrap` installs the pinned `postplan@0.0.4` required by the tracked `html-planning` skill. Authenticate it separately:
+
+```bash
+postplan login
+postplan whoami
+```
+
+Postplan credentials and local draft mappings stay outside the repository.
+
+### OpenCode
+
+`opencode/opencode.jsonc` is the sanitized tracked base. Recreate machine-local provider/proxy configuration in `opencode/opencode.json`; it is ignored because it contains live credentials.
+
+### Zed
+
+Zed settings remain tracked even though Zed.app is not installed in this snapshot. If Zed is re-adopted, install it and then:
+
+- set `context_servers.mcp-server-context7.settings.context7_api_key` in `zed/settings.json`;
+- sign in to GitHub Copilot.
+
+Add `cask "zed"` to the Brewfile when the app becomes part of the active machine again.
+
+### Cursor, Codex, DockDoor, and Raycast
+
+These applications are installed by the Brewfile, but their mutable settings are deliberately not tracked:
+
+- Cursor editor/agent settings, MCP configuration, extension list, and sessions;
+- Codex `~/.codex/config.toml`, authentication, memories, and session state;
+- DockDoor plist preferences;
+- Raycast Beta preferences, databases, and downloaded extensions.
+
+Sign in and configure them manually. See [SYSTEM.md](SYSTEM.md) for the current extension/app snapshot.
+
+### OrbStack and Docker
+
+OrbStack is installed by the Brewfile and supplies `docker`, `kubectl`, `orbctl`, and the tracked Fish completion targets. Start OrbStack, select its Docker context, reauthenticate registries through the macOS keychain, and reapply local IPv6/Rosetta preferences if needed.
+
+## Fish plugins
+
+`fish/fish_plugins` is the manifest for Fisher, fzf.fish, autopair.fish, sponge, and Pure. Bootstrap installs Fisher and runs `fisher update`; after future plugin-manifest changes, run:
+
+```fish
+fisher update
+```
+
+## macOS defaults
+
+`bin/macdefaults` covers selected keyboard, Dock, Finder, screenshot, and window-dragging preferences. It is intentionally opt-in because it requests administrator access and restarts user-interface services:
+
+```bash
+bin/bootstrap --with-defaults
+# or directly:
+fish bin/macdefaults
+```
+
+It does not attempt to clone every GUI preference. Trackpad, Mission Control, hot corners, menu bar, energy, default-app, and many third-party plist settings remain outside scope.
+
+## Git hooks and secret scanning
+
+Bootstrap enables the tracked hook for this clone:
 
 ```bash
 git config core.hooksPath git/hooks
 ```
 
-Before the first commit that touches `claude/`, it's also worth running an independent one-off check:
+The hook runs `gitleaks protect --staged -v`. Before commits that affect credential-adjacent config, also run:
 
 ```bash
 gitleaks detect --source . -v
 ```
 
-### Ghostty & LinearMouse
+## Machine-local and ignored files
 
-No extra steps. Config is picked up automatically on launch.
-
-## Machine-local & ignored files
-
-These are **not** tracked (see `.gitignore`). Configure or regenerate on each machine:
-
-| Path | Why |
-|------|-----|
-| `github-copilot/` | OAuth tokens and Copilot app state |
-| `fish/local/` | Machine-local Fish secrets (e.g. Claude Code / CLIProxyAPI auth) |
-| `claude/settings.local.json` | Local Claude Code `env` (CLIProxyAPI) + permission allow-list, generated from `claude/settings.local.json.example` |
-| `fish/fish_variables` | Universal variables (Fish writes this at runtime) |
-| `nvim/tmp/` | Neovim session / plugin temp state |
-| `zed/prompts/` | Zed prompt library database (regenerated at runtime) |
-| `raycast-x/extensions/` | Downloaded Raycast extension bundles |
-| `*-backup*/`, `.codex-backup*/` | Local backup dirs |
-| `node_modules/`, `*.log`, `.cache/` | Build artifacts and caches |
-
-`github-copilot/` and Raycast data live under `~/.config` but stay local — do not commit them.
+| Path | Why it remains local |
+|------|----------------------|
+| `fish/local/` | Shell secrets and machine-specific exports |
+| `fish/fish_variables` | Fish runtime/universal variables |
+| `claude/settings.local.json` and broader `~/.claude/` state | Credentials, permissions, account and conversation state |
+| `opencode/opencode.json` | Provider configuration and API credentials |
+| `github-copilot/` | OAuth and Copilot state |
+| `~/.wakatime.cfg` | WakaTime API key |
+| `raycast-x/` | Downloaded extensions and app data |
+| `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
+| `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |
+| `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |
 
 ## Updating
 
 ```bash
 cd ~/.config
 git pull
+brew bundle check --file=Brewfile
+fisher update
 ```
 
-After pulling Fish plugin changes: `fisher update`
+For Neovim lockfile changes, open Neovim and run `:Lazy sync`. `bin/brew_update` and `bin/u` provide the existing interactive update flows.
 
-After pulling Neovim lockfile changes: open Neovim and run `:Lazy sync`
+## Linux
+
+The repository remains useful on Linux, but `bin/bootstrap` intentionally exits rather than pretending macOS casks, `mas`, `chsh` paths, and `bin/macdefaults` are portable.
+
+For Linux:
+
+1. Clone the repository directly to `~/.config`.
+2. Install Fish through the distribution package manager and make it the login shell.
+3. Install compatible Brewfile formulae through Linuxbrew or native packages; skip all casks and `mas` entries.
+4. Install Node `24.14.1` with fnm and Python `3.14.4` with pyenv.
+5. Run `bin/claude_link` and `fish -c 'fisher update'`.
+6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, DisplayLink, and `macos-*` Ghostty settings) with Linux equivalents.
+
+The tracked Fish and Neovim configuration guard most optional commands, but the Brewfile itself is Mac-first by design.
