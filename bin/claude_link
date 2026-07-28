@@ -34,6 +34,7 @@ fi
 LINKS=(
     "$LIVE_CLAUDE/CLAUDE.md|$REPO_CLAUDE/CLAUDE.md|CLAUDE.md"
     "$LIVE_CLAUDE/skills|$REPO_CLAUDE/skills|skills/"
+    "$LIVE_CLAUDE/hooks|$REPO_CLAUDE/hooks|hooks/"
     "$LIVE_CLAUDE/statusline-command.sh|$REPO_CLAUDE/statusline-command.sh|statusline-command.sh"
 )
 
