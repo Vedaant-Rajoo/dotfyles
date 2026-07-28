@@ -20,38 +20,38 @@ if not gum confirm "Do you wish to update your scripts?"
     exit 1
 end
 
-gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa
+gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa; or exit $status
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 💤 lazy.nvim synced"
 
-gum spin --spinner globe --title "🧰 mason.nvim updating" -- nvim --headless "+MasonUpdate" +qa
+gum spin --spinner globe --title "🧰 mason.nvim updating" -- nvim --headless "+MasonUpdate" +qa; or exit $status
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 🧰 mason.nvim updated"
 
-gum spin --spinner globe --title "🌳 nvim-treesitter updating" -- nvim --headless "+TSUpdate" +qa
+gum spin --spinner globe --title "🌳 nvim-treesitter updating" -- nvim --headless "+TSUpdate" +qa; or exit $status
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 🌳 nvim-treesitter updated"
 
-gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update >>/tmp/u-$NOW.txt
+gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update >>/tmp/u-$NOW.txt; or exit $status
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 🍻 brew updated"
 
-set -l OUTDATED (brew outdated)
+set -l OUTDATED (brew outdated); or exit $status
 echo $OUTDATED >>/tmp/u-$NOW.txt
 
 if test -n "$OUTDATED"
-    gum spin --spinner globe --title "🍻 brew upgrading" --show-output -- brew upgrade >>/tmp/u-$NOW.txt
+    gum spin --spinner globe --title "🍻 brew upgrading" --show-output -- brew upgrade >>/tmp/u-$NOW.txt; or exit $status
     echo "" >>/tmp/u-$NOW.txt
     echo "✅ 🍻 brew upgraded"
 
-    gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all >>/tmp/u-$NOW.txt
+    gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all >>/tmp/u-$NOW.txt; or exit $status
     echo "" >>/tmp/u-$NOW.txt
     echo "✅ 🍻 brew cleaned up"
 else
     echo "No outdated brew packages" >>/tmp/u-$NOW.txt
 end
 
-gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor >>/tmp/u-$NOW.txt
+gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor >>/tmp/u-$NOW.txt; or exit $status
 echo "" >>/tmp/u-$NOW.txt
 echo "✅ 🍻 brew doctored"
 

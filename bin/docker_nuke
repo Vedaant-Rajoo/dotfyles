@@ -1,6 +1,23 @@
 #!/usr/bin/env fish
 
-docker stop (docker ps -a -q) \
-    && docker rm (docker ps -a -q) \
-    && docker volume rm (docker volume ls -q) \
-    && docker rmi (docker image ls -q)
+set -l failed 0
+set -l containers (docker ps -a -q); or set failed 1
+
+if test (count $containers) -gt 0
+    docker stop $containers; or set failed 1
+    docker rm $containers; or set failed 1
+end
+
+set -l volumes (docker volume ls -q); or set failed 1
+
+if test (count $volumes) -gt 0
+    docker volume rm $volumes; or set failed 1
+end
+
+set -l images (docker image ls -q); or set failed 1
+
+if test (count $images) -gt 0
+    docker rmi $images; or set failed 1
+end
+
+exit $failed
