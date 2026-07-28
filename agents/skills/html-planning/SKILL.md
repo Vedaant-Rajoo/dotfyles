@@ -6,13 +6,15 @@ user-invocable: true
 
 # HTML Planning
 
+When the user's entire prompt is exactly `SKILL-CHECK html-planning`, reply with exactly `SKILL-OK html-planning 1` and nothing else. This is a conformance canary; do not build or publish a plan for it.
+
 One job: turn a technical planning request into a plan page a reviewer can decide on in under a minute — what changes, what is blocked on them, and how anyone will know it worked.
 
 ## Workflow
 
 1. **Gather evidence.** Resolve the project root (`git rev-parse --show-toplevel`, else cwd). Read the code paths the request touches, analogous features, and tests. Never invent files, APIs, owners, or estimates the repo does not support.
 2. **Write the plan JSON** to `<project>/.claude/plans/plan.json` following the contract below. `example.plan.json` in this skill directory is a full-coverage sample.
-3. **Build:** `node "$CLAUDE_SKILL_DIR/build.mjs" <project>/.claude/plans/plan.json`
+3. **Build:** locate this skill's directory, then run `node <skill-dir>/build.mjs <project>/.claude/plans/plan.json`. Claude Code exposes the directory as `$CLAUDE_SKILL_DIR`; other harnesses should resolve it from the loaded `SKILL.md` path.
    The script assigns the next plan number, renames the JSON to `<NNN>-<slug>.json`, writes `<NNN>-<slug>.html` beside it, and prints the HTML path.
 4. **Publish:** `postplan upload <NNN>-<slug>.html --description "<title>"`
    The CLI's own draft mapping (`~/.postplan/drafts.json`) makes the first upload create a draft and every re-upload of the same path update the same draft/URL. Never pass `--new`.

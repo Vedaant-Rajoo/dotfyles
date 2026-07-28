@@ -32,6 +32,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "effortLevel": "medium",

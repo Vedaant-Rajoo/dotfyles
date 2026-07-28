@@ -44,7 +44,7 @@ The bootstrap is safe to re-run. It:
 3. Installs Homebrew Fish, adds it to `/etc/shells`, and selects it as the login shell.
 4. Installs and selects Node `24.14.1` through fnm and Python `3.14.4` through pyenv.
 5. Installs the npm tools required by this configuration, including `postplan@0.0.4`.
-6. Installs/links Claude Code configuration, enables the gitleaks hook, and installs Fisher plugins.
+6. Installs Claude Code, projects shared agent rules/skills/hooks into every installed harness, enables the gitleaks hook, and installs Fisher plugins.
 7. Optionally applies macOS defaults and starts the Herdr service.
 
 The App Store must be signed in before `mas` can install its entries. A failed App Store install is reported and can be resumed by signing in and re-running the bootstrap.
@@ -60,7 +60,8 @@ The App Store must be signed in before `mas` can install its entries. A failed A
 | `SYSTEM.md` | Dated snapshot of installed toolchain provenance and deliberate exceptions |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | `fish/` | Modular Fish config and Fisher plugin manifest — see [fish/README.md](fish/README.md) |
-| `claude/` | Sanitized Claude Code settings and the tracked HTML-planning skill |
+| `agents/` | Canonical cross-harness rules, skills, and portable hook definitions |
+| `claude/` | Claude-native settings, hooks, statusline, and adapters into `agents/` |
 | `ghostty/` | Ghostty config and Rosé Pine theme |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hook |
@@ -109,22 +110,35 @@ nvim
 
 Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal authentication flow and never commit its API key.
 
-### Claude Code
+### Shared AI harness configuration
 
-The bootstrap installs Claude Code with Anthropic's native self-updating installer when `claude` is missing. It then runs `bin/claude_link`, which:
+`agents/` is the source of truth for behavior shared by Claude Code, Codex, OpenCode, and Cursor Agent:
 
-- symlinks `~/.claude/CLAUDE.md`, `skills/`, and `statusline-command.sh` to `claude/`;
-- seeds `~/.claude/settings.local.json` from the tracked example;
-- materializes live `~/.claude/settings.json` by merging the local `env` block into the sanitized tracked settings.
+- `agents/AGENTS.md` contains platform-neutral standing rules;
+- `agents/skills/` uses the common `SKILL.md` directory format;
+- `agents/hooks/manifest.json` records the portable hook intersection, with commands under `agents/hooks/scripts/`.
 
-Replace the placeholder CLIProxyAPI values in `~/.claude/settings.local.json`, mirror the required shell exports in `fish/local/claude-code.fish`, and run:
+`bin/agents_link all` projects that core into each installed harness. It uses native global rule files for Claude, Codex, and OpenCode; installs each shared skill additively without replacing harness-native skills; and generates Cursor's native hook file. Cursor Agent has no verified filesystem-backed global rule path in the installed build, so its shared rules are project-scoped through a repository `AGENTS.md`; the conformance report labels that limitation instead of claiming global coverage.
+
+Run the deterministic wiring checks at any time:
 
 ```bash
-bin/claude_link
-bin/claude_link --check
+bin/agents_link all
+bin/agents_conform
 ```
 
-Everything else under `~/.claude` — authentication, sessions, projects, transcripts, telemetry, and caches — remains local.
+Behavioral checks use real model calls and are deliberately opt-in:
+
+```bash
+bin/agents_conform --live           # rules + supported hooks
+bin/agents_conform --live --skills  # also test skill discovery/invocation
+```
+
+The static tier exits non-zero on drift. The live tier prints a scorecard and is informational by default because model obedience is probabilistic; set `AGENTS_LIVE_GATE=1` only when a failing canary should fail automation.
+
+The bootstrap still installs Claude Code with Anthropic's native self-updating installer when `claude` is missing. The Claude adapter delegates to `bin/claude_link`, which preserves Claude-native settings: it seeds `~/.claude/settings.local.json`, materializes `~/.claude/settings.json` with the local CLIProxyAPI environment, and links Claude-only hooks/statusline files. Replace the placeholder values in `~/.claude/settings.local.json`, mirror the required exports in `fish/local/claude-code.fish`, then re-run `bin/agents_link all`.
+
+Authentication, provider settings, sessions, transcripts, caches, and model selection remain native and machine-local for every harness.
 
 ### HTML planning / Postplan
 
@@ -139,7 +153,7 @@ Postplan credentials and local draft mappings stay outside the repository.
 
 ### OpenCode
 
-`opencode/opencode.jsonc` is the sanitized tracked base. Recreate machine-local provider/proxy configuration in `opencode/opencode.json`; it is ignored because it contains live credentials.
+`opencode/opencode.jsonc` is the sanitized tracked base and points at the shared global rules/skill roots. Recreate machine-local provider/proxy configuration in `opencode/opencode.json`; it is ignored because it contains live credentials. OpenCode lifecycle customization uses plugins rather than portable command hooks, so `agents_conform` reports hook coverage as not applicable.
 
 ### Zed
 
@@ -152,14 +166,14 @@ Add `cask "zed"` to the Brewfile when the app becomes part of the active machine
 
 ### Cursor, Codex, DockDoor, and Raycast
 
-These applications are installed by the Brewfile, but their mutable settings are deliberately not tracked:
+These applications are installed by the Brewfile. Shared agent behavior is projected by `bin/agents_link`, but mutable native settings remain deliberately untracked:
 
-- Cursor editor/agent settings, MCP configuration, extension list, and sessions;
-- Codex `~/.codex/config.toml`, authentication, memories, and session state;
+- Cursor editor/agent settings, MCP configuration, extension list, sessions, and account-backed user rules;
+- Codex `~/.codex/config.toml`, authentication, memories, plugins, and session state;
 - DockDoor plist preferences;
 - Raycast Beta preferences, databases, and downloaded extensions.
 
-Sign in and configure them manually. See [SYSTEM.md](SYSTEM.md) for the current extension/app snapshot.
+Sign in and configure the native state manually. See [SYSTEM.md](SYSTEM.md) for the current extension/app snapshot.
 
 ### OrbStack and Docker
 
@@ -205,7 +219,7 @@ gitleaks detect --source . -v
 |------|----------------------|
 | `fish/local/` | Shell secrets and machine-specific exports |
 | `fish/fish_variables` | Fish runtime/universal variables |
-| `claude/settings.local.json` and broader `~/.claude/` state | Credentials, permissions, account and conversation state |
+| Harness-native auth/config (`~/.claude`, `~/.codex`, `~/.cursor`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |
 | `opencode/opencode.json` | Provider configuration and API credentials |
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |

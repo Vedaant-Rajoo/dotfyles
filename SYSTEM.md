@@ -34,11 +34,24 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 
 The duplicated Go and Rust providers are intentional snapshot facts, not a desired cleanup performed by this change.
 
+## Shared agent configuration
+
+`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries.
+
+| Harness | Rules | Skills | Portable hook coverage |
+|---------|-------|--------|------------------------|
+| Claude Code | `~/.claude/CLAUDE.md` → `agents/AGENTS.md` | `~/.claude/skills` → `agents/skills` | Native `Stop` command hook |
+| Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | Unmanaged until the native TOML hook schema stabilizes |
+| OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Not portable: lifecycle extension surface is the plugin API |
+| Cursor Agent | Project `AGENTS.md`; no verified filesystem global-rules path | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | Generated `~/.cursor/hooks.json` stop hook |
+
+Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
+
 ## npm global tools
 
 The user-owned npm prefix is `~/.node_modules`. Bootstrap restores:
 
-- `postplan@0.0.4` — required by `claude/skills/html-planning`;
+- `postplan@0.0.4` — required by `agents/skills/html-planning`;
 - `@augmentcode/auggie`;
 - `localtunnel`;
 - `classy-cli`.
@@ -102,8 +115,8 @@ These items influence the daily machine but are intentionally excluded from vers
 
 | State | Reason / recovery path |
 |-------|------------------------|
-| Cursor settings, keybindings, extensions, MCP and agent state | User explicitly chose manual setup; contains account/session state |
-| Codex `~/.codex/config.toml`, auth, rules, memories, plugins and sessions | User explicitly chose not to track; auth remains local |
+| Cursor settings, keybindings, extensions, MCP, account-backed user rules and agent state | Native/account state remains local; shared skills and portable hooks are projected from `agents/` |
+| Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; shared rules and skills are projected from `agents/` |
 | DockDoor plist preferences | User explicitly chose not to export GUI defaults |
 | Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
 | Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; only sanitized settings and selected links are tracked |

@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# Project the canonical agents/ rules, skills, and portable hooks into each
+# installed AI harness without taking ownership of provider, auth, or UI config.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+AGENTS_ROOT="$REPO_ROOT/agents"
+CHECK=0
+TARGET="all"
+
+usage() {
+	cat <<'EOF'
+usage: agents_link [--check] [all|claude|codex|opencode|cursor]
+
+  --check  Report drift without changing files.
+
+Rules and skills come from ~/.config/agents. Harness-native settings remain in
+that harness's own config; adapters only add links and generated hook shims.
+EOF
+}
+
+for arg in "$@"; do
+	case "$arg" in
+	--check) CHECK=1 ;;
+	all | claude | codex | opencode | cursor) TARGET="$arg" ;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+	esac
+done
+
+failed=0
+
+is_same_link() {
+	local live="$1" source="$2"
+	[[ -L "$live" ]] && [[ "$live" -ef "$source" ]]
+}
+
+check_link() {
+	local live="$1" source="$2" label="$3"
+	if is_same_link "$live" "$source"; then
+		printf 'OK      %s\n' "$label"
+		return 0
+	fi
+	if [[ -L "$live" ]]; then
+		printf 'STALE   %s (points to %s)\n' "$label" "$(readlink "$live")"
+	elif [[ -e "$live" ]]; then
+		printf 'BROKEN  %s (not a symlink)\n' "$label"
+	else
+		printf 'MISSING %s\n' "$label"
+	fi
+	return 1
+}
+
+link_one() {
+	local live="$1" source="$2" label="$3"
+	mkdir -p "$(dirname "$live")"
+	if is_same_link "$live" "$source"; then
+		printf 'ok:     %s already linked\n' "$label"
+		return 0
+	fi
+	if [[ -L "$live" ]]; then
+		printf 'relink: %s (was %s)\n' "$label" "$(readlink "$live")"
+		rm "$live"
+	elif [[ -e "$live" ]]; then
+		local backup="${live}.pre-agents-link-backup"
+		if [[ -e "$backup" ]]; then
+			printf 'error:  %s exists and backup already exists at %s\n' "$label" "$backup" >&2
+			return 1
+		fi
+		printf 'backup: %s -> %s\n' "$label" "$backup"
+		mv "$live" "$backup"
+	fi
+	ln -s "$source" "$live"
+	printf 'linked: %s -> %s\n' "$label" "$source"
+}
+
+project_link() {
+	if [[ "$CHECK" -eq 1 ]]; then
+		check_link "$1" "$2" "$3" || failed=1
+	else
+		link_one "$1" "$2" "$3" || failed=1
+	fi
+}
+
+project_skills() {
+	local root="$1" harness="$2" skill source live
+	if [[ "$CHECK" -eq 1 ]]; then
+		if [[ ! -d "$root" ]]; then
+			printf 'MISSING %s skills root (%s)\n' "$harness" "$root"
+			failed=1
+			return
+		fi
+	else
+		mkdir -p "$root"
+	fi
+	for source in "$AGENTS_ROOT"/skills/*; do
+		[[ -d "$source" ]] || continue
+		skill="$(basename "$source")"
+		live="$root/$skill"
+		project_link "$live" "$source" "$harness skill: $skill"
+	done
+}
+
+write_cursor_hooks() {
+	local live="$HOME/.cursor/hooks.json"
+	local command="$AGENTS_ROOT/hooks/scripts/conformance-stop-marker.sh"
+	local expected
+	expected="$(python3 - "$command" <<'PY'
+import json, sys
+print(json.dumps({
+    "version": 1,
+    "hooks": {"stop": [{"command": sys.argv[1]}]},
+}, indent=2) + "\n", end="")
+PY
+)"
+	if [[ "$CHECK" -eq 1 ]]; then
+		if [[ -f "$live" ]] && [[ "$(<"$live")" == "$expected" ]]; then
+			printf 'OK      Cursor portable hooks\n'
+		else
+			printf 'STALE   Cursor portable hooks\n'
+			failed=1
+		fi
+		return
+	fi
+	if [[ -e "$live" ]] && [[ ! -f "$live" ]]; then
+		printf 'error:  Cursor hooks path is not a regular file: %s\n' "$live" >&2
+		failed=1
+		return
+	fi
+	if [[ -f "$live" ]] && [[ "$(<"$live")" != "$expected" ]]; then
+		local backup="${live}.pre-agents-link-backup"
+		if [[ ! -e "$backup" ]]; then
+			cp "$live" "$backup"
+			printf 'backup: Cursor hooks -> %s\n' "$backup"
+		else
+			printf 'error:  refusing to replace Cursor hooks; backup already exists at %s\n' "$backup" >&2
+			failed=1
+			return
+		fi
+	fi
+	printf '%s' "$expected" >"$live"
+	printf 'wrote:  Cursor portable hooks\n'
+}
+
+link_shared_standard() {
+	project_skills "$HOME/.agents/skills" "shared"
+}
+
+link_claude() {
+	if ! command -v claude >/dev/null 2>&1 && [[ ! -d "$HOME/.claude" ]]; then
+		printf 'SKIP    Claude Code is not installed\n'
+		return
+	fi
+	if [[ "$CHECK" -eq 1 ]]; then
+		"$REPO_ROOT/bin/claude_link" --check || failed=1
+	else
+		"$REPO_ROOT/bin/claude_link" || failed=1
+	fi
+}
+
+link_codex() {
+	if ! command -v codex >/dev/null 2>&1 && [[ ! -d "$HOME/.codex" ]]; then
+		printf 'SKIP    Codex is not installed\n'
+		return
+	fi
+	project_link "$HOME/.codex/AGENTS.md" "$AGENTS_ROOT/AGENTS.md" "Codex global rules"
+	project_skills "$HOME/.codex/skills" "Codex"
+	printf 'INFO    Codex hooks are supported, but this adapter leaves them native until their TOML schema is stable.\n'
+}
+
+link_opencode() {
+	if ! command -v opencode >/dev/null 2>&1 && [[ ! -d "$HOME/.config/opencode" ]]; then
+		printf 'SKIP    OpenCode is not installed\n'
+		return
+	fi
+	project_link "$HOME/.config/opencode/AGENTS.md" "$AGENTS_ROOT/AGENTS.md" "OpenCode global rules"
+	project_skills "$HOME/.config/opencode/skills" "OpenCode"
+	printf 'INFO    OpenCode lifecycle extensions are plugins, not portable command hooks.\n'
+}
+
+link_cursor() {
+	if ! command -v cursor-agent >/dev/null 2>&1 && ! command -v agent >/dev/null 2>&1 && [[ ! -d "$HOME/.cursor" ]]; then
+		printf 'SKIP    Cursor Agent is not installed\n'
+		return
+	fi
+	project_skills "$HOME/.cursor/skills" "Cursor"
+	write_cursor_hooks
+	printf 'INFO    Cursor has no verified filesystem-backed global rules path; project AGENTS.md remains required.\n'
+}
+
+link_shared_standard
+case "$TARGET" in
+all)
+	link_claude
+	link_codex
+	link_opencode
+	link_cursor
+	;;
+claude) link_claude ;;
+codex) link_codex ;;
+opencode) link_opencode ;;
+cursor) link_cursor ;;
+esac
+
+exit "$failed"

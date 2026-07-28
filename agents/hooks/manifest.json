@@ -1,0 +1,13 @@
+{
+  "$schema": "./manifest.schema.json",
+  "version": 1,
+  "hooks": [
+    {
+      "id": "conformance-stop-marker",
+      "event": "stop",
+      "command": "scripts/conformance-stop-marker.sh",
+      "description": "Writes a marker only when AGENTS_CONFORM_MARKER is set.",
+      "portable": true
+    }
+  ]
+}

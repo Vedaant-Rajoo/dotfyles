@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Verify that installed harnesses are wired to agents/, then optionally run
+# token-burning behavioral canaries through their one-shot interfaces.
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+LIVE=0
+LIVE_SKILLS=0
+TIMEOUT_SECONDS="${AGENTS_CONFORM_TIMEOUT:-120}"
+
+usage() {
+	cat <<'EOF'
+usage: agents_conform [--live] [--skills]
+
+  --live    Run rule and hook canaries through installed harness CLIs.
+  --skills  With --live, also ask each model to invoke the html-planning skill.
+
+The static tier is deterministic and returns non-zero on drift. Live checks use
+models and tokens; their scorecard is informational unless AGENTS_LIVE_GATE=1.
+EOF
+}
+
+for arg in "$@"; do
+	case "$arg" in
+	--live) LIVE=1 ;;
+	--skills) LIVE_SKILLS=1 ;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+	esac
+done
+
+if [[ "$LIVE_SKILLS" -eq 1 && "$LIVE" -eq 0 ]]; then
+	echo "agents_conform: --skills requires --live" >&2
+	exit 1
+fi
+
+static_failed=0
+printf 'Static conformance\n==================\n'
+if ! "$REPO_ROOT/bin/agents_link" --check all; then
+	static_failed=1
+fi
+
+check_repo_link() {
+	if [[ -L "$REPO_ROOT/AGENTS.md" ]] && [[ "$REPO_ROOT/AGENTS.md" -ef "$REPO_ROOT/agents/AGENTS.md" ]]; then
+		printf 'OK      repository AGENTS.md\n'
+	else
+		printf 'BROKEN  repository AGENTS.md\n'
+		static_failed=1
+	fi
+}
+
+check_json() {
+	local path="$1" label="$2"
+	if python3 -m json.tool "$path" >/dev/null 2>&1; then
+		printf 'OK      %s parses\n' "$label"
+	else
+		printf 'BROKEN  %s is invalid JSON\n' "$label"
+		static_failed=1
+	fi
+}
+
+check_repo_link
+check_json "$REPO_ROOT/agents/hooks/manifest.json" "portable hooks manifest"
+check_json "$REPO_ROOT/claude/settings.json" "Claude settings"
+if command -v cursor-agent >/dev/null 2>&1 || command -v agent >/dev/null 2>&1 || [[ -d "$HOME/.cursor" ]]; then
+	check_json "$HOME/.cursor/hooks.json" "Cursor hooks"
+fi
+
+if ! grep -q '^name: html-planning$' "$REPO_ROOT/agents/skills/html-planning/SKILL.md" ||
+	! grep -q '^description:' "$REPO_ROOT/agents/skills/html-planning/SKILL.md"; then
+	printf 'BROKEN  html-planning SKILL.md frontmatter\n'
+	static_failed=1
+else
+	printf 'OK      html-planning SKILL.md frontmatter\n'
+fi
+
+if [[ "$static_failed" -ne 0 ]]; then
+	printf '\nStatic conformance: FAIL\n'
+	exit 1
+fi
+printf '\nStatic conformance: PASS\n'
+
+if [[ "$LIVE" -eq 0 ]]; then
+	exit 0
+fi
+
+run_capture() {
+	local output="$1"
+	shift
+	python3 - "$TIMEOUT_SECONDS" "$output" "$@" <<'PY'
+import subprocess, sys
+seconds, output, *command = sys.argv[1:]
+try:
+    result = subprocess.run(
+        command,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=int(seconds),
+        check=False,
+    )
+except subprocess.TimeoutExpired as exc:
+    text = (exc.stdout or "") + "\nTIMEOUT\n"
+    open(output, "w", encoding="utf-8").write(text)
+    raise SystemExit(124)
+open(output, "w", encoding="utf-8").write(result.stdout)
+raise SystemExit(result.returncode)
+PY
+}
+
+matches_canary() {
+	local output="$1" expected="$2"
+	grep -qxF "$expected" "$output" || grep -qF "$expected" "$output"
+}
+
+is_auth_blocked() {
+	grep -Eqi 'authentication required|token refresh failed|unauthorized|run .*login|401' "$1"
+}
+
+rule_status="" skill_status="" hook_status=""
+rows=()
+live_failed=0
+live_blocked=0
+marker="$(mktemp -t agents-conform-marker.XXXXXX)"
+work="$(mktemp -d -t agents-conform.XXXXXX)"
+trap 'rm -f "$marker"; rm -rf "$work"' EXIT
+
+record() {
+	rows+=("$1|$2|$3|$4|$5")
+	if [[ "$2" == "FAIL" || "$3" == "FAIL" || "$4" == "FAIL" ]]; then
+		live_failed=1
+	fi
+	if [[ "$2" == "BLOCKED" || "$3" == "BLOCKED" || "$4" == "BLOCKED" ]]; then
+		live_blocked=1
+	fi
+}
+
+check_rule() {
+	local name="$1"
+	shift
+	local output="$work/${name}-rule.txt" retries=2
+	: >"$marker"
+	rule_status="FAIL"
+	while ((retries-- > 0)); do
+		if AGENTS_CONFORM_MARKER="$marker" run_capture "$output" "$@" && matches_canary "$output" "AGENTS-OK 1"; then
+			rule_status="PASS"
+			break
+		fi
+		if is_auth_blocked "$output"; then
+			rule_status="BLOCKED"
+			break
+		fi
+	done
+	if [[ -s "$marker" ]]; then hook_status="PASS"; else hook_status="N/A"; fi
+}
+
+check_skill() {
+	local name="$1"
+	shift
+	if [[ "$LIVE_SKILLS" -eq 0 ]]; then
+		skill_status="SKIP"
+		return
+	fi
+	local output="$work/${name}-skill.txt" retries=2
+	skill_status="FAIL"
+	while ((retries-- > 0)); do
+		if run_capture "$output" "$@" && matches_canary "$output" "SKILL-OK html-planning 1"; then
+			skill_status="PASS"
+			break
+		fi
+		if is_auth_blocked "$output"; then
+			skill_status="BLOCKED"
+			break
+		fi
+	done
+}
+
+printf '\nLive conformance\n================\n'
+
+if command -v claude >/dev/null 2>&1; then
+	check_rule claude claude -p --permission-mode dontAsk "CANARY-CHECK"
+	claude_rule="$rule_status"; claude_hook="$hook_status"
+	check_skill claude claude -p --permission-mode dontAsk "SKILL-CHECK html-planning"
+	record "Claude" "$claude_rule" "$skill_status" "$claude_hook" "global rules"
+fi
+
+if command -v codex >/dev/null 2>&1; then
+	codex_last="$work/codex-last.txt"
+	check_rule codex codex exec --ephemeral --sandbox read-only --output-last-message "$codex_last" "CANARY-CHECK"
+	if [[ -f "$codex_last" ]] && matches_canary "$codex_last" "AGENTS-OK 1"; then rule_status="PASS"; fi
+	codex_rule="$rule_status"
+	if [[ "$LIVE_SKILLS" -eq 1 ]]; then
+		codex_skill_last="$work/codex-skill-last.txt"
+		check_skill codex codex exec --ephemeral --sandbox read-only --output-last-message "$codex_skill_last" "SKILL-CHECK html-planning"
+		if [[ -f "$codex_skill_last" ]] && matches_canary "$codex_skill_last" "SKILL-OK html-planning 1"; then skill_status="PASS"; fi
+	else
+		skill_status="SKIP"
+	fi
+	record "Codex" "$codex_rule" "$skill_status" "N/A" "hook schema intentionally unmanaged"
+fi
+
+if command -v opencode >/dev/null 2>&1; then
+	check_rule opencode opencode run --dir "$REPO_ROOT" "CANARY-CHECK"
+	opencode_rule="$rule_status"
+	check_skill opencode opencode run --dir "$REPO_ROOT" "SKILL-CHECK html-planning"
+	record "OpenCode" "$opencode_rule" "$skill_status" "N/A" "plugin hooks are not command-portable"
+fi
+
+cursor_cmd=""
+if command -v cursor-agent >/dev/null 2>&1; then cursor_cmd="cursor-agent"; elif command -v agent >/dev/null 2>&1; then cursor_cmd="agent"; fi
+if [[ -n "$cursor_cmd" ]]; then
+	check_rule cursor "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT" "CANARY-CHECK"
+	cursor_rule="$rule_status"; cursor_hook="$hook_status"
+	check_skill cursor "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT" "SKILL-CHECK html-planning"
+	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "rules are project-scoped; no verified global file path"
+fi
+
+printf '%-10s %-7s %-7s %-7s %s\n' "HARNESS" "RULES" "SKILL" "HOOK" "NOTES"
+printf '%-10s %-7s %-7s %-7s %s\n' "-------" "-----" "-----" "----" "-----"
+for row in "${rows[@]}"; do
+	IFS='|' read -r name rules skill hook note <<<"$row"
+	printf '%-10s %-7s %-7s %-7s %s\n' "$name" "$rules" "$skill" "$hook" "$note"
+done
+
+if [[ "$live_failed" -ne 0 ]]; then
+	printf '\nLive conformance: DRIFT DETECTED (informational)\n'
+	if [[ "${AGENTS_LIVE_GATE:-0}" == "1" ]]; then exit 1; fi
+elif [[ "$live_blocked" -ne 0 ]]; then
+	printf '\nLive conformance: PASS FOR AUTHENTICATED HARNESSES; BLOCKED ROWS UNTESTED\n'
+else
+	printf '\nLive conformance: PASS\n'
+fi

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["version", "hooks"],
+  "properties": {
+    "version": { "const": 1 },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "event", "command", "portable"],
+        "properties": {
+          "id": { "type": "string" },
+          "event": { "enum": ["session-start", "pre-tool", "post-tool", "stop"] },
+          "command": { "type": "string" },
+          "description": { "type": "string" },
+          "portable": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
