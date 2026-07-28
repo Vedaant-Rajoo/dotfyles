@@ -49,7 +49,7 @@ The bootstrap is safe to re-run. It:
 
 The App Store must be signed in before `mas` can install its entries. A failed App Store install is reported and can be resumed by signing in and re-running the bootstrap.
 
-> On this already-configured source machine, use `brew bundle check --file=Brewfile` to validate the manifest. Do not run `brew bundle install` merely as a check: casks such as DisplayLink invoke system package installers.
+> On this already-configured source machine, use `brew bundle check --file=Brewfile` to validate the manifest. Do not run `brew bundle install` merely as a check: it may adopt externally installed applications into Homebrew ownership.
 
 ## What's included
 
@@ -236,6 +236,6 @@ For Linux:
 3. Install compatible Brewfile formulae through Linuxbrew or native packages; skip all casks and `mas` entries.
 4. Install Node `24.14.1` with fnm and Python `3.14.4` with pyenv.
 5. Run `bin/claude_link` and `fish -c 'fisher update'`.
-6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, DisplayLink, and `macos-*` Ghostty settings) with Linux equivalents.
+6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, and `macos-*` Ghostty settings) with Linux equivalents.
 
 The tracked Fish and Neovim configuration guard most optional commands, but the Brewfile itself is Mac-first by design.

@@ -67,11 +67,11 @@ The Brewfile now covers the active package-manageable application set, including
 - development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, FluxMarkdown;
 - productivity/UI: Raycast, Rectangle Pro, Hyperkey, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse, Quotio;
 - browsers/networking: Google Chrome, Zen, Discord, Proton Pass, Tailscale;
-- hardware/system: DisplayLink Manager, Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
+- hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
 - games: League of Legends and Riot Client;
 - font: JetBrains Mono Nerd Font.
 
-Raycast runs its Beta channel selected inside the application; Homebrew exposes the `raycast` cask rather than a beta-specific token. DisplayLink is a package-installer cask that may require a reboot and license acceptance.
+Raycast runs its Beta channel selected inside the application; Homebrew exposes the `raycast` cask rather than a beta-specific token.
 
 Zed settings remain tracked, but **Zed.app was not installed at snapshot time**, so `cask "zed"` is intentionally absent. Add it if Zed becomes active again.
 

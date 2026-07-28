@@ -1,8 +1,8 @@
 # Full macOS machine manifest.
 #
 # On an already-configured machine, use `brew bundle check --file=Brewfile`.
-# Do not use `brew bundle install` only to verify this file: some casks, notably
-# DisplayLink, run package installers with system-level side effects.
+# Do not use `brew bundle install` only to verify this file: it may adopt existing
+# applications or run privileged package installers with system-level effects.
 
 # Taps
 tap "anomalyco/tap"
@@ -30,7 +30,6 @@ brew "xz"
 brew "zoxide"
 
 # Git and repository tooling
-brew "forgejo-cli"
 brew "gh"
 brew "gitleaks"
 brew "lazygit"
@@ -113,9 +112,6 @@ cask "tailscale-app"
 cask "zen"
 
 # Hardware and system utilities
-# DisplayLink uses a pkg installer, accepts the Synaptics license, and may require
-# a reboot. Do not install it merely to validate this manifest.
-cask "displaylink"
 cask "logitech-g-hub"
 cask "macs-fan-control"
 cask "music-presence"
