@@ -1,84 +1,139 @@
+# Full macOS machine manifest.
+#
+# On an already-configured machine, use `brew bundle check --file=Brewfile`.
+# Do not use `brew bundle install` only to verify this file: some casks, notably
+# DisplayLink, run package installers with system-level side effects.
+
+# Taps
+tap "anomalyco/tap"
+tap "nguyenphutrong/tap"
 tap "supabase/tap"
 tap "xykong/tap"
-# Clone of cat(1) with syntax highlighting and Git integration
+
+# Shell
+# bin/bootstrap adds the Homebrew binary to /etc/shells and selects it with chsh.
+# This snapshot machine still uses the official Fish pkg at /usr/local/bin/fish.
+brew "fish"
+
+# Core CLI tools
 brew "bat"
-# General-purpose data compression with high compression ratio
-brew "xz"
-# Python code formatter
-brew "black"
-# Dependency manager for Cocoa projects
-brew "cocoapods"
-# Modern, maintained replacement for ls
 brew "eza"
-# Simple, fast and user-friendly alternative to find
 brew "fd"
-# Fast and simple Node.js version manager
-brew "fnm"
-# Command-line fuzzy finder written in Go
 brew "fzf"
-# Command-line tool to interact with Forgejo instances
-brew "forgejo-cli"
-# GitHub command-line tool
-brew "gh"
-# Scan git repos for hardcoded secrets before they're committed
-brew "gitleaks"
-# Open source programming language to build simple/reliable/efficient software
-brew "go"
-# Stricter gofmt
-brew "gofumpt"
-# Go formatter that additionally inserts import statements
-brew "goimports"
-# Tool for glamorous shell scripts
 brew "gum"
-# Agent multiplexer that lives in your terminal
-brew "herdr"
-# Simple terminal UI for git commands
-brew "lazygit"
-# Package manager for the Lua programming language
-brew "luarocks"
-# Ambitious Vim-fork focused on extensibility and agility
-brew "neovim"
-# Code formatter for JavaScript, CSS, JSON, GraphQL, Markdown, YAML
-brew "prettier"
-# Prettier daemon
-brew "prettierd"
-# Python version management
-brew "pyenv"
-# Pyenv plugin to manage virtualenv
-brew "pyenv-virtualenv"
-# Search tool like grep and The Silver Searcher
+# Required by bin/herdr-sessionizer.
+brew "jq"
 brew "ripgrep"
-# Extremely fast Python linter, written in Rust
-brew "ruff"
-# Safe, concurrent, practical language
-brew "rust"
-# Autoformat shell script source code
-brew "shfmt"
-# Shell script static analysis tool
-brew "shellcheck"
-# Opinionated Lua code formatter
-brew "stylua"
-# CLI tool that moves files or folder to the trash
-brew "trash"
-# Shell extension to navigate your filesystem faster
-brew "zoxide"
-# Supabase CLI
-brew "supabase/tap/supabase", trusted: true
-# tldr: simplified and community-driven man pages
 brew "tldr"
-# Opeencode
-brew "anomalyco/tap/opencode", trusted: true
-# pnpm: fast, disk space efficient package manager
+brew "trash"
+brew "xz"
+brew "zoxide"
+
+# Git and repository tooling
+brew "forgejo-cli"
+brew "gh"
+brew "gitleaks"
+brew "lazygit"
+
+# Toolchains and package managers
+# Node 24.14.1 is installed and selected by bin/bootstrap.
+brew "fnm"
+# On this snapshot machine, official Go under /usr/local/go wins on PATH;
+# Homebrew Go is the fallback on a fresh machine. See fish/conf.d/00-paths.fish.
+brew "go"
+# Python 3.14.4 is installed and selected by bin/bootstrap.
+brew "pyenv"
+brew "pyenv-virtualenv"
+# rustup coexists on the snapshot machine; Homebrew Rust currently wins on PATH.
+# See SYSTEM.md for provenance rather than changing either installation here.
+brew "rust"
+# This snapshot machine also has the official ~/.bun install first on PATH.
+brew "bun"
+brew "cocoapods"
+brew "luarocks"
+brew "mas"
 brew "pnpm"
-# OpenAI's coding agent that runs in your terminal
+brew "proton-pass-cli"
+
+# Formatters and linters
+brew "black"
+brew "gofumpt"
+brew "goimports"
+brew "prettier"
+brew "prettierd"
+brew "ruff"
+brew "shellcheck"
+brew "shfmt"
+brew "stylua"
+
+# Editors and terminal workflow
+brew "herdr"
+brew "neovim"
+# Required at runtime by nvim-treesitter on its main branch.
+brew "tree-sitter-cli"
+
+# tmux is intentionally not declared. It was retired in favor of Herdr and is
+# only installed locally as legacy state; bin/tmux-sessionizer is a Herdr shim.
+
+# Product CLIs
+brew "anomalyco/tap/opencode", trusted: true
+brew "supabase/tap/supabase", trusted: true
+
+# Developer apps and terminal tools
+# Claude Code and cursor-agent use their native self-updating installers instead
+# of the available claude-code and cursor-cli casks; bin/bootstrap handles Claude.
 cask "codex"
-# Window peeking utility app
-cask "dockdoor"
-# Markdown previews in Finder QuickLook with diagrams and math
-cask "xykong/tap/flux-markdown", trusted: true
+cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
-# Terminal emulator that uses platform-native UI and GPU acceleration
 cask "ghostty"
-# Customise mouse behavior
+cask "orbstack"
+cask "t3-code@nightly"
+cask "xykong/tap/flux-markdown", trusted: true
+
+# Productivity and desktop UI
+cask "alcove"
+cask "bartender"
+cask "dockdoor"
+cask "hyperkey"
 cask "linearmouse"
-npm "corepack"
+cask "nguyenphutrong/tap/quotio", trusted: true
+# The installed Raycast uses the Beta channel selected inside the app; Homebrew
+# exposes only the stable cask token.
+cask "raycast"
+cask "rectangle-pro"
+cask "shottr"
+cask "wallspace"
+cask "wispr-flow"
+
+# Browsers, communication, and networking
+cask "discord"
+cask "google-chrome"
+cask "proton-pass"
+cask "tailscale-app"
+cask "zen"
+
+# Hardware and system utilities
+# DisplayLink uses a pkg installer, accepts the Synaptics license, and may require
+# a reboot. Do not install it merely to validate this manifest.
+cask "displaylink"
+cask "logitech-g-hub"
+cask "macs-fan-control"
+cask "music-presence"
+cask "wakatime"
+
+# Games
+# This also installs the Riot Client.
+cask "league-of-legends"
+
+# Mac App Store applications. Sign in to the App Store before running bootstrap.
+mas "Amphetamine", id: 937984704
+mas "Hush", id: 1544743900
+mas "NepTunes", id: 1006739057
+mas "Proton Pass for Safari", id: 6502835663
+mas "Tampermonkey", id: 6738342400
+mas "TrashMe 3", id: 1490879410
+mas "Wipr", id: 1662217862
+mas "Xcode", id: 497799835
+
+# npm globals are installed after fnm by bin/bootstrap. Brew Bundle's npm
+# directive cannot pin versions and installs Homebrew Node when npm is absent.
