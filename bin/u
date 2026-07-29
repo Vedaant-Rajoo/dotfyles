@@ -40,7 +40,11 @@ set -l OUTDATED (brew outdated); or exit $status
 echo $OUTDATED >>/tmp/u-$NOW.txt
 
 if test -n "$OUTDATED"
-    gum spin --spinner globe --title "🍻 brew upgrading" --show-output -- brew upgrade >>/tmp/u-$NOW.txt; or exit $status
+    # no spinner here: cask upgrades can prompt for sudo, and gum spin swallows the prompt
+    echo "🍻 brew upgrading..."
+    brew upgrade 2>&1 | tee -a /tmp/u-$NOW.txt
+    set -l upgrade_status $pipestatus[1]
+    test $upgrade_status -eq 0; or exit $upgrade_status
     echo "" >>/tmp/u-$NOW.txt
     echo "✅ 🍻 brew upgraded"
 
