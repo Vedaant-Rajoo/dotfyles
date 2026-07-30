@@ -189,7 +189,7 @@ fisher update
 
 ## macOS defaults
 
-`bin/macdefaults` covers selected keyboard, Dock, Finder, screenshot, and window-dragging preferences. It is intentionally opt-in because it requests administrator access and restarts user-interface services:
+`bin/macdefaults` covers selected keyboard, Dock, Finder, screenshot, and window-dragging preferences. It is intentionally opt-in because it restarts Dock, Finder, and related UI services:
 
 ```bash
 bin/bootstrap --with-defaults

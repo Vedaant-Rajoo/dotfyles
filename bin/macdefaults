@@ -3,19 +3,10 @@
 # ~/.macos — https://mths.be/macos
 # Also see: https://macos-defaults.com/
 
-# Close any open System Preferences panes, to prevent them from overriding
-# settings we’re about to change
-osascript -e 'tell application "System Preferences" to quit'
-
-# Ask for the administrator password upfront
-sudo -v
-
-# Keep-alive: update existing `sudo` time stamp until this script has finished
-while true
-    sudo -n true
-    sleep 60
-    kill -0 $fish_pid 2>/dev/null; or exit
-end &
+# Close System Settings / Preferences so they cannot override changes we write.
+# Neither app requires sudo; this script only touches per-user defaults.
+osascript -e 'tell application "System Settings" to quit' >/dev/null 2>&1
+osascript -e 'tell application "System Preferences" to quit' >/dev/null 2>&1
 
 # VSCode: disable the Apple press and hold for VSCode only
 defaults write com.microsoft.VSCode ApplePressAndHoldEnabled -bool false
