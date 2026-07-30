@@ -214,7 +214,6 @@ NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
 	"@augmentcode/auggie"
 	"localtunnel"
-	"classy-cli"
 )
 
 install_npm_global() {
@@ -252,7 +251,21 @@ printf '\n==> Repository hooks\n'
 run git -C "$REPO_ROOT" config core.hooksPath git/hooks
 
 printf '\n==> Fisher plugins\n'
-run "$FISH_BIN" -c 'if not functions -q fisher; curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source; and fisher install jorgebucaran/fisher; end; and fisher update'
+# Plugin files are vendored under fish/. On a fresh machine Fisher has no
+# _fisher_plugins state, so `fisher update` tries installs, hits conflicts,
+# and then deletes fish_plugins. Seed the universal list first so Fisher
+# treats them as updates and overwrites the vendored copies.
+run "$FISH_BIN" -c '
+	if not functions -q fisher
+		curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source
+		and fisher install jorgebucaran/fisher
+	end
+	set -l manifest $__fish_config_dir/fish_plugins
+	if test -e $manifest; and not set -q _fisher_plugins[1]
+		set -U _fisher_plugins (string match -r -- \'^[^\s]+$\' <$manifest)
+	end
+	fisher update
+'
 
 if [[ "$WITH_DEFAULTS" -eq 1 ]]; then
 	printf '\n==> macOS defaults\n'

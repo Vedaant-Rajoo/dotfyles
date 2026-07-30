@@ -53,8 +53,7 @@ The user-owned npm prefix is `~/.node_modules`. Bootstrap restores:
 
 - `postplan@0.0.4` — required by `agents/skills/html-planning`;
 - `@augmentcode/auggie`;
-- `localtunnel`;
-- `classy-cli`.
+- `localtunnel`.
 
 The snapshot also contained a separate npm installation and a broken `vaultwork` launcher. Those are not restored. Corepack ships with the fnm-managed Node runtime; the old Brewfile `npm "corepack"` directive was removed because Brew Bundle cannot pin npm versions and may install Homebrew Node before fnm is ready.
 
