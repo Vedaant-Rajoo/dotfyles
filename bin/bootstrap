@@ -247,6 +247,13 @@ elif ! "$REPO_ROOT/bin/agents_link" all; then
 	warn "edit ~/.claude/settings.local.json if required, then re-run bin/agents_link all"
 fi
 
+printf '\n==> Legcord settings\n'
+if [[ "$DRY_RUN" -eq 1 ]]; then
+	quote_command "$REPO_ROOT/bin/legcord_link"
+elif ! "$REPO_ROOT/bin/legcord_link"; then
+	warn "Legcord settings link failed; run bin/legcord_link again after launching Legcord once"
+fi
+
 printf '\n==> Repository hooks\n'
 run git -C "$REPO_ROOT" config core.hooksPath git/hooks
 

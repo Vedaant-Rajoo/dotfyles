@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# legcord_link — connect Legcord's live settings to the tracked copy.
+#
+# Legcord stores its configuration at <userData>/storage/settings.json and
+# saves it with a plain writeFileSync, so a symlinked settings.json survives
+# in-app saves and edits land in this repository's working tree.
+#
+# macOS userData is ~/Library/Application Support/legcord; the tracked copy
+# lives at legcord/storage/settings.json, mirroring the app's own layout.
+# On Linux, Electron's userData already is ~/.config/legcord, so the app
+# reads the tracked file directly and no link is required.
+#
+# Only settings.json is shared. Discord session state (Cookies, Local
+# Storage), caches, storage/window.json geometry, and storage/lang.json
+# remain machine-local; .gitignore enforces that boundary for Linux, where
+# the app writes runtime state directly into this repository's legcord/.
+#
+# Caveat: Legcord rewrites settings.json in place at times (for example the
+# modCache bundle hashes), so review `git diff legcord/` before committing.
+#
+# Usage:
+#   legcord_link          Create/repair the symlink. Adopts the live file
+#                         into the repository when no tracked copy exists.
+#   legcord_link --check  Report status only; make no changes.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_SETTINGS="$REPO_ROOT/legcord/storage/settings.json"
+LIVE_STORAGE="$HOME/Library/Application Support/legcord/storage"
+LIVE_SETTINGS="$LIVE_STORAGE/settings.json"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "legcord_link: Linux Legcord reads ~/.config/legcord directly; no link needed"
+    exit 0
+fi
+
+CHECK=0
+if [[ "${1:-}" == "--check" ]]; then
+    CHECK=1
+elif [[ "${1:-}" != "" ]]; then
+    echo "usage: legcord_link [--check]" >&2
+    exit 1
+fi
+
+if [[ "$CHECK" -eq 1 ]]; then
+    if [[ -L "$LIVE_SETTINGS" ]] && [[ "$LIVE_SETTINGS" -ef "$REPO_SETTINGS" ]]; then
+        echo "OK      settings.json"
+        exit 0
+    elif [[ -L "$LIVE_SETTINGS" ]]; then
+        echo "STALE   settings.json (symlink points elsewhere: $(readlink "$LIVE_SETTINGS"))"
+    elif [[ -e "$LIVE_SETTINGS" ]]; then
+        echo "BROKEN  settings.json (regular file, not a symlink — run legcord_link to relink)"
+    else
+        echo "MISSING settings.json (link never created)"
+    fi
+    exit 1
+fi
+
+if [[ -L "$LIVE_SETTINGS" ]] && [[ "$LIVE_SETTINGS" -ef "$REPO_SETTINGS" ]]; then
+    echo "ok:     settings.json already linked"
+    exit 0
+fi
+
+if [[ ! -e "$REPO_SETTINGS" ]]; then
+    if [[ -f "$LIVE_SETTINGS" && ! -L "$LIVE_SETTINGS" ]]; then
+        mkdir -p "$(dirname "$REPO_SETTINGS")"
+        mv "$LIVE_SETTINGS" "$REPO_SETTINGS"
+        echo "adopt:  live settings.json -> $REPO_SETTINGS"
+    else
+        echo "error:  no tracked settings and no live file to adopt — launch Legcord once, then re-run legcord_link" >&2
+        exit 1
+    fi
+fi
+
+if [[ -L "$LIVE_SETTINGS" ]]; then
+    echo "relink: settings.json (stale symlink -> $(readlink "$LIVE_SETTINGS"))"
+    rm "$LIVE_SETTINGS"
+elif [[ -e "$LIVE_SETTINGS" ]]; then
+    backup="${LIVE_SETTINGS}.pre-symlink-backup"
+    if [[ -e "$backup" ]]; then
+        echo "error:  settings.json — backup already exists at $backup, refusing to overwrite. Resolve manually." >&2
+        exit 1
+    fi
+    echo "backup: settings.json -> $backup"
+    mv "$LIVE_SETTINGS" "$backup"
+fi
+
+mkdir -p "$LIVE_STORAGE"
+ln -s "$REPO_SETTINGS" "$LIVE_SETTINGS"
+echo "linked: settings.json -> $REPO_SETTINGS"

@@ -105,8 +105,9 @@ cask "wallspace"
 cask "wispr-flow"
 
 # Browsers, communication, and networking
-cask "discord"
 cask "google-chrome"
+# Alternate Discord client; bin/legcord_link connects its tracked settings.
+cask "legcord"
 cask "proton-pass"
 cask "tailscale-app"
 cask "zen"

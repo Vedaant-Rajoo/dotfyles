@@ -33,6 +33,14 @@ raycast/
 raycast-x/
 node_modules/
 
+# --- Legcord: only storage/settings.json is tracked. On Linux the app's
+#     Electron userData dir IS ~/.config/legcord, so session cookies and
+#     caches would otherwise land here; bin/legcord_link documents this. ---
+legcord/*
+!legcord/storage
+legcord/storage/*
+!legcord/storage/settings.json
+
 # --- Logs / caches (defensive) ---
 *.log
 .cache/

@@ -78,7 +78,7 @@ The Brewfile now covers the active package-manageable application set, including
 
 - development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, FluxMarkdown;
 - productivity/UI: Raycast, Rectangle Pro, Hyperkey, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse, Quotio;
-- browsers/networking: Google Chrome, Zen, Discord, Proton Pass, Tailscale;
+- browsers/networking: Google Chrome, Zen, Legcord, Proton Pass, Tailscale;
 - hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
 - games: League of Legends and Riot Client;
 - font: JetBrains Mono Nerd Font.
@@ -124,6 +124,7 @@ These items influence the daily machine but are intentionally excluded from vers
 | WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |
 | OpenCode live provider configuration | `opencode/opencode.json` contains credentials |
 | OrbStack/Docker contexts, registry auth, IPv6/Rosetta preferences | Keychain and machine/runtime state |
+| Legcord Discord session, caches, window geometry, and locale cache | Only `storage/settings.json` is tracked; `bin/legcord_link` connects it |
 | GUI preference plists for third-party apps | Full GUI cloning is outside the repository boundary |
 
 ## Runtime and service state

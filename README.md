@@ -67,6 +67,7 @@ The App Store must be signed in before `mas` can install its entries. A failed A
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hook |
 | `gh/` | GitHub CLI configuration (credentials remain in the keychain) |
 | `linearmouse/` | LinearMouse per-device settings |
+| `legcord/` | Legcord (alternate Discord client) settings, connected by `bin/legcord_link` |
 | `zed/` | Zed settings; the app itself is not currently installed |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `bat/` | Bat configuration |
@@ -164,6 +165,10 @@ Zed settings remain tracked even though Zed.app is not installed in this snapsho
 
 Add `cask "zed"` to the Brewfile when the app becomes part of the active machine again.
 
+### Legcord
+
+Legcord keeps its configuration at `~/Library/Application Support/legcord/storage/settings.json` and rewrites it in place, so bootstrap runs `bin/legcord_link` to symlink that file to the tracked `legcord/storage/settings.json`. In-app settings changes land directly in this repository's working tree; review `git diff legcord/` before committing, because Legcord also bumps internal fields such as `modCache` hashes on its own. Discord account login, session cookies, caches, window geometry, and the locale cache stay machine-local. On Linux no link is needed — Electron's config directory for Legcord is `~/.config/legcord` itself — and the tracked `.gitignore` rules keep everything except `storage/settings.json` out of version control there.
+
 ### Cursor, Codex, DockDoor, and Raycast
 
 These applications are installed by the Brewfile. Shared agent behavior is projected by `bin/agents_link`, but mutable native settings remain deliberately untracked:
@@ -224,6 +229,7 @@ gitleaks detect --source . -v
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |
 | `raycast/`, `raycast-x/` | Downloaded extensions and app data |
+| `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

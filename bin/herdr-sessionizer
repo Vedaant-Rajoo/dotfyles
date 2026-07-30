@@ -49,9 +49,38 @@ server_running() {
 	[[ "$out" == *'status: running'* ]]
 }
 
+# A server that outlives the terminal app which spawned it keeps running with a
+# dead Mach bootstrap port, and every pane it spawns inherits the corpse. In
+# such a pane getpwuid() returns NULL, so sudo says "you do not exist in the
+# passwd database" and fish warns that notify_register_file_descriptor() failed
+# with status 9. Cheap probe: with no bootstrap port there is no opendirectoryd
+# to ask, so `id -un` falls back to printing the raw uid.
+bootstrap_port_alive() {
+	[[ "$(id -un 2>/dev/null)" != "$(id -u)" ]]
+}
+
+warn_dead_bootstrap_port() {
+	echo "herdr-sessionizer: no Mach bootstrap port in this process." >&2
+	echo "  The herdr server outlived the terminal app that started it." >&2
+	echo "  sudo, dscl and fish universal variables misbehave in every pane it spawns." >&2
+	echo "  Fix: brew services restart herdr" >&2
+}
+
 ensure_server() {
 	if server_running; then
+		# Inside a pane our own namespace *is* the server's namespace, so this
+		# probe reports on the running server. Warn only — restarting here
+		# would kill whatever the panes are running.
+		if [[ -n "${HERDR_ENV:-}${HERDR_PANE_ID:-}" ]] && ! bootstrap_port_alive; then
+			warn_dead_bootstrap_port
+		fi
 		return 0
+	fi
+	# Never hand a dead bootstrap port to a brand-new server: it would poison
+	# every pane for the whole life of that server.
+	if ! bootstrap_port_alive; then
+		warn_dead_bootstrap_port
+		die "refusing to start a herdr server without a bootstrap port; start it from a fresh terminal window or with 'brew services start herdr'"
 	fi
 	nohup "$herdr_bin" server >/dev/null 2>&1 &
 	local deadline=$(( SECONDS + START_TIMEOUT ))
