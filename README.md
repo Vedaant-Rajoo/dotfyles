@@ -153,7 +153,11 @@ bin/agents_conform --live --skills  # also test skill discovery/invocation
 
 The static tier exits non-zero on drift. It also validates `agents/hooks/manifest.json` against its own schema, checks that Claude's tracked settings really run every hook the manifest calls portable, and requires each `agents/skills/*/SKILL.md` to declare a `name:` matching its directory. The live tier prints a scorecard and is informational by default because model obedience is probabilistic; set `AGENTS_LIVE_GATE=1` only when a failing canary should fail automation. A skill joins the live tier by publishing a `SKILL-CHECK <name>` contract line in its own `SKILL.md`.
 
-Until `~/.claude/settings.local.json` holds a real CLIProxyAPI token, `agents_conform` reports two expected `BROKEN` rows for `settings.local.json` and `settings.json`. That file is machine-local by design and cannot be fixed from the repository — see the note below.
+Until `~/.claude/settings.local.json` holds a real CLIProxyAPI token, `agents_conform` reports two expected `BROKEN` rows for `settings.local.json` and `settings.json`. That file is machine-local by design and cannot be fixed from the repository — see the note below. Three consequences follow from that one placeholder, and all three clear together once the token is real:
+
+- `claude_link` refuses to materialize `~/.claude/settings.json`, so the live settings file keeps whatever Claude Code last wrote and carries none of the tracked hooks;
+- Claude's `Stop` hook therefore never fires, and the live scorecard shows `HOOK N/A`;
+- the live tier never runs at all, because `--live` is gated behind a passing static tier.
 
 The bootstrap still installs Claude Code with Anthropic's native self-updating installer when `claude` is missing. The Claude adapter delegates to `bin/claude_link`, which preserves Claude-native settings: it seeds `~/.claude/settings.local.json`, materializes `~/.claude/settings.json` with the local CLIProxyAPI environment, and links Claude-only hooks/statusline files. Replace the placeholder values in `~/.claude/settings.local.json`, mirror the required exports in `fish/local/claude-code.fish`, then re-run `bin/agents_link all`.
 
