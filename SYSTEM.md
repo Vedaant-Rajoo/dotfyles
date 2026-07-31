@@ -29,7 +29,7 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | Bun | 1.3.14, Homebrew | Declared in Brewfile; the former `~/.bun` native install is no longer present |
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
 | Claude Code | 2.1.220 native install under `~/.local/share/claude`, launcher in `~/.local/bin` | `bin/bootstrap` uses the official native self-updating installer |
-| Cursor Agent | build `2026.07.09-a3815c0`, native install under `~/.local/bin` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
+| Cursor Agent | CLI `2026.07.23-e383d2b` under `~/.local/share/cursor-agent`; Cursor.app is `2026.07.09-a3815c0` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
 | Proton Pass CLI | 2.2.3 under `~/.local/bin` | `proton-pass-cli` is now declared as a fresh-machine fallback |
 
 The duplicated Go and Rust providers are intentional snapshot facts, not a desired cleanup performed by this change.
@@ -43,10 +43,18 @@ The duplicated Go and Rust providers are intentional snapshot facts, not a desir
 | Claude Code | `~/.claude` **is** `claude/`; `claude/CLAUDE.md` → `agents/AGENTS.md` | `claude/skills` → `agents/skills` | Generated into `claude/agents` | Native `Stop` command hook, from tracked settings |
 | Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | N/A: no stable subagent file format | Unmanaged until the native TOML hook schema stabilizes |
 | OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Generated into `~/.config/opencode/agents` | Not portable: lifecycle extension surface is the plugin API |
-| Cursor Agent | Project `AGENTS.md`; no verified filesystem global-rules path | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: `~/.cursor/agents` format unverified in this build | Generated `~/.cursor/hooks.json` stop hook |
+| Cursor Agent | Generated `~/.cursor/rules/agents.mdc` (`alwaysApply`), found by ancestor walk | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: the CLI reads subagents only from a workspace `.cursor/agents` | Generated `~/.cursor/hooks.json` stop hook |
 | Shared standard | `~/.agents/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.agents/skills` | — | — |
 
-Rules and skills are symlinks, so all harnesses read the same bytes. Subagent frontmatter is harness-specific, so `bin/agents_render` translates each `agents/subagents/<name>.md` and `agents_link` writes the result; those generated files are untracked and carry a generation header that marks them safe to rewrite or prune. The lossy edges — model tier dropped on OpenCode, permission tiers `safe`/`full` dropped on Claude — are recorded in `agents/subagents/README.md`.
+Cursor is the awkward one, and the table above understates it. It has no global rules *file*: `LocalCursorRulesService` walks up from the workspace directory reading `<dir>/.cursor/rules/**/*.mdc` and `<dir>/AGENTS.md` at every ancestor until it hits `/`. `~/.cursor/rules` is therefore reached only because `$HOME` is an ancestor — the shared rule applies to every project under the home directory and to nothing outside it. There is no `~/.cursor/AGENTS.md` and no `CURSOR.md` anywhere in the shipped bundle. `CURSOR_CONFIG_DIR` exists but relocates only `cli-config.json` and `permissions.json`, so it cannot move rules, skills, agents, or hooks.
+
+Three Cursor findings worth not rediscovering:
+
+- **Subagents are workspace-only.** `computeAgentsDirs()` resolves from `workspacePath` alone; no `homedir()`-joined agents directory exists in the bundle. Projecting into `~/.cursor/agents` would fail silently, which is why this repo does not.
+- **Cursor imports Claude's hooks.** It reads `~/.claude/settings.json` directly and maps `Stop`→`stop`, `PreToolUse`→`preToolUse`, and six more. With both that and `~/.cursor/hooks.json` configured, a portable hook can run twice under Cursor.
+- **`XDG_CONFIG_HOME` is a latent trap for this machine.** It is unset today. Exporting it as `~/.config` — tempting, given this repo lives there — silently moves Cursor's config dir to `~/.config/cursor` and orphans `cli-config.json` and `permissions.json`.
+
+Rules and skills are symlinks elsewhere, so all other harnesses read the same bytes. Subagent frontmatter is harness-specific, so `bin/agents_render` translates each `agents/subagents/<name>.md` and `agents_link` writes the result; those generated files are untracked and carry a generation header that marks them safe to rewrite or prune. The lossy edges — model tier dropped on OpenCode, permission tiers `safe`/`full` dropped on Claude — are recorded in `agents/subagents/README.md`.
 
 Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
 
