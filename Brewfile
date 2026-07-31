@@ -24,7 +24,7 @@ brew "gum"
 # Required by bin/herdr-sessionizer.
 brew "jq"
 brew "ripgrep"
-brew "tldr"
+brew "tlrc"
 brew "trash"
 brew "xz"
 brew "zoxide"
@@ -46,7 +46,6 @@ brew "pyenv-virtualenv"
 # rustup coexists on the snapshot machine; Homebrew Rust currently wins on PATH.
 # See SYSTEM.md for provenance rather than changing either installation here.
 brew "rust"
-# This snapshot machine also has the official ~/.bun install first on PATH.
 brew "bun"
 brew "cocoapods"
 brew "luarocks"

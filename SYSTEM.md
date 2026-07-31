@@ -26,7 +26,7 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | Python | 3.14.4, pyenv global | Pinned in `bin/bootstrap` |
 | Go | Official Go 1.26.2 at `/usr/local/go` wins over Homebrew Go 1.26.5 | Keep `fish/conf.d/00-paths.fish` preference; Brewfile Go is the fresh-machine fallback |
 | Rust | Homebrew Rust 1.97.1 wins on PATH; rustup stable ARM64 1.96.0 also exists | Brewfile reproduces Homebrew Rust; rustup remains documented local state |
-| Bun | 1.3.14 under `~/.bun`, first on PATH | Brewfile now declares Bun; the existing native install remains untouched |
+| Bun | 1.3.14, Homebrew | Declared in Brewfile; the former `~/.bun` native install is no longer present |
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
 | Claude Code | 2.1.220 native install under `~/.local/share/claude`, launcher in `~/.local/bin` | `bin/bootstrap` uses the official native self-updating installer |
 | Cursor Agent | build `2026.07.09-a3815c0`, native install under `~/.local/bin` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
