@@ -45,7 +45,7 @@ say() {
 	fi
 	local color=7
 	case "$status" in
-	ok: | moved: | adopted:) color=2 ;;
+	ok: | moved: | done:) color=2 ;;
 	next:) color=3 ;;
 	error:) color=1 ;;
 	INFO) color=4 ;;
@@ -125,7 +125,7 @@ printf '\n'
 "$REPO_ROOT/bin/agents_link" all || say INFO "agents_link reported drift above; the adopted skill itself is in place"
 
 printf '\n'
-say 'adopted:' "$NAME is now canonical and shared by every installed harness"
+say 'done:' "$NAME is now canonical and shared by every installed harness"
 say 'next:' "review it, then track it:"
 printf '  git -C %s status --short agents/skills/%s\n' "$REPO_ROOT" "$NAME"
 printf '  git -C %s add agents/skills/%s\n' "$REPO_ROOT" "$NAME"
