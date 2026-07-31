@@ -40,7 +40,7 @@ The duplicated Go and Rust providers are intentional snapshot facts, not a desir
 
 | Harness | Rules | Skills | Subagents | Portable hook coverage |
 |---------|-------|--------|-----------|------------------------|
-| Claude Code | `~/.claude/CLAUDE.md` → `agents/AGENTS.md` | `~/.claude/skills` → `agents/skills` | Generated into `~/.claude/agents` | Native `Stop` command hook |
+| Claude Code | `~/.claude` **is** `claude/`; `claude/CLAUDE.md` → `agents/AGENTS.md` | `claude/skills` → `agents/skills` | Generated into `claude/agents` | Native `Stop` command hook, from tracked settings |
 | Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | N/A: no stable subagent file format | Unmanaged until the native TOML hook schema stabilizes |
 | OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Generated into `~/.config/opencode/agents` | Not portable: lifecycle extension surface is the plugin API |
 | Cursor Agent | Project `AGENTS.md`; no verified filesystem global-rules path | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: `~/.cursor/agents` format unverified in this build | Generated `~/.cursor/hooks.json` stop hook |
@@ -50,7 +50,9 @@ Rules and skills are symlinks, so all harnesses read the same bytes. Subagent fr
 
 Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
 
-`~/.claude/settings.local.json` still contains the placeholder `ANTHROPIC_AUTH_TOKEN` on this machine, so `agents_conform` reports two expected `BROKEN` rows. That file holds credentials, is deliberately outside the repository, and is the one documented manual step between a clean clone and a clean conformance run.
+Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
+
+About 340 MB of Claude runtime state — `security/` alone is a 297 MB agent SDK venv — now sits inside the working tree and is gitignored wholesale. `~/.claude.json` is deliberately left at the home root: it is OAuth and per-project state, not configuration.
 
 ## npm global tools
 
@@ -123,7 +125,8 @@ These items influence the daily machine but are intentionally excluded from vers
 | Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; shared rules and skills are projected from `agents/` |
 | DockDoor plist preferences | User explicitly chose not to export GUI defaults |
 | Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
-| Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; only sanitized settings and selected links are tracked |
+| Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; it now lives under `claude/` because `~/.claude` links there, and is gitignored wholesale |
+| `claude/auth-token` and `~/.claude.json` | The CLIProxyAPI credential and Claude's OAuth/project state; neither is ever tracked |
 | GitHub Copilot OAuth state | Credential-bearing runtime data |
 | SSH private keys, known hosts, and the `trixie` host alias | Security boundary; recreate manually |
 | WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |

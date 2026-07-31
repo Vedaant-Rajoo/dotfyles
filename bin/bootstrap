@@ -244,7 +244,8 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 	quote_command "$REPO_ROOT/bin/agents_link" all
 elif ! "$REPO_ROOT/bin/agents_link" all; then
 	warn "agent links were seeded, but one or more adapters need attention"
-	warn "edit ~/.claude/settings.local.json if required, then re-run bin/agents_link all"
+	warn "write your CLIProxyAPI token into claude/auth-token, then re-run bin/agents_link all"
+	warn "if ~/.claude is still a real directory, fold it in with bin/claude_link --migrate"
 fi
 
 printf '\n==> Legcord settings\n'
@@ -294,7 +295,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Sign in to the App Store and re-run bootstrap if any mas installs failed.
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
-  - Set ~/.claude/settings.local.json, then run bin/agents_link all.
+  - Write your CLIProxyAPI token into claude/auth-token, then run bin/agents_link all.
   - Run `postplan login` and open Neovim once to install plugins.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
