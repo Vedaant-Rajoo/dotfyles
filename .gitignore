@@ -18,6 +18,7 @@ Thumbs.db
 # --- Secrets / auth (never public) ---
 github-copilot/
 fish/local/
+monid/credentials.yaml
 opencode/opencode.json
 
 # --- Nested upstream repo ---
