@@ -1,3 +1,12 @@
 # Fingerprints of findings gitleaks should ignore, one per line, in the form
-# <file>:<rule>:<line>. Keep this list empty unless a finding is provably a
-# synthetic test fixture: real credentials never belong in this repository.
+# <commit>:<file>:<rule>:<line>. Keep this list empty unless a finding is
+# provably a synthetic test fixture: real credentials never belong in this repo.
+#
+# These fingerprints pin *historical* commits, so they must stay even when the
+# path no longer exists in the working tree — `gitleaks detect` scans all of
+# history, not just tracked files.
+
+# Synthetic secrets in the html-planning skill's own redaction tests, used to
+# verify sanitize-and-validate.mjs catches them. The values are self-labelled:
+# syntheticBearerToken..., ghp_abcdefghij..., fakeuser:fakepassword.
+53ea57dfd61bb18f38f387aa7cc6842a8a231f97:claude/skills/html-planning/tests/fixtures/unsafe-plan.json:jwt:11
