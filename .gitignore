@@ -24,6 +24,11 @@ opencode/opencode.json
 # --- Nested upstream repo ---
 init.lua/
 
+# --- Generated harness projections. ~/.config/opencode IS this repo's
+#     opencode/, so bin/agents_link writes translated subagents into the
+#     working tree; agents/subagents/ is the tracked source. ---
+opencode/agents/
+
 # --- Machine-local runtime state ---
 fish/fish_variables
 nvim/tmp/

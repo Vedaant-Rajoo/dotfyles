@@ -38,14 +38,19 @@ The duplicated Go and Rust providers are intentional snapshot facts, not a desir
 
 `agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries.
 
-| Harness | Rules | Skills | Portable hook coverage |
-|---------|-------|--------|------------------------|
-| Claude Code | `~/.claude/CLAUDE.md` → `agents/AGENTS.md` | `~/.claude/skills` → `agents/skills` | Native `Stop` command hook |
-| Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | Unmanaged until the native TOML hook schema stabilizes |
-| OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Not portable: lifecycle extension surface is the plugin API |
-| Cursor Agent | Project `AGENTS.md`; no verified filesystem global-rules path | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | Generated `~/.cursor/hooks.json` stop hook |
+| Harness | Rules | Skills | Subagents | Portable hook coverage |
+|---------|-------|--------|-----------|------------------------|
+| Claude Code | `~/.claude/CLAUDE.md` → `agents/AGENTS.md` | `~/.claude/skills` → `agents/skills` | Generated into `~/.claude/agents` | Native `Stop` command hook |
+| Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | N/A: no stable subagent file format | Unmanaged until the native TOML hook schema stabilizes |
+| OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Generated into `~/.config/opencode/agents` | Not portable: lifecycle extension surface is the plugin API |
+| Cursor Agent | Project `AGENTS.md`; no verified filesystem global-rules path | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: `~/.cursor/agents` format unverified in this build | Generated `~/.cursor/hooks.json` stop hook |
+| Shared standard | `~/.agents/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.agents/skills` | — | — |
+
+Rules and skills are symlinks, so all harnesses read the same bytes. Subagent frontmatter is harness-specific, so `bin/agents_render` translates each `agents/subagents/<name>.md` and `agents_link` writes the result; those generated files are untracked and carry a generation header that marks them safe to rewrite or prune. The lossy edges — model tier dropped on OpenCode, permission tiers `safe`/`full` dropped on Claude — are recorded in `agents/subagents/README.md`.
 
 Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
+
+`~/.claude/settings.local.json` still contains the placeholder `ANTHROPIC_AUTH_TOKEN` on this machine, so `agents_conform` reports two expected `BROKEN` rows. That file holds credentials, is deliberately outside the repository, and is the one documented manual step between a clean clone and a clean conformance run.
 
 ## npm global tools
 

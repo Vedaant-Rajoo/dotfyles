@@ -1,0 +1,349 @@
+#!/usr/bin/env node
+// agents_render — translate the canonical agents/ layer into harness-native
+// text, and validate the parts of it that other adapters depend on.
+//
+// Everything here prints to stdout and never touches the filesystem outside
+// of reads: bin/agents_link owns file placement, backups, and refusals.
+// Zero dependencies, Node 20+ (same constraint as agents/skills/*/build.mjs).
+//
+// Usage:
+//   agents_render subagent <source.md> <claude|opencode>
+//   agents_render cursor-hooks
+//   agents_render validate-manifest
+//   agents_render check-claude-hooks
+
+import { readFileSync, existsSync, accessSync, constants } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve, join, basename } from 'node:path';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const AGENTS_ROOT = join(REPO_ROOT, 'agents');
+const HOOKS_ROOT = join(AGENTS_ROOT, 'hooks');
+const MANIFEST = join(HOOKS_ROOT, 'manifest.json');
+const SCHEMA = join(HOOKS_ROOT, 'manifest.schema.json');
+
+function fail(msg) {
+  console.error(`agents_render: ${msg}`);
+  process.exit(1);
+}
+
+function readJson(path, label) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    fail(`${label} is not readable JSON (${path}): ${err.message}`);
+  }
+}
+
+// ------------------------------------------------------------- frontmatter
+
+// Deliberately not a YAML parser. The canonical subagent format is a strict
+// subset — `---` fences around single-line `key: value` pairs, with inline
+// `[a, b]` lists — so that every harness projection is a pure function of the
+// source. Anything richer is a hard error rather than a silent guess.
+function parseFrontmatter(text, source) {
+  const lines = text.split('\n');
+  if (lines[0] !== '---') fail(`${source}: must start with a --- frontmatter fence`);
+  const end = lines.indexOf('---', 1);
+  if (end === -1) fail(`${source}: frontmatter fence is never closed`);
+
+  const data = {};
+  for (let i = 1; i < end; i++) {
+    const line = lines[i];
+    if (line.trim() === '') continue;
+    const match = /^([A-Za-z][A-Za-z0-9_-]*): *(.*)$/.exec(line);
+    if (!match) fail(`${source}: line ${i + 1} is not a single-line "key: value" pair: ${line}`);
+    const [, key, raw] = match;
+    if (key in data) fail(`${source}: duplicate frontmatter key "${key}"`);
+    if (raw === '' || raw === '>' || raw === '|' || raw === '>-' || raw === '|-') {
+      fail(`${source}: key "${key}" has no inline value; block scalars and nested maps are not supported`);
+    }
+    data[key] = parseValue(raw, key, source);
+  }
+  return { data, body: lines.slice(end + 1).join('\n') };
+}
+
+function parseValue(raw, key, source) {
+  const value = raw.trim();
+  if (value.startsWith('[')) {
+    if (!value.endsWith(']')) fail(`${source}: key "${key}" has an unterminated inline list`);
+    const inner = value.slice(1, -1).trim();
+    if (inner === '') return [];
+    return inner.split(',').map((item) => unquote(item.trim(), key, source));
+  }
+  return unquote(value, key, source);
+}
+
+// Only a leading quote makes a value quoted; an apostrophe inside a plain
+// scalar ("a project's tests") is unambiguous and stays literal.
+function unquote(value, key, source) {
+  const quote = value[0];
+  if (quote !== '"' && quote !== "'") return value;
+  if (value.length < 2 || value.at(-1) !== quote) {
+    fail(`${source}: key "${key}" opens with ${quote} but never closes it`);
+  }
+  return value.slice(1, -1);
+}
+
+// ---------------------------------------------------------------- subagent
+
+const MODELS = ['haiku', 'sonnet', 'opus', 'inherit'];
+const PERMISSIONS = ['read-only', 'safe', 'full'];
+const KNOWN_KEYS = ['name', 'description', 'tools', 'model', 'permission'];
+const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
+const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
+
+// Claude tool vocabulary -> OpenCode tool id. Names outside this table are
+// Claude-only (Task, NotebookEdit, …) and are simply not expressible on the
+// OpenCode side, so they are skipped rather than guessed at.
+const OPENCODE_TOOLS = [
+  ['Read', 'read'],
+  ['Grep', 'grep'],
+  ['Glob', 'glob'],
+  ['Write', 'write'],
+  ['Edit', 'edit'],
+  ['Bash', 'bash'],
+  ['WebFetch', 'webfetch'],
+  ['WebSearch', 'websearch'],
+  ['TodoWrite', 'todowrite'],
+];
+
+const OPENCODE_PERMISSIONS = {
+  'read-only': { edit: 'deny', bash: 'deny', webfetch: 'allow' },
+  safe: { edit: 'allow', bash: 'ask', webfetch: 'allow' },
+  full: { edit: 'allow', bash: 'allow', webfetch: 'allow' },
+};
+
+function loadSubagent(path) {
+  if (!existsSync(path)) fail(`subagent source not found: ${path}`);
+  const stem = basename(path).replace(/\.md$/, '');
+  const source = `agents/subagents/${stem}.md`;
+  const { data, body } = parseFrontmatter(readFileSync(path, 'utf8'), source);
+
+  for (const key of Object.keys(data)) {
+    if (!KNOWN_KEYS.includes(key)) fail(`${source}: unknown frontmatter key "${key}"`);
+  }
+  if (typeof data.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(data.name)) {
+    fail(`${source}: "name" is required and must match ^[a-z0-9][a-z0-9-]*$`);
+  }
+  if (data.name !== stem) fail(`${source}: "name" is ${data.name} but the filename stem is ${stem}`);
+  if (typeof data.description !== 'string' || data.description.trim() === '') {
+    fail(`${source}: "description" is required`);
+  }
+  if ('tools' in data) {
+    if (!Array.isArray(data.tools) || data.tools.length === 0) {
+      fail(`${source}: "tools" must be a non-empty inline list, or omitted to inherit every tool`);
+    }
+    for (const tool of data.tools) {
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(tool)) fail(`${source}: "${tool}" is not a tool name`);
+    }
+  }
+  const model = data.model ?? 'inherit';
+  if (!MODELS.includes(model)) fail(`${source}: "model" must be one of ${MODELS.join('|')}`);
+  const permission = data.permission ?? 'safe';
+  if (!PERMISSIONS.includes(permission)) {
+    fail(`${source}: "permission" must be one of ${PERMISSIONS.join('|')}`);
+  }
+  if (permission === 'read-only' && Array.isArray(data.tools)) {
+    const mutating = data.tools.filter((tool) => WRITE_TOOLS.includes(tool));
+    if (mutating.length > 0) {
+      fail(`${source}: permission read-only contradicts tools ${mutating.join(', ')}`);
+    }
+  }
+
+  return { stem, source, data, body, model, permission, hasModel: 'model' in data };
+}
+
+function renderClaude(agent) {
+  const lines = [`name: ${agent.data.name}`, `description: ${agent.data.description}`];
+  // read-only has no Claude-native expression; the closest faithful projection
+  // is an explicit read-only tool allowlist. `safe` and `full` map to Claude's
+  // own defaults, and bypass modes are never emitted from this layer.
+  const tools = agent.data.tools ?? (agent.permission === 'read-only' ? READ_ONLY_TOOLS : null);
+  if (tools) lines.push(`tools: ${tools.join(', ')}`);
+  if (agent.hasModel) lines.push(`model: ${agent.model}`);
+  return frontmatterDocument(lines, agent);
+}
+
+function renderOpencode(agent) {
+  // The agent id is the filename, so `name` is dropped. Model tiers are
+  // provider-qualified in OpenCode and therefore machine-local, so the tier is
+  // dropped too and OpenCode falls back to its configured default.
+  const lines = [`description: ${agent.data.description}`, 'mode: subagent'];
+  if (agent.data.tools) {
+    const denied = OPENCODE_TOOLS.filter(([claudeName]) => !agent.data.tools.includes(claudeName));
+    if (denied.length > 0) {
+      lines.push('tools:');
+      for (const [, id] of denied) lines.push(`  ${id}: false`);
+    }
+  }
+  lines.push('permission:');
+  for (const [key, value] of Object.entries(OPENCODE_PERMISSIONS[agent.permission])) {
+    lines.push(`  ${key}: ${value}`);
+  }
+  return frontmatterDocument(lines, agent);
+}
+
+function frontmatterDocument(lines, agent) {
+  const header = `<!-- generated by bin/agents_link from ${agent.source} — do not edit -->`;
+  const body = agent.body.replace(/^\n+/, '').replace(/\n+$/, '');
+  return `---\n${lines.join('\n')}\n---\n${header}\n\n${body}\n`;
+}
+
+function cmdSubagent(args) {
+  const [path, kind] = args;
+  if (!path || !kind) fail('usage: agents_render subagent <source.md> <claude|opencode>');
+  const agent = loadSubagent(resolve(path));
+  if (kind === 'claude') process.stdout.write(renderClaude(agent));
+  else if (kind === 'opencode') process.stdout.write(renderOpencode(agent));
+  else fail(`unknown subagent target "${kind}" (expected claude or opencode)`);
+}
+
+// ------------------------------------------------------------------- hooks
+
+// Portable event -> native event name, per harness. An event missing from a
+// table is not expressible there yet; the caller is told rather than silently
+// dropping coverage.
+const CURSOR_EVENTS = { stop: 'stop' };
+const CLAUDE_EVENTS = {
+  'session-start': 'SessionStart',
+  'pre-tool': 'PreToolUse',
+  'post-tool': 'PostToolUse',
+  stop: 'Stop',
+};
+
+function portableHooks() {
+  const manifest = readJson(MANIFEST, 'portable hooks manifest');
+  if (!Array.isArray(manifest.hooks)) fail('portable hooks manifest has no "hooks" array');
+  return manifest.hooks.filter((hook) => hook && hook.portable === true);
+}
+
+function cmdCursorHooks() {
+  const hooks = {};
+  const skipped = [];
+  for (const hook of portableHooks()) {
+    const event = CURSOR_EVENTS[hook.event];
+    if (!event) {
+      skipped.push(`${hook.id} (${hook.event})`);
+      continue;
+    }
+    (hooks[event] ??= []).push({ command: join(HOOKS_ROOT, hook.command) });
+  }
+  if (skipped.length > 0) {
+    console.error(`agents_render: Cursor has no hook event for ${skipped.join(', ')}`);
+  }
+  process.stdout.write(`${JSON.stringify({ version: 1, hooks }, null, 2)}\n`);
+}
+
+function cmdCheckClaudeHooks() {
+  const settings = readJson(join(REPO_ROOT, 'claude', 'settings.json'), 'Claude settings');
+  const configured = settings.hooks ?? {};
+  const missing = [];
+  for (const hook of portableHooks()) {
+    const event = CLAUDE_EVENTS[hook.event];
+    if (!event) {
+      missing.push(`${hook.id}: no Claude event for "${hook.event}"`);
+      continue;
+    }
+    // Suffix match: Claude settings may reach the same script through ~, an
+    // absolute path, or the ~/.claude/hooks link. The check is one-directional
+    // by design — Claude-only hooks are not required to appear in the manifest.
+    const suffix = `agents/hooks/${hook.command}`;
+    const found = (configured[event] ?? [])
+      .flatMap((entry) => entry?.hooks ?? [])
+      .some((entry) => typeof entry?.command === 'string' && entry.command.endsWith(suffix));
+    if (!found) missing.push(`${hook.id}: no Claude ${event} hook running ${suffix}`);
+  }
+  if (missing.length > 0) fail(`claude/settings.json is missing portable hooks:\n  ${missing.join('\n  ')}`);
+}
+
+// -------------------------------------------------------- manifest validation
+
+// A deliberately small interpreter for exactly the JSON Schema keywords
+// manifest.schema.json uses. The schema file stays the authority for what a
+// manifest may contain; this only teaches the repo how to read it without
+// pulling in a validator dependency.
+function validateAgainst(schema, value, path, errors) {
+  if (schema.const !== undefined && value !== schema.const) {
+    errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
+    return;
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${path}: expected one of ${schema.enum.join(', ')}`);
+    return;
+  }
+  if (schema.type && !matchesType(schema.type, value)) {
+    errors.push(`${path}: expected ${schema.type}`);
+    return;
+  }
+  if (schema.type === 'object' || schema.properties) {
+    for (const key of schema.required ?? []) {
+      if (!(key in value)) errors.push(`${path}: missing required key "${key}"`);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      // `$schema` on the instance is an editor hint, not manifest data.
+      if (key === '$schema' && path === '$') continue;
+      const childSchema = schema.properties?.[key];
+      if (!childSchema) {
+        if (schema.additionalProperties === false) errors.push(`${path}: unexpected key "${key}"`);
+        continue;
+      }
+      validateAgainst(childSchema, value[key], `${path}.${key}`, errors);
+    }
+  }
+  if (schema.items && Array.isArray(value)) {
+    value.forEach((item, i) => validateAgainst(schema.items, item, `${path}[${i}]`, errors));
+  }
+}
+
+function matchesType(type, value) {
+  if (type === 'array') return Array.isArray(value);
+  if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'number' || type === 'integer') return typeof value === 'number';
+  fail(`manifest.schema.json uses unsupported type "${type}"`);
+}
+
+function cmdValidateManifest() {
+  const schema = readJson(SCHEMA, 'portable hooks schema');
+  const manifest = readJson(MANIFEST, 'portable hooks manifest');
+  const errors = [];
+  validateAgainst(schema, manifest, '$', errors);
+
+  for (const [i, hook] of (manifest.hooks ?? []).entries()) {
+    if (typeof hook?.command !== 'string') continue;
+    if (hook.command.startsWith('/') || hook.command.includes('..')) {
+      errors.push(`$.hooks[${i}].command must be relative to agents/hooks/`);
+      continue;
+    }
+    const script = join(HOOKS_ROOT, hook.command);
+    try {
+      accessSync(script, constants.X_OK);
+    } catch {
+      errors.push(`$.hooks[${i}].command is not an executable file: agents/hooks/${hook.command}`);
+    }
+  }
+
+  if (errors.length > 0) fail(`portable hooks manifest is invalid:\n  ${errors.join('\n  ')}`);
+}
+
+// -------------------------------------------------------------------- main
+
+const [command, ...rest] = process.argv.slice(2);
+switch (command) {
+  case 'subagent':
+    cmdSubagent(rest);
+    break;
+  case 'cursor-hooks':
+    cmdCursorHooks();
+    break;
+  case 'validate-manifest':
+    cmdValidateManifest();
+    break;
+  case 'check-claude-hooks':
+    cmdCheckClaudeHooks();
+    break;
+  default:
+    fail('usage: agents_render <subagent|cursor-hooks|validate-manifest|check-claude-hooks> [args]');
+}
