@@ -390,7 +390,11 @@ write_cursor_hooks() {
 		say 'ok:' "Cursor portable hooks already current"
 		return
 	fi
-	if [[ -f "$live" ]]; then
+	# JSON carries no comment header, so ownership is inferred from the command
+	# path: a file already pointing into agents/hooks/ is a previous generation
+	# of ours and is replaced outright. Backing those up would leave a stale
+	# backup that makes the *next* format change refuse to write.
+	if [[ -f "$live" ]] && ! grep -qF "$AGENTS_ROOT/hooks/" "$live"; then
 		local backup="${live}.pre-agents-link-backup"
 		if [[ ! -e "$backup" ]]; then
 			cp "$live" "$backup"
@@ -457,7 +461,7 @@ link_cursor() {
 	write_cursor_hooks
 	say INFO "Cursor finds rules by walking up from the workspace, so the shared rule reaches projects under \$HOME only."
 	say INFO "Cursor reads subagents from a workspace .cursor/agents; ~/.cursor/agents is not read, so agents/subagents is not projected there."
-	say INFO "Cursor also imports hooks from ~/.claude/settings.json, so portable hooks may run twice until one channel is dropped."
+	say INFO "Cursor fires no stop hook headless, so the portable stop hook is also registered on sessionEnd."
 }
 
 link_shared_standard

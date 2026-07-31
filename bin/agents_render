@@ -220,10 +220,17 @@ function cmdCursorRule() {
 
 // ------------------------------------------------------------------- hooks
 
-// Portable event -> native event name, per harness. An event missing from a
+// Portable event -> native event name(s), per harness. An event missing from a
 // table is not expressible there yet; the caller is told rather than silently
 // dropping coverage.
-const CURSOR_EVENTS = { stop: 'stop' };
+//
+// Cursor gets two targets for `stop`. Measured against the installed CLI, a
+// headless `cursor-agent -p` run fires only workspaceOpen, sessionStart and
+// sessionEnd — `stop` never fires, in either --mode ask or default agent mode.
+// Registering `stop` alone therefore produces a hook file that does nothing
+// outside the editor, so `sessionEnd` is registered as the headless carrier.
+// In the editor both fire: `stop` after each response, `sessionEnd` once.
+const CURSOR_EVENTS = { stop: ['stop', 'sessionEnd'] };
 const CLAUDE_EVENTS = {
   'session-start': 'SessionStart',
   'pre-tool': 'PreToolUse',
@@ -241,12 +248,14 @@ function cmdCursorHooks() {
   const hooks = {};
   const skipped = [];
   for (const hook of portableHooks()) {
-    const event = CURSOR_EVENTS[hook.event];
-    if (!event) {
+    const events = CURSOR_EVENTS[hook.event];
+    if (!events) {
       skipped.push(`${hook.id} (${hook.event})`);
       continue;
     }
-    (hooks[event] ??= []).push({ command: join(HOOKS_ROOT, hook.command) });
+    for (const event of events) {
+      (hooks[event] ??= []).push({ command: join(HOOKS_ROOT, hook.command) });
+    }
   }
   if (skipped.length > 0) {
     console.error(`agents_render: Cursor has no hook event for ${skipped.join(', ')}`);

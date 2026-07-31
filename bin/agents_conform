@@ -330,10 +330,13 @@ fi
 cursor_cmd=""
 if command -v cursor-agent >/dev/null 2>&1; then cursor_cmd="cursor-agent"; elif command -v agent >/dev/null 2>&1; then cursor_cmd="agent"; fi
 if [[ -n "$cursor_cmd" ]]; then
-	check_rule cursor "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT" "CANARY-CHECK"
+	# --trust is required or Cursor refuses an unmarked workspace outright and
+	# the canary reads as a rules failure. It is not persisted to the workspace,
+	# and --mode ask keeps the run read-only.
+	check_rule cursor "$cursor_cmd" -p --mode ask --trust --workspace "$REPO_ROOT" "CANARY-CHECK"
 	cursor_rule="$rule_status"; cursor_hook="$hook_status"
-	check_skills cursor "" "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT"
-	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "rules are project-scoped; no verified global file path"
+	check_skills cursor "" "$cursor_cmd" -p --mode ask --trust --workspace "$REPO_ROOT"
+	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "global rule reaches projects under \$HOME only"
 fi
 
 if [[ "${#rows[@]}" -gt 0 ]]; then

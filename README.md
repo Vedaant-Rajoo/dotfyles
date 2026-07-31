@@ -207,7 +207,7 @@ Legcord keeps its configuration at `~/Library/Application Support/legcord/storag
 
 Cursor Agent must be authenticated separately before any of its shared configuration can be verified — `cursor-agent status` reports `unauthenticated` on a fresh machine, which is what makes its conformance row `BLOCKED` rather than passing. Run `cursor-agent login`.
 
-Two Cursor gotchas worth knowing. Its CLI reads hooks from `~/.claude/settings.json` as well as `~/.cursor/hooks.json`, so a portable hook configured in both runs **twice** under Cursor; drop one channel if that matters. And do not export `XDG_CONFIG_HOME=~/.config` — tempting, since this repo lives there — because Cursor would silently move its config directory to `~/.config/cursor` and orphan `cli-config.json` and `permissions.json`.
+Two Cursor gotchas worth knowing. Its headless CLI fires only `workspaceOpen`, `sessionStart`, and `sessionEnd` — **not** `stop` — so the portable stop hook is projected to both `stop` and `sessionEnd`, and `sessionEnd` is what actually runs outside the editor. Cursor also reads hooks from `~/.claude/settings.json` as well as `~/.cursor/hooks.json`, which looks like it should double-fire; measured, it does not, because `stop` fires from neither channel headless. And do not export `XDG_CONFIG_HOME=~/.config` — tempting, since this repo lives there — because Cursor would silently move its config directory to `~/.config/cursor` and orphan `cli-config.json` and `permissions.json`.
 
 These applications are installed by the Brewfile. Shared agent behavior is projected by `bin/agents_link`, but mutable native settings remain deliberately untracked:
 
