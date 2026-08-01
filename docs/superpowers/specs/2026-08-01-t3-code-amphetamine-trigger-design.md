@@ -112,7 +112,7 @@ The approvals clause is a safety net for the "in flight or blocked on you" bound
 
 Loop behavior:
 
-- Stat `state.sqlite-wal` first and run the query only when its modification time has changed, so a quiet machine costs one `stat` per tick.
+- Run the query unconditionally on every poll while the T3 Code server is alive. An earlier revision short-circuited on the modification time of `state.sqlite-wal` and ran the query only when it changed; that was removed because it could latch the busy state permanently. The change signal was consumed before the query result was known, so a transient read error stopped the retry from ever running again, and `stat` reports only whole seconds, so a turn completing in the same second as the last observed write could be missed entirely. Both paths end with the sentinel held up for the life of the server — the one failure direction this design forbids. Two `EXISTS` probes against small projections cost single-digit milliseconds, so the optimization bought nothing worth that risk: correctness over a negligible saving.
 - Poll every 2 seconds while the T3 Code server is alive, every 15 seconds when it is not.
 - After the last busy poll, linger 30 seconds before quitting the sentinel. This bridges back-to-back turns during conversational work and prevents the application from flapping open and closed.
 - Open or quit the sentinel only on a state transition, never on every poll.
