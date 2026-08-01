@@ -193,3 +193,21 @@ Against the real system, with the trigger installed:
 - Manual Amphetamine sessions and other triggers are never ended or altered by this system.
 - Killing T3 Code at any point, including mid-turn, releases the session within one poll.
 - `bin/t3_awake install` on a clean machine produces a working setup after the one documented Amphetamine step, and `bin/t3_awake uninstall` removes every artifact it created.
+
+## Verification record
+
+Recorded here because two of these claims cannot be covered by any test — they are assertions about a third-party GUI application and about T3 Code's internal behavior, and the evidence would otherwise be lost.
+
+**The trigger premise holds.** With `t3` and `claude` deleted and only `t3-busy` present, Amphetamine reported `session is active` = true, `session is Trigger` = true, and `session time remaining` = -1 while the sentinel was running. Since `t3-busy` was then the only trigger configured, nothing else could have been holding the session. Amphetamine's app trigger does detect a dockless `LSUIElement` applet.
+
+**The signal is driver-agnostic.** A `codex` thread was observed in `projection_turns` with `state = 'running'` alongside a `claudeAgent` thread, and in `provider_session_runtime` with `provider_name = 'codex'`. The predicate is an `EXISTS` that never references the provider, so the codex row satisfied it independently. This was proven against a real non-Claude turn, not inferred from the schema.
+
+**The full cycle runs in production.** The log recorded `busy: sentinel up` on a turn starting, then `idle: sentinel down after 30s linger` once it finished — acquire, hold, release, unassisted.
+
+**The approvals clause is currently unreachable, not merely unverified.** Every thread on the machine at the time ran `runtime_mode = 'full-access'`, which never raises a permission prompt, so `projection_pending_approvals` had no rows across 11 threads. The clause is forward-looking. `resolved_at IS NULL` was chosen precisely because it cannot misread a `status` vocabulary that has never been observed.
+
+**`projection_turns.state` carries only `running` and `completed`,** so the predicate covers every in-flight state that exists.
+
+**Live verification found a defect three code reviews did not.** Re-running `bin/t3_awake install` on an already-provisioned machine failed with `Bootstrap failed: 5: Input/output error` and left the LaunchAgent unloaded — `cmd_install` was racing an asynchronous `launchctl bootout` against the `bootstrap` that followed it. It was invisible to review because `install --dry-run` never touches launchctl and the real path had only ever run once, on a clean machine. Since `bin/bootstrap` is documented as safe to re-run and calls `install`, this would have disabled the feature on any re-bootstrap. Fixed, and the fix was then validated against the live domain.
+
+**Open question — orphaned turns.** The server-PID gate only holds while T3 Code stays dead. Whether T3 Code reconciles an orphaned `running` row when it restarts is unverified; if it does not, a crash mid-turn would pin the machine awake with no age bound once the app is relaunched. A survey at the time showed no orphans across 47 turns and three days, which is suggestive but not probative. Settling it requires killing the server mid-turn and reading the row back after a relaunch. The predicate was deliberately left unbounded rather than capped, because an age cap would also stop holding the machine awake during a legitimately long turn.
