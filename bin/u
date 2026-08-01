@@ -343,23 +343,50 @@ end
 
 function u_queue_reopen_fallback --argument-names requested_token requested_path requested_bundle requested_pids
     set -l fallback_file "$U_STATE_DIR/reopen-fallback.tsv"
+    set -l pending (mktemp "$U_STATE_DIR/.reopen-fallback.tsv.pending.XXXXXX")
+    or return 1
+    set -l found 0
+
     if test -e "$fallback_file"
         while read -l --delimiter \t token app_path bundle_id pids_csv
             if test "$token" = "$requested_token"; and test "$app_path" = "$requested_path"
-                if test -z "$requested_bundle"; or test -n "$bundle_id"
-                    return 0
+                set found 1
+                # Never downgrade exact reconciliation metadata to a path-only
+                # fallback. Upgrade a path-only row when exact metadata arrives.
+                if test -n "$requested_bundle"; and test -z "$bundle_id"
+                    set bundle_id "$requested_bundle"
+                    set pids_csv "$requested_pids"
                 end
-                u_remove_reopen_fallback "$requested_token" "$requested_path"
-                or return 1
-                break
+            end
+
+            if test -n "$bundle_id"
+                printf '%s\t%s\t%s\t%s\n' "$token" "$app_path" "$bundle_id" "$pids_csv" >>"$pending"
+            else
+                printf '%s\t%s\n' "$token" "$app_path" >>"$pending"
+            end
+            or begin
+                rm -f "$pending" 2>/dev/null
+                return 1
             end
         end <"$fallback_file"
     end
 
-    if test -n "$requested_bundle"
-        printf '%s\t%s\t%s\t%s\n' "$requested_token" "$requested_path" "$requested_bundle" "$requested_pids" >>"$fallback_file"
-    else
-        printf '%s\t%s\n' "$requested_token" "$requested_path" >>"$fallback_file"
+    if test $found -eq 0
+        if test -n "$requested_bundle"
+            printf '%s\t%s\t%s\t%s\n' "$requested_token" "$requested_path" "$requested_bundle" "$requested_pids" >>"$pending"
+        else
+            printf '%s\t%s\n' "$requested_token" "$requested_path" >>"$pending"
+        end
+        or begin
+            rm -f "$pending" 2>/dev/null
+            return 1
+        end
+    end
+
+    mv -f "$pending" "$fallback_file"
+    or begin
+        rm -f "$pending" 2>/dev/null
+        return 1
     end
 end
 
@@ -401,6 +428,9 @@ function u_restore_or_queue_app --argument-names token app_path detail preserve_
 
     if open "$app_path"
         if test "$preserve_until_reconciled" = 1
+            if test $queue_status -ne 0
+                return 1
+            end
             set -ga U_FALLBACK_OPEN_ATTEMPTED "$token"\t"$app_path"
         else if test $queue_status -eq 0
             u_remove_reopen_fallback "$token" "$app_path"

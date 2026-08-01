@@ -875,6 +875,44 @@ fish -c 'function gum; return 0; end; set -gx U_TEST_FISH_PID $fish_pid; source 
 assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
     'SIGTERM after force reconciliation error cannot leave the app closed'; or set test_status 1
 
+# Fallback replacement must publish atomically. If writing the replacement row
+# fails, the old durable record must remain byte-for-byte available to cleanup.
+u_test_reset
+printf 'calm\t/Applications/Calm.app\ncursor\t/Applications/Cursor.app\n' >"$U_STATE_DIR/reopen-fallback.tsv"
+set -l prior_fallback (u_test_state reopen-fallback.tsv | string collect)
+set -g u_test_fallback_writes 0
+function printf
+    set -g u_test_fallback_writes (math $u_test_fallback_writes + 1)
+    if test $u_test_fallback_writes -eq 2
+        return 1
+    end
+    builtin printf $argv
+end
+u_queue_reopen_fallback cursor /Applications/Cursor.app com.cursor.Cursor 111
+set -l fallback_write_status $status
+functions -e printf
+assert_equal 1 $fallback_write_status 'fallback replacement reports a row-write failure'; or set test_status 1
+assert_equal "$prior_fallback" "$(u_test_state reopen-fallback.tsv)" \
+    'fallback replacement failure preserves the prior durable row'; or set test_status 1
+
+# In the uncertain asynchronous path, open=0 is not proof of relaunch. A failed
+# metadata publication must return nonzero and retain the prior recovery row.
+u_test_reset
+printf 'cursor\t/Applications/Cursor.app\n' >"$U_STATE_DIR/reopen-fallback.tsv"
+set -l prior_fallback (u_test_state reopen-fallback.tsv | string collect)
+function printf
+    return 1
+end
+u_restore_or_queue_app cursor /Applications/Cursor.app 'test fallback failure' 1 com.cursor.Cursor 111
+set -l restore_without_fallback_status $status
+functions -e printf
+assert_equal 1 $restore_without_fallback_status \
+    'open success cannot mask uncertain fallback publication failure'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'uncertain fallback publication failure still attempts immediate reopen'; or set test_status 1
+assert_equal "$prior_fallback" "$(u_test_state reopen-fallback.tsv)" \
+    'open success plus fallback failure retains the prior recovery row'; or set test_status 1
+
 # A failed row write must abort the atomic rewrite before mv publishes a partial
 # file. The temporary function shadows only the state writer's printf call.
 u_test_reset
