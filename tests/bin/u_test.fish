@@ -247,14 +247,32 @@ if contains -- "$command" running terminate force-terminate; and test (count $ar
     end
 
     set -l exit_fixture "$U_MOCK_DIR/exit-$operation_key"
-    if test -e "$exit_fixture"
+    if test -e "$exit_fixture"; and not begin
+            test "$command" = running
+            and test -e "$U_MOCK_DIR/defer-running-error-until-force"
+            and not test -e "$U_MOCK_DIR/force-seen-$bundle_key"
+        end
         set -l exit_status (string trim <"$exit_fixture")
         if test "$exit_status" -ne 0
+            if test "$command" = running
+                if test -e "$U_MOCK_DIR/signal-running-error-SIGINT"; and not test -e "$U_MOCK_DIR/signal-sent"
+                    touch "$U_MOCK_DIR/signal-sent"
+                    kill -INT "$U_TEST_FISH_PID"
+                end
+                if test -e "$U_MOCK_DIR/signal-running-error-SIGTERM"; and test -e "$U_MOCK_DIR/force-seen-$bundle_key"; and not test -e "$U_MOCK_DIR/signal-sent"
+                    touch "$U_MOCK_DIR/signal-sent"
+                    kill -TERM "$U_TEST_FISH_PID"
+                end
+            end
             exit "$exit_status"
         end
     end
 
     set -l pids
+    if test "$command" = force-terminate
+        touch "$U_MOCK_DIR/force-seen-$bundle_key"
+    end
+
     if test "$command" = running
         set -l queue "$U_MOCK_DIR/running-$bundle_key"
         if test -e "$queue"
@@ -269,6 +287,18 @@ if contains -- "$command" running terminate force-terminate; and test (count $ar
     end
 
     printf "{\"bundleId\":\"%s\",\"pids\":[%s]}\n" "$bundle_id" (string join , $pids)
+
+    if test "$command" = running
+        if test -e "$U_MOCK_DIR/signal-graceful-SIGINT"; and not test -e "$U_MOCK_DIR/signal-sent"
+            touch "$U_MOCK_DIR/signal-sent"
+            kill -INT "$U_TEST_FISH_PID"
+        end
+        if test -e "$U_MOCK_DIR/signal-force-SIGTERM"; and test -e "$U_MOCK_DIR/force-seen-$bundle_key"; and not test -e "$U_MOCK_DIR/signal-sent"
+            touch "$U_MOCK_DIR/signal-sent"
+            kill -TERM "$U_TEST_FISH_PID"
+        end
+    end
+
     exit 0
 end
 
@@ -297,6 +327,10 @@ if test -e "$U_MOCK_DIR/signal-on-first-open"; and not test -e "$U_MOCK_DIR/sign
     touch "$U_MOCK_DIR/signal-sent"
     kill -INT "$U_TEST_FISH_PID"
 end
+if test -e "$U_MOCK_DIR/open-fail-once"; and not test -e "$U_MOCK_DIR/open-failed"
+    touch "$U_MOCK_DIR/open-failed"
+    exit 1
+end
 exit 0' >"$u_mock_bin/open"
 
 chmod +x "$u_mock_bin/brew" "$u_mock_bin/osascript" "$u_mock_bin/gum" "$u_mock_bin/sleep" "$u_mock_bin/open"
@@ -312,11 +346,12 @@ function u_test_write_inspect --argument-names bundle_path json
 end
 
 function u_test_reset
-    rm -f "$U_STATE_DIR/apps.tsv" "$U_STATE_DIR/skips.tsv" "$U_STATE_DIR/failures.tsv"
+    rm -f "$U_STATE_DIR/apps.tsv" "$U_STATE_DIR/skips.tsv" "$U_STATE_DIR/failures.tsv" "$U_STATE_DIR/reopen-fallback.tsv"
     rm -f "$U_MOCK_DIR"/gum-confirm-decline "$U_MOCK_DIR"/gum-force-decline
-    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'post-*' -o -name 'signal-*' \))
+    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'post-*' -o -name 'signal-*' -o -name 'force-seen-*' -o -name 'open-fail-*' -o -name 'open-failed' -o -name 'defer-running-*' \))
         rm -f "$fixture"
     end
+    set -e U_FALLBACK_OPEN_ATTEMPTED
     printf '' >"$U_MOCK_LOG"
 end
 
@@ -685,6 +720,29 @@ assert_equal 1 (u_test_calls 'open /Applications/Two.app$') \
     'overlapping cleanup paths do not reopen an app twice'; or set test_status 1
 
 u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t1\t0'
+touch "$U_MOCK_DIR/open-fail-once"
+functions -c u_set_app_flags u_test_real_set_app_flags
+set -g u_test_flag_writes 0
+function u_set_app_flags
+    set -g u_test_flag_writes (math $u_test_flag_writes + 1)
+    if test $u_test_flag_writes -gt 1
+        return 1
+    end
+    u_test_real_set_app_flags $argv
+end
+u_reopen_token_apps cursor
+assert_equal 1 $status 'failed reopen with failed state rollback reports failure'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app' "$(u_test_state reopen-fallback.tsv)" \
+    'failed reopen rollback leaves a durable cleanup fallback'; or set test_status 1
+functions -e u_set_app_flags
+functions -c u_test_real_set_app_flags u_set_app_flags
+functions -e u_test_real_set_app_flags
+u_cleanup
+assert_equal 2 (u_test_calls 'open /Applications/Cursor.app$') \
+    'cleanup retries reopen after rollback publication fails'; or set test_status 1
+
+u_test_reset
 u_test_write_apps \
     'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t1\t0' \
     'chrome\t/Applications/Google Chrome.app\tcom.google.Chrome\t222,333\t1\t1\t0' \
@@ -712,6 +770,133 @@ chrome|/Applications/Google Chrome.app|com.google.Chrome|222|1|1|1' "$(u_test_st
     'SIGINT overlapping normal cleanup reopens every closed tracked app'; or set test_status 1
 assert_equal 2 (u_test_calls '^open ') \
     'overlapping signal cleanup opens each tracked app exactly once'; or set test_status 1
+
+# Signals arriving after a lifecycle helper closes the app but before the state
+# row is published must wait until reconciliation and publication complete.
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor ''
+touch "$U_MOCK_DIR/signal-graceful-SIGINT"
+fish -c 'set -gx U_TEST_FISH_PID $fish_pid; source "$argv[1]"; u_stop_cask_apps cursor; /bin/sleep 0.1' "$repo_root/bin/u"
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|1' "$(u_test_state apps.tsv)" \
+    'SIGINT after graceful termination waits for closure publication before cleanup'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'SIGINT after graceful termination reopens the newly closed app'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor 111
+u_test_post_operation com.cursor.Cursor force-terminate ''
+touch "$U_MOCK_DIR/signal-force-SIGTERM"
+fish -c 'function gum; return 0; end; set -gx U_TEST_FISH_PID $fish_pid; source "$argv[1]"; u_stop_cask_apps cursor; /bin/sleep 0.1' "$repo_root/bin/u"
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|1' "$(u_test_state apps.tsv)" \
+    'SIGTERM after force termination waits for closure publication before cleanup'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'SIGTERM after force termination reopens the newly closed app'; or set test_status 1
+
+# If closure publication fails after exact-PID reconciliation proves the app is
+# closed, stop must immediately reopen it rather than leave cleanup blind.
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor ''
+functions -c u_set_app_flags u_test_real_set_app_flags
+function u_set_app_flags
+    return 1
+end
+u_stop_cask_apps cursor >/dev/null
+assert_equal 1 $status 'closure publication failure rejects the cask'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'closure publication failure immediately reopens the closed app'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|0|0' "$(u_test_state apps.tsv)" \
+    'closure publication failure leaves the prior app state intact'; or set test_status 1
+functions -e u_set_app_flags
+functions -c u_test_real_set_app_flags u_set_app_flags
+functions -e u_test_real_set_app_flags
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor ''
+touch "$U_MOCK_DIR/open-fail-once"
+functions -c u_set_app_flags u_test_real_set_app_flags
+function u_set_app_flags
+    return 1
+end
+u_stop_cask_apps cursor >/dev/null
+assert_equal 1 $status 'closure publication and immediate reopen failure rejects the cask'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app' "$(u_test_state reopen-fallback.tsv)" \
+    'failed immediate reopen leaves a durable cleanup fallback'; or set test_status 1
+functions -e u_set_app_flags
+functions -c u_test_real_set_app_flags u_set_app_flags
+functions -e u_test_real_set_app_flags
+u_cleanup
+assert_equal 2 (u_test_calls 'open /Applications/Cursor.app$') \
+    'later cleanup retries a failed immediate reopen'; or set test_status 1
+assert_equal '' "$(u_test_state reopen-fallback.tsv)" \
+    'successful cleanup consumes the durable reopen fallback'; or set test_status 1
+
+# A reconciliation error leaves the original PID outcome unknown. LaunchServices
+# may accept open while that old process is still terminating, so the durable
+# fallback must survive until a later check proves every original PID is gone.
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_post_operation com.cursor.Cursor terminate ''
+printf '70\n' >"$U_MOCK_DIR/exit-com.cursor.Cursor-running"
+u_stop_cask_apps cursor >/dev/null
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111' "$(u_test_state reopen-fallback.tsv)" \
+    'reconciliation failure keeps exact PID metadata in the durable fallback'; or set test_status 1
+rm -f "$U_MOCK_DIR/exit-com.cursor.Cursor-running"
+u_test_running com.cursor.Cursor 111 ''
+set -e U_FALLBACK_OPEN_ATTEMPTED
+u_cleanup
+assert_equal '' "$(u_test_state reopen-fallback.tsv)" \
+    'cleanup waits to consume fallback until every original PID is gone'; or set test_status 1
+u_cleanup
+assert_equal 2 (u_test_calls 'open /Applications/Cursor.app$') \
+    'cleanup relaunches once after positive original-PID closure reconciliation'; or set test_status 1
+
+# If exact-PID reconciliation itself errors after the helper may have closed the
+# app, the blocked attempt must restore or durably track the app before signals run.
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_post_operation com.cursor.Cursor terminate ''
+printf '70\n' >"$U_MOCK_DIR/exit-com.cursor.Cursor-running"
+touch "$U_MOCK_DIR/signal-running-error-SIGINT"
+fish -c 'set -gx U_TEST_FISH_PID $fish_pid; source "$argv[1]"; u_stop_cask_apps cursor; /bin/sleep 0.1' "$repo_root/bin/u"
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'SIGINT after graceful reconciliation error cannot leave the app closed'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor 111
+u_test_post_operation com.cursor.Cursor force-terminate ''
+printf '70\n' >"$U_MOCK_DIR/exit-com.cursor.Cursor-running"
+touch "$U_MOCK_DIR/defer-running-error-until-force" "$U_MOCK_DIR/signal-running-error-SIGTERM"
+fish -c 'function gum; return 0; end; set -gx U_TEST_FISH_PID $fish_pid; source "$argv[1]"; u_stop_cask_apps cursor; /bin/sleep 0.1' "$repo_root/bin/u"
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'SIGTERM after force reconciliation error cannot leave the app closed'; or set test_status 1
+
+# A failed row write must abort the atomic rewrite before mv publishes a partial
+# file. The temporary function shadows only the state writer's printf call.
+u_test_reset
+u_test_write_apps \
+    'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0' \
+    'calm\t/Applications/Calm.app\tcom.calm.Calm\t\t0\t0\t0'
+set -l prior_apps (u_test_state apps.tsv | string collect)
+function printf
+    return 1
+end
+function mv
+    set -ga u_test_mock_calls mv
+    return 0
+end
+u_set_app_flags cursor /Applications/Cursor.app 1 0
+set -l row_write_status $status
+functions -e printf mv
+assert_equal 1 $row_write_status 'state rewrite reports a row-write failure'; or set test_status 1
+assert_equal 0 (u_test_matches mv $u_test_mock_calls) \
+    'state rewrite never publishes after a row-write failure'; or set test_status 1
+assert_equal "$prior_apps" "$(u_test_state apps.tsv)" \
+    'state rewrite preserves the prior TSV after a row-write failure'; or set test_status 1
 
 rm -rf "$U_STATE_DIR" "$u_mock_root"
 exit $test_status
