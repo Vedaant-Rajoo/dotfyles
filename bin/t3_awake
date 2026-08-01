@@ -157,6 +157,83 @@ cmd_sentinel() {
 	esac
 }
 
+cmd_watch() {
+	local state want interval now last_busy fails rc wal_mtime prev_wal cached
+
+	trap 'sentinel_down || true; exit 0' TERM INT
+
+	state="unknown"
+	cached="idle"
+	prev_wal=""
+	last_busy=0
+	fails=0
+
+	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${LINGER}s)"
+
+	while :; do
+		if t3_server_alive; then
+			interval="$POLL"
+			# The WAL mtime is only a usable change signal while a WAL file
+			# exists. A journal_mode=delete database, or a checkpointed-away
+			# WAL, reports 0 forever; caching on that would freeze the last
+			# reading permanently — including a stale "busy" that would pin
+			# the machine awake. Fall back to polling every iteration.
+			wal_mtime="$(stat -f %m "$DB-wal" 2>/dev/null || echo 0)"
+			if [ "$wal_mtime" = "0" ] || [ "$wal_mtime" != "$prev_wal" ] || [ "$state" = "unknown" ]; then
+				prev_wal="$wal_mtime"
+				rc=0
+				db_busy || rc=$?
+				case "$rc" in
+				0)
+					cached="busy"
+					fails=0
+					;;
+				1)
+					cached="idle"
+					fails=0
+					;;
+				*)
+					fails=$((fails + 1))
+					if [ "$fails" -ge 5 ]; then
+						if [ "$cached" != "idle" ]; then
+							log "database unreadable for $fails polls; falling back to idle"
+						fi
+						cached="idle"
+					fi
+					;;
+				esac
+			fi
+			want="$cached"
+		else
+			interval="$IDLE_POLL"
+			want="idle"
+			cached="idle"
+			fails=0
+		fi
+
+		now="$(date +%s)"
+		if [ "$want" = "busy" ]; then
+			last_busy="$now"
+		fi
+
+		if [ "$want" = "busy" ] && [ "$state" != "busy" ]; then
+			if sentinel_up; then
+				state="busy"
+				log "busy: sentinel up"
+			fi
+		elif [ "$want" = "idle" ] && [ "$state" != "idle" ]; then
+			if [ $((now - last_busy)) -ge "$LINGER" ]; then
+				if sentinel_down; then
+					state="idle"
+					log "idle: sentinel down after ${LINGER}s linger"
+				fi
+			fi
+		fi
+
+		sleep "$interval"
+	done
+}
+
 usage() {
 	cat <<'EOF'
 usage: bin/t3_awake <command>
@@ -178,6 +255,7 @@ main() {
 		shift
 		cmd_sentinel "$@"
 		;;
+	watch) cmd_watch ;;
 	-h | --help | help | '') usage ;;
 	*)
 		printf 'unknown command: %s\n' "$1" >&2

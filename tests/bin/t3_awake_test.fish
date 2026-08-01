@@ -105,6 +105,56 @@ check "down is idempotent" stopped (env $sentinel_env $bin sentinel state)
 set absent $workdir/Nothing.app
 check "up on a missing bundle fails" 1 (env T3_AWAKE_APP=$absent $bin sentinel up >/dev/null 2>&1; echo $status)
 
+# --- watch loop --------------------------------------------------------
+
+set wapp $workdir/T3\ Busy\ Watch.app
+set w $workdir/watch
+make_fixture $w
+env T3_AWAKE_APP=$wapp $bin sentinel build
+
+function watch_env
+    echo T3_AWAKE_DB=$w/state.sqlite
+    echo T3_AWAKE_RUNTIME_JSON=$w/server-runtime.json
+    echo T3_AWAKE_APP=$wapp
+    echo T3_AWAKE_POLL=1
+    echo T3_AWAKE_IDLE_POLL=1
+    echo T3_AWAKE_LINGER=3
+    echo T3_AWAKE_LOG=$w/t3-awake.log
+end
+
+env (watch_env) $bin watch &
+set -l watch_pid $last_pid
+sleep 2
+check "idle at rest" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+
+sqlite3 $w/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
+sleep 3
+check "running turn raises the sentinel" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+
+sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='completed';"
+sleep 2
+check "sentinel held during linger" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+
+sleep 4
+check "sentinel released after linger" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+
+# A dead server must release even while the database still says running.
+sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='running';"
+sleep 3
+check "reacquired for the stale-guard case" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+printf '{"version":1,"pid":999999}\n' >$w/server-runtime.json
+sleep 6
+check "dead server releases despite running row" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+
+# SIGTERM must not strand a running sentinel.
+printf '{"version":1,"pid":%d}\n' $fish_pid >$w/server-runtime.json
+sleep 3
+check "reacquired before shutdown test" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+kill -TERM $watch_pid
+sleep 3
+check "SIGTERM lowers the sentinel" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+check "watch exited" 1 (kill -0 $watch_pid 2>/dev/null; echo $status)
+
 # --- summary -----------------------------------------------------------
 
 printf '\n%d checks, %d failures\n' $checks $failures
