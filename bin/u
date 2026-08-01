@@ -15,6 +15,51 @@ function u_run_brew_upgrade
     return $upgrade_status
 end
 
+function u_discover_outdated --argument-names json
+    if not test -d "$U_STATE_DIR"
+        echo "u_discover_outdated: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    printf '%s\n' $json | jq -r '
+        .formulae // [] | .[] | .name // ""
+        | if type == "string" and length > 0 then
+              .
+          else
+              "u_discover_outdated: outdated formula record has no name\n" | halt_error(1)
+          end
+    ' >"$U_STATE_DIR/formulae.tsv"
+    or return 1
+
+    printf '%s\n' $json | jq -r '
+        .casks // [] | .[] | .name // ""
+        | if type == "string" and length > 0 then
+              .
+          else
+              "u_discover_outdated: outdated cask record has no name\n" | halt_error(1)
+          end
+    ' >"$U_STATE_DIR/casks.tsv"
+    or return 1
+
+    return 0
+end
+
+function u_cask_app_paths --argument-names cask_json
+    printf '%s\n' $cask_json | jq -r '
+        .casks // [] | .[] | .artifacts // [] | .[]
+        | select(type == "object" and has("app"))
+        | .target // ""
+        | if type == "string" and startswith("/") then
+              .
+          else
+              "u_cask_app_paths: app artifact has no absolute target path\n" | halt_error(1)
+          end
+    '
+    or return 1
+
+    return 0
+end
+
 function u_main
     gum style \
         --foreground 12 --border-foreground 12 --border double \

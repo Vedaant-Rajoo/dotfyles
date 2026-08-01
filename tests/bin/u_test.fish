@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
 
-set -l repo_root (cd (dirname (status filename))/../..; and pwd)
+set -l repo_root (path resolve (dirname (status filename))/../..)
 set -g u_test_mock_calls
 
 function assert_function
@@ -16,8 +16,25 @@ function assert_function
     return 1
 end
 
+function assert_equal
+    set -l expected $argv[1]
+    set -l actual $argv[2]
+    set -l description $argv[3]
+
+    if test "$expected" = "$actual"
+        printf 'ok - %s\n' $description
+        return 0
+    end
+
+    printf 'not ok - %s\n' $description
+    printf '  expected: %s\n' (string escape -- "$expected")
+    printf '  actual:   %s\n' (string escape -- "$actual")
+    return 1
+end
+
 function assert_no_mock_calls
     if test (count $u_test_mock_calls) -eq 0
+        printf 'ok - source runs no top-level commands in test mode\n'
         return 0
     end
 
@@ -48,7 +65,80 @@ end
 set -lx U_TEST_MODE 1
 source "$repo_root/bin/u"
 
+set -g U_STATE_DIR (mktemp -d)
+
 set -l test_status 0
 assert_function u_main 'source exposes u_main'; or set test_status 1
+assert_function u_discover_outdated 'source exposes u_discover_outdated'; or set test_status 1
+assert_function u_cask_app_paths 'source exposes u_cask_app_paths'; or set test_status 1
 assert_no_mock_calls; or set test_status 1
+
+# u_discover_outdated
+
+u_discover_outdated '{"formulae":[],"casks":[]}'
+assert_equal 0 $status 'discover accepts empty outdated JSON'; or set test_status 1
+assert_equal '' "$(cat "$U_STATE_DIR/formulae.tsv")" \
+    'discover writes no formula records for empty JSON'; or set test_status 1
+assert_equal '' "$(cat "$U_STATE_DIR/casks.tsv")" \
+    'discover writes no cask records for empty JSON'; or set test_status 1
+
+u_discover_outdated '{"formulae":[{"name":"jq"}],"casks":[{"name":"cursor"}]}'
+assert_equal 0 $status 'discover accepts one formula and one cask'; or set test_status 1
+assert_equal jq "$(cat "$U_STATE_DIR/formulae.tsv")" \
+    'discover records the outdated formula name'; or set test_status 1
+assert_equal cursor "$(cat "$U_STATE_DIR/casks.tsv")" \
+    'discover records the outdated cask name'; or set test_status 1
+
+u_discover_outdated '{"formulae":[{"name":"jq"},{"name":"fish"}],"casks":[]}'
+assert_equal 0 $status 'discover accepts several formulae'; or set test_status 1
+assert_equal 'jq
+fish' "$(cat "$U_STATE_DIR/formulae.tsv")" \
+    'discover records one formula per line'; or set test_status 1
+assert_equal '' "$(cat "$U_STATE_DIR/casks.tsv")" \
+    'discover truncates stale cask records'; or set test_status 1
+
+u_discover_outdated 'not json' 2>/dev/null
+assert_equal 1 $status 'discover rejects invalid JSON'; or set test_status 1
+
+u_discover_outdated '{"formulae":[{"installed_versions":["1.0"]}],"casks":[]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects a formula record without a name'; or set test_status 1
+
+u_discover_outdated '{"formulae":[],"casks":[{"installed_versions":["1.0"]}]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects a cask record without a name'; or set test_status 1
+
+set -l saved_state_dir $U_STATE_DIR
+set -g U_STATE_DIR "$saved_state_dir/missing"
+u_discover_outdated '{"formulae":[],"casks":[]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects a missing state directory'; or set test_status 1
+set -g U_STATE_DIR $saved_state_dir
+
+# u_cask_app_paths
+
+set -l cask_app_json '{"casks":[{"token":"cursor","artifacts":[{"app":["Cursor.app"],"target":"/Applications/Cursor.app"},{"binary":["cursor"],"target":"/opt/homebrew/bin/cursor"}]}]}'
+assert_equal /Applications/Cursor.app "$(u_cask_app_paths $cask_app_json)" \
+    'cask app paths emits only the app artifact target'; or set test_status 1
+
+set -l cask_non_app_json '{"casks":[{"token":"font-hack","artifacts":[{"font":["Hack-Regular.ttf"]},{"binary":["hack"],"target":"/opt/homebrew/bin/hack"}]}]}'
+u_cask_app_paths $cask_non_app_json >/dev/null
+assert_equal 0 $status 'cask app paths accepts a cask without app artifacts'; or set test_status 1
+assert_equal '' "$(u_cask_app_paths $cask_non_app_json)" \
+    'cask app paths emits nothing for a cask without app artifacts'; or set test_status 1
+
+set -l cask_two_apps_json '{"casks":[{"token":"multi","artifacts":[{"app":["One.app"],"target":"/Applications/One.app"},{"app":["Two.app"],"target":"/Applications/Two.app"}]}]}'
+assert_equal '/Applications/One.app
+/Applications/Two.app' "$(u_cask_app_paths $cask_two_apps_json)" \
+    'cask app paths emits every app artifact target'; or set test_status 1
+
+set -l cask_missing_target_json '{"casks":[{"token":"bad","artifacts":[{"app":["Bad.app"]}]}]}'
+u_cask_app_paths $cask_missing_target_json >/dev/null 2>&1
+assert_equal 1 $status 'cask app paths rejects a missing app target'; or set test_status 1
+
+set -l cask_relative_target_json '{"casks":[{"token":"bad","artifacts":[{"app":["Bad.app"],"target":"Bad.app"}]}]}'
+u_cask_app_paths $cask_relative_target_json >/dev/null 2>&1
+assert_equal 1 $status 'cask app paths rejects a non-absolute app target'; or set test_status 1
+
+u_cask_app_paths 'not json' >/dev/null 2>&1
+assert_equal 1 $status 'cask app paths rejects invalid JSON'; or set test_status 1
+
+rm -rf "$U_STATE_DIR"
 exit $test_status
