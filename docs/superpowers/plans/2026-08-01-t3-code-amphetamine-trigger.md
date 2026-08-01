@@ -992,7 +992,7 @@ check "status reports the sentinel state" stopped (printf '%s\n' $st | sed -n 's
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `fish tests/bin/t3_awake_test.fish`
-Expected: the six new checks fail; the template does not exist and `install` is unknown.
+Expected: the nine new checks fail; the template does not exist and `install` is unknown.
 
 - [ ] **Step 3: Write the LaunchAgent template**
 
