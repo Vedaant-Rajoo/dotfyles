@@ -11,9 +11,11 @@ and treats the machine as busy when a turn is running or an approval is
 unresolved, gated on T3 Code's server process being alive.
 
 When busy it launches `~/Applications/T3 Busy.app`, a dockless do-nothing
-applet compiled from `t3-busy.applescript`. An Amphetamine trigger keyed to
-that application supplies the wake session. Amphetamine's own session state is
-never scripted, so manual sessions and other triggers are unaffected.
+applet compiled from `t3-busy.applescript`, and it terminates that applet once
+the work has been done for 30 seconds — which is what ends the wake session. An
+Amphetamine trigger keyed to that application supplies the session. Amphetamine's
+own session state is never scripted, so manual sessions and other triggers are
+unaffected.
 
 Because the signal comes from T3 Code's orchestration layer rather than from an
 agent CLI, it covers every provider driver — `claudeAgent`, `codex`, `cursor`,
@@ -27,7 +29,9 @@ bin/t3_awake install
 
 Then, in Amphetamine -> Preferences -> Triggers:
 
-1. Add a trigger for a running application and select `~/Applications/T3 Busy.app`.
+1. Add a trigger for a running application, name it `t3-busy`, and select
+   `~/Applications/T3 Busy.app`. The name is what the uninstall step and
+   `bin/bootstrap` refer to.
 2. Leave the frontmost requirement off; allow display sleep on.
 3. Delete the `t3` trigger. It fires whenever T3 Code is frontmost, which is the
    false positive this replaces.
@@ -39,9 +43,14 @@ Then, in Amphetamine -> Preferences -> Triggers:
 ```bash
 bin/t3_awake status     # turns, approvals, sentinel, Amphetamine session
 bin/t3_awake probe      # just "busy" or "idle"
-tail -f ~/Library/Logs/t3-awake.log
+tail -f ~/Library/Logs/t3-awake.log   # transitions and error conditions
+tail -f ~/Library/Logs/t3-awake.err   # launchd's stderr for the agent
 fish tests/bin/t3_awake_test.fish
 ```
+
+The two files are separate on purpose: the daemon truncates its own log past
+1 MB, and launchd writing into that same file at its own offset would re-inflate
+it with NUL padding.
 
 ## Removing it
 

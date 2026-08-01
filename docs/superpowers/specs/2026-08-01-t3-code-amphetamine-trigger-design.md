@@ -115,7 +115,7 @@ Loop behavior:
 - Run the query unconditionally on every poll while the T3 Code server is alive. An earlier revision short-circuited on the modification time of `state.sqlite-wal` and ran the query only when it changed; that was removed because it could latch the busy state permanently. The change signal was consumed before the query result was known, so a transient read error stopped the retry from ever running again, and `stat` reports only whole seconds, so a turn completing in the same second as the last observed write could be missed entirely. Both paths end with the sentinel held up for the life of the server — the one failure direction this design forbids. Two `EXISTS` probes against small projections cost single-digit milliseconds, so the optimization bought nothing worth that risk: correctness over a negligible saving.
 - Poll every 2 seconds while the T3 Code server is alive, every 15 seconds when it is not.
 - After the last busy poll, linger 30 seconds before quitting the sentinel. This bridges back-to-back turns during conversational work and prevents the application from flapping open and closed.
-- Open or quit the sentinel only on a state transition, never on every poll.
+- Reconcile the sentinel to the desired state on every poll, and log only on a transition. Both `sentinel_up` and `sentinel_down` are idempotent and cost one `pgrep`, so reconciling is nearly free; acting only on a transition is not, because a cached state that is never re-checked diverges from reality in both directions. If the applet dies for any external reason, a transition-only daemon still believes it is up, and the machine silently stops being held awake with nothing in the log. If an applet is started by anything else — a stranded instance, or macOS reopening applications at login — a transition-only daemon never quits it, and the machine is pinned awake for as long as the daemon runs. That second direction is the one this design forbids, so the check has to happen every poll even though the log entry does not.
 
 ## Failure and cleanup behavior
 
@@ -123,7 +123,11 @@ Every failure path resolves toward not-busy, so a malfunction lets the Mac sleep
 
 ### Stale running turn
 
-If the T3 Code server process is gone, the daemon reports not-busy regardless of database contents. Without this guard, a crash during a turn leaves a `running` row that no process will ever complete, holding the Mac awake indefinitely.
+If the T3 Code server process is gone, the daemon reports not-busy regardless of database contents. A crash during a turn leaves a `running` row that no process will ever complete, and without this guard that row would hold the Mac awake.
+
+The guard's reach ends where the crash does. It only suppresses the stale row **while the server process stays dead**. Once T3 Code is relaunched, the new PID is alive, the orphaned `running` row still satisfies the predicate, and the machine is pinned awake with no age bound on the row and no log line explaining it. The same applies to an orphaned unresolved approval. A survey of the live database found 46 completed turns, all with a non-NULL `completed_at`, and one genuinely running turn, with no orphans across three days — encouraging, but it does not establish the behavior.
+
+**Open question:** whether T3 Code reconciles orphaned `running` turns and unresolved approvals when its server restarts is unverified. If it does not, the predicate needs an age bound — a `running` turn older than some threshold treated as not-busy. No age cap is applied now, because it would also cut off legitimately long turns, and choosing that trade-off is the operator's call rather than a default. Verifying it means killing the server mid-turn, relaunching, and checking whether the row is still `running`.
 
 ### Database unavailable
 
@@ -131,11 +135,17 @@ A missing or unreadable database yields not-busy.
 
 ### Query failure
 
-A transient `sqlite3` error, such as a locked database, retains the previous state. After five consecutive failures the daemon falls back to not-busy and logs the transition. The counter resets on the next successful query.
+A transient `sqlite3` error, such as a locked database, retains the previous state. After five consecutive failures the daemon falls back to not-busy and logs once; the counter, and with it the log, resets on the next successful query.
+
+That log line is written whatever the previous state was, rather than only when the daemon was previously busy. The failure mode this covers is not a transient lock but a permanent one: a T3 Code upgrade that renames a table or column breaks the query forever, and the daemon restarting after that upgrade starts out idle. Gating the line on a busy-to-idle transition would leave that daemon permanently dead with an empty log. For the same reason the line says the query *failed* rather than that the database was *unreadable* — a schema break is not an unreadable file, and the wrong word sends the reader after the wrong cause.
 
 ### Sentinel unavailable
 
-If the sentinel application is missing, the daemon logs once and continues polling rather than exiting, so it cannot crash-loop under launchd's `KeepAlive`.
+If the sentinel application is missing, the daemon logs and continues polling rather than exiting, so it cannot crash-loop under launchd's `KeepAlive`. Because the sentinel is reconciled on every poll, that logging is throttled to one line per failure episode rather than one per poll, and resets when the sentinel next comes up.
+
+### Sentinel that will not exit
+
+`sentinel_down` sends `SIGTERM` and waits. If the applet is still running when the wait expires it escalates to `SIGKILL` rather than returning failure, because repeating `SIGTERM` every poll cannot win against a process ignoring it, and the machine stays awake for as long as the applet survives.
 
 ### Daemon restart
 
@@ -143,11 +153,15 @@ On start the daemon recomputes desired state and opens or quits the sentinel to 
 
 ### Daemon shutdown
 
-`SIGTERM` and `SIGINT` handlers quit the sentinel before exiting, so logout or an explicit unload does not strand a running sentinel and, with it, a permanent wake session.
+An `EXIT` trap quits the sentinel, and the `SIGTERM`, `SIGINT` and `SIGHUP` handlers reach it by exiting, so logout, an explicit unload, or a `set -e` abort inside the loop does not strand a running sentinel and, with it, a permanent wake session.
+
+One window survives that: a signal arriving while the daemon is still waiting for LaunchServices to finish launching the applet lands before the applet has registered, so the first quit finds nothing to kill. The cleanup therefore quits, pauses briefly, and quits again, which closes the window in practice. An applet slower than that pause can still outlive the daemon, and `bin/t3_awake sentinel down` clears it.
 
 ## Logging
 
 The daemon writes to `~/Library/Logs/t3-awake.log`, one timestamped line per state transition and per error condition — never per poll. The file is truncated when it exceeds 1 MB. Thread identifiers, titles, and message content are never logged; only counts and states.
+
+launchd's `StandardErrorPath` points at a separate `~/Library/Logs/t3-awake.err`, not at that file. launchd holds its own descriptor at its own offset, so after the daemon truncates the log, launchd's next write would land past the new end of file and re-inflate it with NUL padding.
 
 ## Verification strategy
 

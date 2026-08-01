@@ -303,7 +303,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
   - Write your CLIProxyAPI token into claude/auth-token, then run bin/agents_link all.
-  - Add the "T3 Busy" trigger in Amphetamine -> Preferences -> Triggers (see amphetamine/README.md).
+  - Add the "t3-busy" trigger in Amphetamine -> Preferences -> Triggers (see amphetamine/README.md).
   - Run `postplan login` and open Neovim once to install plugins.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
