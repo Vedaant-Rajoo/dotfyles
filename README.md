@@ -45,7 +45,8 @@ The bootstrap is safe to re-run. It:
 4. Installs and selects Node `24.14.1` through fnm and Python `3.14.4` through pyenv.
 5. Installs the npm tools required by this configuration, including `postplan@0.0.4`.
 6. Installs Claude Code, projects shared agent rules/skills/subagents/hooks into every installed harness, enables the gitleaks hook, and installs Fisher plugins.
-7. Optionally applies macOS defaults and starts the Herdr service.
+7. Installs the `dev.newedia.t3-awake` LaunchAgent, which keeps the Mac awake while a T3 Code thread is working.
+8. Optionally applies macOS defaults and starts the Herdr service.
 
 The App Store must be signed in before `mas` can install its entries. A failed App Store install is reported and can be resumed by signing in and re-running the bootstrap.
 
