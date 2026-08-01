@@ -16,6 +16,12 @@ IDLE_POLL="${T3_AWAKE_IDLE_POLL:-15}"
 LINGER="${T3_AWAKE_LINGER:-30}"
 LOG="${T3_AWAKE_LOG:-$HOME/Library/Logs/t3-awake.log}"
 
+# launchd holds its own descriptor on StandardErrorPath at its own offset. If it
+# pointed at LOG, every truncation in log() would leave launchd writing past the
+# new end of file and re-inflating it with NUL padding, so stderr gets its own
+# file. It follows LOG so an override still keeps the pair together.
+ERRLOG="${LOG%.log}.err"
+
 BUNDLE_ID="dev.newedia.t3-busy"
 LABEL="dev.newedia.t3-awake"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,19 +29,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Tracks the backgrounded poll sleep so a signal handler can interrupt it.
 SLEEP_PID=""
 
-# A non-numeric interval would make the watch loop's arithmetic comparison fail
-# rather than evaluate false. The guarding `if` swallows that error, so the
-# linger branch would be skipped on every iteration and the sentinel would never
-# come down. Reject bad values at startup instead of failing open.
-for _knob in POLL IDLE_POLL LINGER; do
-	case "${!_knob}" in
-	'' | *[!0-9]*)
-		printf 'T3_AWAKE_%s must be a non-negative integer, got: %s\n' "$_knob" "${!_knob}" >&2
-		exit 78
-		;;
-	esac
-done
-unset _knob
+# Set while sentinel_up is failing, so a persistent failure logs once per
+# episode rather than once per poll.
+SENTINEL_FAIL_LOGGED=0
 
 log() {
 	local ts
@@ -108,26 +104,40 @@ sentinel_running() {
 	pgrep -f "$(sentinel_pattern)" >/dev/null 2>&1
 }
 
+# The watch loop reconciles on every poll, so a sentinel that cannot be started
+# would otherwise write a log line every POLL seconds — turning a missing bundle
+# into a log flood in the one file you read when the machine is stuck awake. Log
+# the first failure of an episode and stay quiet until the sentinel comes up.
+sentinel_fail() {
+	if [ "$SENTINEL_FAIL_LOGGED" -eq 0 ]; then
+		log "$1"
+		SENTINEL_FAIL_LOGGED=1
+	fi
+	return 1
+}
+
 sentinel_up() {
 	if sentinel_running; then
+		SENTINEL_FAIL_LOGGED=0
 		return 0
 	fi
 	if [ ! -d "$APP" ]; then
-		log "sentinel missing at $APP"
+		sentinel_fail "sentinel missing at $APP"
 		return 1
 	fi
 	if ! open "$APP" >/dev/null 2>&1; then
-		log "failed to open sentinel at $APP"
+		sentinel_fail "failed to open sentinel at $APP"
 		return 1
 	fi
 	local i
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		if sentinel_running; then
+			SENTINEL_FAIL_LOGGED=0
 			return 0
 		fi
 		sleep 0.5
 	done
-	log "sentinel did not appear after open"
+	sentinel_fail "sentinel did not appear after open"
 	return 1
 }
 
@@ -143,7 +153,19 @@ sentinel_down() {
 		fi
 		sleep 0.5
 	done
-	log "sentinel did not exit after SIGTERM"
+	# Repeating SIGTERM cannot win against an applet that ignores it, and the
+	# loop would re-send it on every poll while Amphetamine holds the machine
+	# awake. Escalate instead: an unkillable sentinel is a worse outcome than
+	# an ungraceful one.
+	log "sentinel ignored SIGTERM; escalating to SIGKILL"
+	pkill -9 -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
+	for i in 1 2 3 4; do
+		if ! sentinel_running; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	log "sentinel survived SIGKILL at $APP"
 	return 1
 }
 
@@ -195,7 +217,13 @@ cmd_sentinel() {
 	esac
 }
 
-# Runs on every exit path, so no route out of the loop can strand the applet.
+# Runs on every exit path, and takes down any applet that is registered by the
+# time it runs. It cannot promise more than that: a signal arriving while
+# sentinel_up is still waiting on LaunchServices lands before the applet has
+# registered, so the first sentinel_down finds nothing to kill and returns
+# success. The second pass, after a short pause, catches an applet that
+# registers in that window. An applet that takes longer than the pause to appear
+# can still outlive the daemon; `bin/t3_awake sentinel down` clears it.
 watch_cleanup() {
 	local rc=$?
 	if [ -n "$SLEEP_PID" ]; then
@@ -203,11 +231,45 @@ watch_cleanup() {
 		SLEEP_PID=""
 	fi
 	sentinel_down || true
+	sleep 1
+	sentinel_down || true
 	return "$rc"
 }
 
+# Only the watch loop consumes these, so only the watch loop is gated on them.
+# Validating at top level instead made an exported bad value break `probe`,
+# `status` and — the part that matters — `uninstall`, so the guard meant to stop
+# a stranded applet became the reason the user could not clear one.
+#
+# Decimals are legal because POLL and IDLE_POLL feed `sleep`, which accepts
+# fractions. Zero is not: it would spin the poll loop with no delay. A
+# non-numeric value is the real hazard, because LINGER's arithmetic comparison
+# would then error rather than evaluate false, and the guarding `if` swallows
+# that — skipping the linger branch on every iteration so the sentinel never
+# comes down.
+validate_intervals() {
+	local knob
+	for knob in POLL IDLE_POLL LINGER; do
+		case "${!knob}" in
+		*[!0-9.]* | *.*.*) ;; # not a plain decimal number
+		*[1-9]*) continue ;;  # a number, and not zero
+		esac
+		printf 'T3_AWAKE_%s must be a positive number, got: %s\n' "$knob" "${!knob}" >&2
+		return 78
+	done
+}
+
 cmd_watch() {
-	local state want interval now last_busy fails rc cached
+	local state want interval now last_busy fails rc cached linger_secs
+
+	validate_intervals || return $?
+
+	# LINGER is the one knob compared arithmetically, and `[ x -ge 2.5 ]` is an
+	# error rather than a comparison. Floor it once to whole seconds — the same
+	# granularity `date +%s` reports — so a fractional value cannot wedge the
+	# release branch shut.
+	linger_secs="${LINGER%%.*}"
+	[ -n "$linger_secs" ] || linger_secs=0
 
 	# EXIT covers every way out, not just the signals: a `set -e` abort inside
 	# the loop would otherwise leave the applet running with Amphetamine holding
@@ -249,10 +311,21 @@ cmd_watch() {
 				;;
 			*)
 				fails=$((fails + 1))
+				# Logged the first time the threshold is crossed, whatever
+				# the cached state was. Gating this on `cached != idle`
+				# hid the case that matters most: a T3 Code upgrade that
+				# renames a table or column breaks the query permanently,
+				# and a daemon restarting after that upgrade is already
+				# idle — so the feature would be dead forever with an
+				# empty log to diagnose it from. "Failed" rather than
+				# "unreadable", because a schema break is not an
+				# unreadable file and the wrong word sends the reader
+				# after the wrong cause. `-eq` keeps it to one line per
+				# failure episode; `fails` resets on the next success.
+				if [ "$fails" -eq 5 ]; then
+					log "busy query failed for $fails consecutive polls; falling back to idle"
+				fi
 				if [ "$fails" -ge 5 ]; then
-					if [ "$cached" != "idle" ]; then
-						log "database unreadable for $fails polls; falling back to idle"
-					fi
 					cached="idle"
 				fi
 				;;
@@ -270,17 +343,28 @@ cmd_watch() {
 			last_busy="$now"
 		fi
 
-		if [ "$want" = "busy" ] && [ "$state" != "busy" ]; then
+		# Reconciled on every poll rather than only on a transition. Both
+		# helpers are idempotent and cost one pgrep, and a cached state that
+		# is never re-checked drifts from reality in both directions: an
+		# applet that dies on its own leaves the daemon believing the machine
+		# is still held awake, and an applet started by anything else — a
+		# stranded instance, or macOS reopening it at login — is held up for
+		# as long as the daemon runs. That second direction is the one the
+		# design forbids. Only the log lines stay gated on the transition, so
+		# the log still records changes and not every poll.
+		if [ "$want" = "busy" ]; then
 			if sentinel_up; then
+				if [ "$state" != "busy" ]; then
+					log "busy: sentinel up"
+				fi
 				state="busy"
-				log "busy: sentinel up"
 			fi
-		elif [ "$want" = "idle" ] && [ "$state" != "idle" ]; then
-			if [ $((now - last_busy)) -ge "$LINGER" ]; then
-				if sentinel_down; then
-					state="idle"
+		elif [ $((now - last_busy)) -ge "$linger_secs" ]; then
+			if sentinel_down; then
+				if [ "$state" != "idle" ]; then
 					log "idle: sentinel down after ${LINGER}s linger"
 				fi
+				state="idle"
 			fi
 		fi
 
@@ -332,9 +416,17 @@ cmd_status() {
 
 cmd_install() {
 	local dry=0 template target
-	if [ "${1:-}" = "--dry-run" ]; then
-		dry=1
-	fi
+	# Anything that was not exactly --dry-run used to fall through to a real
+	# install, so `install --dryrun` built the applet, wrote the LaunchAgent
+	# and booted it — the opposite of what the typo asked for.
+	case "$#:${1:-}" in
+	0:) ;;
+	1:--dry-run) dry=1 ;;
+	*)
+		printf 'usage: bin/t3_awake install [--dry-run]\n' >&2
+		return 64
+		;;
+	esac
 	template="$REPO_DIR/amphetamine/$LABEL.plist"
 	target="$(plist_target)"
 
@@ -353,7 +445,7 @@ cmd_install() {
 	sentinel_build
 	mkdir -p "$(dirname "$target")"
 	sed -e "s|__T3_AWAKE_BIN__|$REPO_DIR/bin/t3_awake|g" \
-		-e "s|__T3_AWAKE_LOG__|$LOG|g" \
+		-e "s|__T3_AWAKE_ERR__|$ERRLOG|g" \
 		"$template" >"$target"
 
 	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
@@ -365,7 +457,7 @@ Installed. One manual step remains, because Amphetamine's trigger list cannot
 be written safely from outside the app:
 
   1. Open Amphetamine -> Preferences -> Triggers.
-  2. Add a trigger for a running application and select:
+  2. Add a trigger for a running application, name it "t3-busy", and select:
        $APP
   3. Leave the frontmost requirement OFF, and allow display sleep ON.
   4. Delete the existing "t3" and "claude" triggers.

@@ -7,6 +7,12 @@ set -g failures 0
 set -g checks 0
 set -g workdir (mktemp -d /tmp/t3-awake-test.XXXXXX)
 
+# Every invocation that can write a log line must be given this. Overriding only
+# T3_AWAKE_APP still leaves T3_AWAKE_LOG at its default, and ~/Library/Logs/
+# t3-awake.log is the first file you read when the machine is stuck awake — the
+# suite must not fill it with lines about deleted temp paths.
+set -g log_env T3_AWAKE_LOG=$workdir/sentinel.log
+
 # Daemons and applets started by the suite. Removing $workdir is not enough: if
 # the run aborts between starting a watch daemon and stopping it, the orphan and
 # its applet survive — leaking exactly the process that pins the machine awake.
@@ -18,7 +24,7 @@ function teardown --on-event fish_exit
         kill -TERM $pid 2>/dev/null
     end
     for stray in $sentinel_apps
-        env T3_AWAKE_APP=$stray $bin sentinel down >/dev/null 2>&1
+        env $log_env T3_AWAKE_APP=$stray $bin sentinel down >/dev/null 2>&1
     end
     test -n "$workdir"; and rm -rf $workdir
 end
@@ -99,7 +105,7 @@ check "database without the projection tables is idle" idle (probe $empty)
 # --- sentinel ----------------------------------------------------------
 
 set app $workdir/T3\ Busy\ Test.app
-set -g sentinel_env T3_AWAKE_APP=$app
+set -g sentinel_env $log_env T3_AWAKE_APP=$app
 
 env $sentinel_env $bin sentinel build
 set -a sentinel_apps $app
@@ -123,14 +129,14 @@ env $sentinel_env $bin sentinel down
 check "down is idempotent" stopped (env $sentinel_env $bin sentinel state)
 
 set absent $workdir/Nothing.app
-check "up on a missing bundle fails" 1 (env T3_AWAKE_APP=$absent $bin sentinel up >/dev/null 2>&1; echo $status)
+check "up on a missing bundle fails" 1 (env $log_env T3_AWAKE_APP=$absent $bin sentinel up >/dev/null 2>&1; echo $status)
 
 # --- watch loop --------------------------------------------------------
 
 set wapp $workdir/T3\ Busy\ Watch.app
 set w $workdir/watch
 make_fixture $w
-env T3_AWAKE_APP=$wapp $bin sentinel build
+env $log_env T3_AWAKE_APP=$wapp $bin sentinel build
 set -a sentinel_apps $wapp
 
 function watch_env
@@ -186,7 +192,7 @@ check "watch exited" 1 (kill -0 $watch_pid 2>/dev/null; echo $status)
 set walapp $workdir/T3\ Busy\ Wal.app
 set wal $workdir/wal
 make_wal_fixture $wal
-env T3_AWAKE_APP=$walapp $bin sentinel build
+env $log_env T3_AWAKE_APP=$walapp $bin sentinel build
 set -a sentinel_apps $walapp
 
 # Read-write connection on purpose: a read-only one cannot open a WAL database
@@ -234,6 +240,40 @@ chmod 644 $wal/state.sqlite
 kill -TERM $wal_pid
 sleep 2
 
+# --- interval validation ------------------------------------------------
+#
+# A non-numeric interval wedges the linger comparison open, so the watch loop
+# refuses to start on one. The validation belongs to the daemon alone: gating
+# every subcommand on it meant an exported bad value broke `uninstall`, which is
+# the one command that clears a stranded applet.
+
+set vdir $workdir/validate
+make_fixture $vdir
+
+function validate_env
+    echo $log_env
+    echo T3_AWAKE_DB=$vdir/state.sqlite
+    echo T3_AWAKE_RUNTIME_JSON=$vdir/server-runtime.json
+    echo T3_AWAKE_APP=$workdir/Unbuilt.app
+end
+
+check "watch rejects a non-numeric interval" 78 (env (validate_env) T3_AWAKE_POLL=abc $bin watch >/dev/null 2>&1; echo $status)
+check "watch rejects a zero interval" 78 (env (validate_env) T3_AWAKE_LINGER=0 $bin watch >/dev/null 2>&1; echo $status)
+
+# Decimals are legal: these knobs feed `sleep`, which takes fractions. The
+# fixture has no running turn, so the loop stays idle and never touches the
+# unbuilt bundle; surviving two seconds is the assertion.
+env (validate_env) T3_AWAKE_POLL=0.5 T3_AWAKE_IDLE_POLL=0.5 T3_AWAKE_LINGER=1 $bin watch &
+set -g validate_pid $last_pid
+set -a watch_pids $validate_pid
+sleep 2
+check "watch accepts a decimal interval" 0 (kill -0 $validate_pid 2>/dev/null; echo $status)
+kill -TERM $validate_pid 2>/dev/null
+sleep 1
+
+# The recovery path must survive a bad value that is merely exported.
+check "a bad interval does not break probe" idle (env T3_AWAKE_POLL=abc T3_AWAKE_DB=$missing/state.sqlite T3_AWAKE_RUNTIME_JSON=$missing/server-runtime.json $bin probe)
+
 # --- plist template and install planning -------------------------------
 
 check "template is valid plist" 0 (plutil -lint $repo/amphetamine/dev.newedia.t3-awake.plist >/dev/null 2>&1; echo $status)
@@ -244,7 +284,17 @@ check "dry run plans the plist write" 1 (printf '%s\n' $dry | grep -c '^would wr
 check "dry run plans the bootstrap" 1 (printf '%s\n' $dry | grep -c '^would bootstrap gui/')
 check "dry run creates nothing" 1 (test -d $workdir/Dry.app; echo $status)
 
-check "status runs cleanly" 0 (env T3_AWAKE_APP=$workdir/None.app $bin status >/dev/null 2>&1; echo $status)
+# A mistyped flag used to fall through to a real install, which builds the
+# applet, writes ~/Library/LaunchAgents and boots it.
+check "install rejects an unknown argument" 64 (env $log_env T3_AWAKE_APP=$workdir/Typo.app $bin install --dryrun >/dev/null 2>&1; echo $status)
+check "a rejected install builds nothing" 1 (test -d $workdir/Typo.app; echo $status)
+
+# Asserting a field rather than the exit status: a `status` that printed nothing
+# at all would still exit 0.
+set st (env $log_env T3_AWAKE_APP=$workdir/None.app $bin status 2>/dev/null)
+set st_rc $status
+check "status exits cleanly" 0 $st_rc
+check "status reports the sentinel state" stopped (printf '%s\n' $st | sed -n 's/^sentinel: *//p')
 
 # --- summary -----------------------------------------------------------
 
