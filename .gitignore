@@ -20,9 +20,17 @@ github-copilot/
 fish/local/
 monid/credentials.yaml
 opencode/opencode.json
+claude/auth-token
 
 # --- Nested upstream repo ---
 init.lua/
+
+# --- Generated harness projections. ~/.config/opencode IS this repo's
+#     opencode/, and ~/.claude is a symlink to this repo's claude/, so
+#     bin/agents_link writes translated subagents into the working tree;
+#     agents/subagents/ is the tracked source. ---
+opencode/agents/
+claude/agents/
 
 # --- Machine-local runtime state ---
 fish/fish_variables
@@ -103,7 +111,8 @@ claude/cache/
 claude/.last-cleanup
 claude/.last-update-result.json
 claude/mcp-needs-auth-cache.json
-claude/plugins/cache/
-claude/plugins/marketplaces/
-claude/plugins/plugin-catalog-cache.json
+claude/plugins/
+claude/security/
+claude/plans/
 claude/settings.json.backup.*
+claude/.last_inuse_sweep

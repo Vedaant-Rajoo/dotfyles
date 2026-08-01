@@ -17,7 +17,7 @@ function _claude_model_picker_launch
 
 	# Static model list used by the picker.
 	set -l models \
-		(string join \t 'Opus 4.8' 'claude-opus-4-8') \
+		(string join \t 'Opus 5' 'claude-opus-5') \
 		(string join \t 'Sonnet 5' 'claude-sonnet-5') \
 		(string join \t 'Haiku 4.5' 'claude-haiku-4-5') \
 		(string join \t 'GPT 5.6 Sol' 'gpt-5.6-sol') \

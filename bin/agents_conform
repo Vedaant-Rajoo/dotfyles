@@ -20,7 +20,8 @@ usage() {
 usage: agents_conform [--live] [--skills]
 
   --live    Run rule and hook canaries through installed harness CLIs.
-  --skills  With --live, also ask each model to invoke the html-planning skill.
+  --skills  With --live, also ask each model to invoke every skill that
+            publishes a SKILL-CHECK contract line in its own SKILL.md.
 
 The static tier is deterministic and returns non-zero on drift. Live checks use
 models and tokens; their scorecard is informational unless AGENTS_LIVE_GATE=1.
@@ -106,20 +107,48 @@ check_json() {
 	fi
 }
 
+# The manifest schema and the Claude hook wiring are checked by agents_render,
+# which reads the schema file rather than restating it here.
+check_render() {
+	local subcommand="$1" label="$2" output
+	if output="$("$REPO_ROOT/bin/agents_render" "$subcommand" 2>&1)"; then
+		say OK "$label"
+	else
+		say BROKEN "$label"
+		[[ -n "$output" ]] && printf '%s\n' "$output" >&2
+		static_failed=1
+	fi
+}
+
+# Every skill must be discoverable: a SKILL.md whose declared name matches the
+# directory, because that directory name is the id each harness links against.
+check_skill_sources() {
+	local dir name skill_md
+	for dir in "$REPO_ROOT"/agents/skills/*/; do
+		[[ -d "$dir" ]] || continue
+		name="$(basename "$dir")"
+		skill_md="$dir/SKILL.md"
+		if [[ ! -f "$skill_md" ]]; then
+			say BROKEN "$name has no SKILL.md"
+			static_failed=1
+		elif grep -qxF "name: $name" "$skill_md" && grep -q '^description:' "$skill_md"; then
+			say OK "$name SKILL.md frontmatter"
+		else
+			say BROKEN "$name SKILL.md frontmatter (needs 'name: $name' and a description)"
+			static_failed=1
+		fi
+	done
+}
+
 check_repo_link
 check_json "$REPO_ROOT/agents/hooks/manifest.json" "portable hooks manifest"
 check_json "$REPO_ROOT/claude/settings.json" "Claude settings"
 if command -v cursor-agent >/dev/null 2>&1 || command -v agent >/dev/null 2>&1 || [[ -d "$HOME/.cursor" ]]; then
 	check_json "$HOME/.cursor/hooks.json" "Cursor hooks"
 fi
-
-if ! grep -q '^name: html-planning$' "$REPO_ROOT/agents/skills/html-planning/SKILL.md" ||
-	! grep -q '^description:' "$REPO_ROOT/agents/skills/html-planning/SKILL.md"; then
-	say BROKEN "html-planning SKILL.md frontmatter"
-	static_failed=1
-else
-	say OK "html-planning SKILL.md frontmatter"
-fi
+check_render validate-manifest "portable hooks manifest matches its schema"
+check_render check-claude-hooks "Claude settings run every portable hook"
+check_skill_sources
 
 if [[ "$static_failed" -ne 0 ]]; then
 	verdict 1 'Static conformance: FAIL'
@@ -206,17 +235,34 @@ check_rule() {
 	if [[ -s "$marker" ]]; then hook_status="PASS"; else hook_status="N/A"; fi
 }
 
-check_skill() {
-	local name="$1"
-	shift
-	if [[ "$LIVE_SKILLS" -eq 0 ]]; then
-		skill_status="SKIP"
-		return
-	fi
-	local output="$work/${name}-skill.txt" retries=2
+# A skill opts into the live tier by publishing its own canary contract line;
+# skills without one are still projected and checked statically, just not asked
+# to prove discoverability with tokens.
+canary_skills() {
+	local skill_md name
+	for skill_md in "$REPO_ROOT"/agents/skills/*/SKILL.md; do
+		[[ -f "$skill_md" ]] || continue
+		name="$(basename "$(dirname "$skill_md")")"
+		grep -qF "SKILL-CHECK $name" "$skill_md" && printf '%s\n' "$name"
+	done
+}
+
+# The prompt is appended here, so callers pass their harness command without
+# one. last_message is for CLIs that report the final answer through a file
+# instead of stdout; pass "" when stdout is authoritative.
+check_one_skill() {
+	local harness="$1" skill="$2" last_message="$3"
+	shift 3
+	local output="$work/${harness}-skill-${skill}.txt" retries=2
+	local expected="SKILL-OK $skill 1"
 	skill_status="FAIL"
 	while ((retries-- > 0)); do
-		if run_capture "$name: skill canary" "$output" "$@" && matches_canary "$output" "SKILL-OK html-planning 1"; then
+		if run_capture "$harness: $skill canary" "$output" "$@" "SKILL-CHECK $skill" &&
+			matches_canary "$output" "$expected"; then
+			skill_status="PASS"
+			break
+		fi
+		if [[ -n "$last_message" ]] && [[ -f "$last_message" ]] && matches_canary "$last_message" "$expected"; then
 			skill_status="PASS"
 			break
 		fi
@@ -227,13 +273,40 @@ check_skill() {
 	done
 }
 
+# One column covers every canary skill: PASS only if all of them pass, and
+# BLOCKED wins over FAIL because an unauthenticated harness was never tested.
+check_skills() {
+	local harness="$1" last_message="$2"
+	shift 2
+	if [[ -z "$CANARY_SKILLS" ]]; then
+		skill_status="N/A"
+		return
+	fi
+	if [[ "$LIVE_SKILLS" -eq 0 ]]; then
+		skill_status="SKIP"
+		return
+	fi
+	local skill aggregate="PASS"
+	for skill in $CANARY_SKILLS; do
+		check_one_skill "$harness" "$skill" "$last_message" "$@"
+		if [[ "$skill_status" == "BLOCKED" ]]; then
+			aggregate="BLOCKED"
+			break
+		fi
+		[[ "$skill_status" == "FAIL" ]] && aggregate="FAIL"
+	done
+	skill_status="$aggregate"
+}
+
+CANARY_SKILLS="$(canary_skills)"
+
 echo
 header 'Live conformance'
 
 if command -v claude >/dev/null 2>&1; then
 	check_rule claude claude -p --permission-mode dontAsk "CANARY-CHECK"
 	claude_rule="$rule_status"; claude_hook="$hook_status"
-	check_skill claude claude -p --permission-mode dontAsk "SKILL-CHECK html-planning"
+	check_skills claude "" claude -p --permission-mode dontAsk
 	record "Claude" "$claude_rule" "$skill_status" "$claude_hook" "global rules"
 fi
 
@@ -242,30 +315,28 @@ if command -v codex >/dev/null 2>&1; then
 	check_rule codex codex exec --ephemeral --sandbox read-only --output-last-message "$codex_last" "CANARY-CHECK"
 	if [[ -f "$codex_last" ]] && matches_canary "$codex_last" "AGENTS-OK 1"; then rule_status="PASS"; fi
 	codex_rule="$rule_status"
-	if [[ "$LIVE_SKILLS" -eq 1 ]]; then
-		codex_skill_last="$work/codex-skill-last.txt"
-		check_skill codex codex exec --ephemeral --sandbox read-only --output-last-message "$codex_skill_last" "SKILL-CHECK html-planning"
-		if [[ -f "$codex_skill_last" ]] && matches_canary "$codex_skill_last" "SKILL-OK html-planning 1"; then skill_status="PASS"; fi
-	else
-		skill_status="SKIP"
-	fi
+	codex_skill_last="$work/codex-skill-last.txt"
+	check_skills codex "$codex_skill_last" codex exec --ephemeral --sandbox read-only --output-last-message "$codex_skill_last"
 	record "Codex" "$codex_rule" "$skill_status" "N/A" "hook schema intentionally unmanaged"
 fi
 
 if command -v opencode >/dev/null 2>&1; then
 	check_rule opencode opencode run --dir "$REPO_ROOT" "CANARY-CHECK"
 	opencode_rule="$rule_status"
-	check_skill opencode opencode run --dir "$REPO_ROOT" "SKILL-CHECK html-planning"
+	check_skills opencode "" opencode run --dir "$REPO_ROOT"
 	record "OpenCode" "$opencode_rule" "$skill_status" "N/A" "plugin hooks are not command-portable"
 fi
 
 cursor_cmd=""
 if command -v cursor-agent >/dev/null 2>&1; then cursor_cmd="cursor-agent"; elif command -v agent >/dev/null 2>&1; then cursor_cmd="agent"; fi
 if [[ -n "$cursor_cmd" ]]; then
-	check_rule cursor "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT" "CANARY-CHECK"
+	# --trust is required or Cursor refuses an unmarked workspace outright and
+	# the canary reads as a rules failure. It is not persisted to the workspace,
+	# and --mode ask keeps the run read-only.
+	check_rule cursor "$cursor_cmd" -p --mode ask --trust --workspace "$REPO_ROOT" "CANARY-CHECK"
 	cursor_rule="$rule_status"; cursor_hook="$hook_status"
-	check_skill cursor "$cursor_cmd" -p --mode ask --workspace "$REPO_ROOT" "SKILL-CHECK html-planning"
-	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "rules are project-scoped; no verified global file path"
+	check_skills cursor "" "$cursor_cmd" -p --mode ask --trust --workspace "$REPO_ROOT"
+	record "Cursor" "$cursor_rule" "$skill_status" "$cursor_hook" "global rule reaches projects under \$HOME only"
 fi
 
 if [[ "${#rows[@]}" -gt 0 ]]; then

@@ -1,11 +1,14 @@
 # Keep the entrypoint intentionally small.
 set -g fish_greeting
 
-# Claude Code → CLIProxyAPI.
-# Secrets (BASE_URL / AUTH_TOKEN) live in local/ — not versioned.
-# Loaded for all sessions (interactive or not) so scripts and non-TTY
-# launches inherit the proxy vars; Claude itself also reads the same
-# values from ~/.claude/settings.local.json.
+# Machine-local shell secrets, not versioned. Loaded for all sessions
+# (interactive or not) so scripts and non-TTY launches inherit them.
+#
+# Claude Code no longer belongs here and this file is normally absent: its
+# credential comes from apiKeyHelper reading claude/auth-token, and the base URL
+# and model ids are tracked in claude/settings.json. Do not re-export
+# ANTHROPIC_AUTH_TOKEN — Claude refuses to choose between it and apiKeyHelper
+# and warns that auth may not work.
 set -l secrets $__fish_config_dir/local/claude-code.fish
 if test -f $secrets
     source $secrets
