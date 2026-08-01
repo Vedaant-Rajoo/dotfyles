@@ -1,10 +1,25 @@
 #!/usr/bin/env fish
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 
-gum style \
-    --foreground 12 --border-foreground 12 --border double \
-    --margin "1 0" --padding "0 2" \
-    '
+function u_log
+    echo -e $argv[2..-1] >>"$argv[1]"
+end
+
+function u_run_logged
+    $argv[2..-1] >>"$argv[1]"
+end
+
+function u_run_brew_upgrade
+    brew upgrade 2>&1 | tee -a "$argv[1]"
+    set -l upgrade_status $pipestatus[1]
+    return $upgrade_status
+end
+
+function u_main
+    gum style \
+        --foreground 12 --border-foreground 12 --border double \
+        --margin "1 0" --padding "0 2" \
+        '
 ██╗   ██╗██████╗ ██████╗  █████╗ ████████╗███████╗
 ██║   ██║██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝
 ██║   ██║██████╔╝██║  ██║███████║   ██║   █████╗
@@ -13,51 +28,55 @@ gum style \
  ╚═════╝ ╚═╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
  '
 
-set -l NOW (date +%Y-%m-%d-%H-%M-%S)
-echo -e "$NOW\n" >>/tmp/u-$NOW.txt
+    set -l NOW (date +%Y-%m-%d-%H-%M-%S)
+    set -l log_file /tmp/u-$NOW.txt
+    u_log "$log_file" "$NOW\n"
 
-if not gum confirm "Do you wish to update your scripts?"
-    exit 1
+    if not gum confirm "Do you wish to update your scripts?"
+        exit 1
+    end
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa; or exit $status
+    u_log "$log_file" ""
+    echo "✅ 💤 lazy.nvim synced"
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "🧰 mason.nvim updating" -- nvim --headless "+MasonUpdate" +qa; or exit $status
+    u_log "$log_file" ""
+    echo "✅ 🧰 mason.nvim updated"
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "🌳 nvim-treesitter updating" -- nvim --headless "+TSUpdate" +qa; or exit $status
+    u_log "$log_file" ""
+    echo "✅ 🌳 nvim-treesitter updated"
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update; or exit $status
+    u_log "$log_file" ""
+    echo "✅ 🍻 brew updated"
+
+    set -l OUTDATED (brew outdated); or exit $status
+    u_log "$log_file" "$OUTDATED"
+
+    if test -n "$OUTDATED"
+        # no spinner here: cask upgrades can prompt for sudo, and gum spin swallows the prompt
+        echo "🍻 brew upgrading..."
+        u_run_brew_upgrade "$log_file"; or exit $status
+        u_log "$log_file" ""
+        echo "✅ 🍻 brew upgraded"
+
+        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all; or exit $status
+        u_log "$log_file" ""
+        echo "✅ 🍻 brew cleaned up"
+    else
+        u_log "$log_file" "No outdated brew packages"
+    end
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor; or exit $status
+    u_log "$log_file" ""
+    echo "✅ 🍻 brew doctored"
+
+    echo "✅ 🧾 logged to $log_file"
+    bat "$log_file"
 end
 
-gum spin --spinner globe --title "💤 lazy.nvim syncing..." -- nvim --headless "+Lazy! sync" +qa; or exit $status
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 💤 lazy.nvim synced"
-
-gum spin --spinner globe --title "🧰 mason.nvim updating" -- nvim --headless "+MasonUpdate" +qa; or exit $status
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 🧰 mason.nvim updated"
-
-gum spin --spinner globe --title "🌳 nvim-treesitter updating" -- nvim --headless "+TSUpdate" +qa; or exit $status
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 🌳 nvim-treesitter updated"
-
-gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update >>/tmp/u-$NOW.txt; or exit $status
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 🍻 brew updated"
-
-set -l OUTDATED (brew outdated); or exit $status
-echo $OUTDATED >>/tmp/u-$NOW.txt
-
-if test -n "$OUTDATED"
-    # no spinner here: cask upgrades can prompt for sudo, and gum spin swallows the prompt
-    echo "🍻 brew upgrading..."
-    brew upgrade 2>&1 | tee -a /tmp/u-$NOW.txt
-    set -l upgrade_status $pipestatus[1]
-    test $upgrade_status -eq 0; or exit $upgrade_status
-    echo "" >>/tmp/u-$NOW.txt
-    echo "✅ 🍻 brew upgraded"
-
-    gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all >>/tmp/u-$NOW.txt; or exit $status
-    echo "" >>/tmp/u-$NOW.txt
-    echo "✅ 🍻 brew cleaned up"
-else
-    echo "No outdated brew packages" >>/tmp/u-$NOW.txt
+if not set -q U_TEST_MODE
+    u_main $argv
 end
-
-gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor >>/tmp/u-$NOW.txt; or exit $status
-echo "" >>/tmp/u-$NOW.txt
-echo "✅ 🍻 brew doctored"
-
-echo "✅ 🧾 logged to /tmp/u-$NOW.txt"
-bat /tmp/u-$NOW.txt
