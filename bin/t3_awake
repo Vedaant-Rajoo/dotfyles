@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Hold an Amphetamine trigger session while a T3 Code thread is actively working.
+#
+# The daemon reads T3 Code's own orchestration projections read-only and
+# reflects "a turn is running" by opening or terminating a dockless sentinel
+# application. A native Amphetamine trigger keyed to that application supplies
+# the wake session; Amphetamine's own session state is never scripted.
+
+set -euo pipefail
+
+DB="${T3_AWAKE_DB:-$HOME/.t3/userdata/state.sqlite}"
+RUNTIME_JSON="${T3_AWAKE_RUNTIME_JSON:-$HOME/.t3/userdata/server-runtime.json}"
+APP="${T3_AWAKE_APP:-$HOME/Applications/T3 Busy.app}"
+POLL="${T3_AWAKE_POLL:-2}"
+IDLE_POLL="${T3_AWAKE_IDLE_POLL:-15}"
+LINGER="${T3_AWAKE_LINGER:-30}"
+LOG="${T3_AWAKE_LOG:-$HOME/Library/Logs/t3-awake.log}"
+
+BUNDLE_ID="dev.newedia.t3-busy"
+LABEL="dev.newedia.t3-awake"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+log() {
+	local ts
+	ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+	mkdir -p "$(dirname "$LOG")"
+	if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG")" -gt 1048576 ]; then
+		: >"$LOG"
+	fi
+	printf '%s %s\n' "$ts" "$*" >>"$LOG"
+}
+
+# 0 alive, 1 dead or unreadable.
+t3_server_alive() {
+	local pid
+	if [ ! -r "$RUNTIME_JSON" ]; then
+		return 1
+	fi
+	pid="$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' "$RUNTIME_JSON" | head -1)"
+	if [ -z "$pid" ]; then
+		return 1
+	fi
+	kill -0 "$pid" 2>/dev/null
+}
+
+# 0 busy, 1 idle, 2 unreadable or query error.
+db_busy() {
+	local out
+	if [ ! -r "$DB" ]; then
+		return 2
+	fi
+	if ! out="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
+		"SELECT EXISTS(SELECT 1 FROM projection_turns WHERE state = 'running')
+		     OR EXISTS(SELECT 1 FROM projection_pending_approvals WHERE resolved_at IS NULL);" 2>/dev/null)"; then
+		return 2
+	fi
+	if [ "$out" = "1" ]; then
+		return 0
+	fi
+	return 1
+}
+
+t3_probe() {
+	if ! t3_server_alive; then
+		printf 'idle\n'
+		return 0
+	fi
+	if db_busy; then
+		printf 'busy\n'
+	else
+		printf 'idle\n'
+	fi
+	return 0
+}
+
+usage() {
+	cat <<'EOF'
+usage: bin/t3_awake <command>
+
+  probe                 Print "busy" or "idle" for the current state.
+  sentinel <build|up|down|state>
+                        Manage the marker application directly.
+  watch                 Run the daemon loop (what launchd runs).
+  status                Print a diagnostic summary.
+  install [--dry-run]   Build the applet and load the LaunchAgent.
+  uninstall             Remove the LaunchAgent and the applet.
+EOF
+}
+
+main() {
+	case "${1:-}" in
+	probe) t3_probe ;;
+	-h | --help | help | '') usage ;;
+	*)
+		printf 'unknown command: %s\n' "$1" >&2
+		usage >&2
+		return 64
+		;;
+	esac
+}
+
+main "$@"
