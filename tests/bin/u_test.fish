@@ -74,6 +74,9 @@ assert_function u_cask_app_paths 'source exposes u_cask_app_paths'; or set test_
 assert_function u_inspect_app 'source exposes u_inspect_app'; or set test_status 1
 assert_function u_prepare_cask 'source exposes u_prepare_cask'; or set test_status 1
 assert_function u_confirm_running_apps 'source exposes u_confirm_running_apps'; or set test_status 1
+assert_function u_stop_cask_apps 'source exposes u_stop_cask_apps'; or set test_status 1
+assert_function u_reopen_token_apps 'source exposes u_reopen_token_apps'; or set test_status 1
+assert_function u_cleanup 'source exposes u_cleanup'; or set test_status 1
 assert_no_mock_calls; or set test_status 1
 
 # u_discover_outdated
@@ -218,7 +221,13 @@ exit 64' >"$u_mock_bin/brew"
 
 echo '#!/usr/bin/env fish
 echo "osascript $argv" >>"$U_MOCK_LOG"
-if test (count $argv) -eq 5; and test "$argv[1]" = -l; and test "$argv[2]" = JavaScript; and string match -q -- "*/u-cask-lifecycle.js" "$argv[3]"; and test "$argv[4]" = inspect
+if test "$argv[1]" != -l; or test "$argv[2]" != JavaScript; or not string match -q -- "*/u-cask-lifecycle.js" "$argv[3]"
+    echo "osascript mock: unexpected invocation: $argv" >>"$U_MOCK_LOG"
+    exit 64
+end
+
+set -l command "$argv[4]"
+if test "$command" = inspect; and test (count $argv) -eq 5
     set -l fixture "$U_MOCK_DIR/inspect"(string replace -a / _ -- "$argv[5]")".json"
     if test -e "$fixture"
         cat "$fixture"
@@ -227,17 +236,70 @@ if test (count $argv) -eq 5; and test "$argv[1]" = -l; and test "$argv[2]" = Jav
     echo "osascript mock: no fixture for $argv[5]" >>"$U_MOCK_LOG"
     exit 66
 end
+
+if contains -- "$command" running terminate force-terminate; and test (count $argv) -ge 5
+    set -l bundle_id "$argv[5]"
+    set -l bundle_key (string replace -a / _ -- "$bundle_id")
+    set -l operation_key "$bundle_key-$command"
+    set -l post_fixture "$U_MOCK_DIR/post-$operation_key"
+    if test -e "$post_fixture"
+        cp "$post_fixture" "$U_MOCK_DIR/running-$bundle_key"
+    end
+
+    set -l exit_fixture "$U_MOCK_DIR/exit-$operation_key"
+    if test -e "$exit_fixture"
+        set -l exit_status (string trim <"$exit_fixture")
+        if test "$exit_status" -ne 0
+            exit "$exit_status"
+        end
+    end
+
+    set -l pids
+    if test "$command" = running
+        set -l queue "$U_MOCK_DIR/running-$bundle_key"
+        if test -e "$queue"
+            set -l lines (cat "$queue")
+            if test (count $lines) -gt 0; and test "$lines[1]" != -
+                set pids (string split , -- "$lines[1]")
+            end
+            if test (count $lines) -gt 1
+                printf "%s\n" $lines[2..-1] >"$queue"
+            end
+        end
+    end
+
+    printf "{\"bundleId\":\"%s\",\"pids\":[%s]}\n" "$bundle_id" (string join , $pids)
+    exit 0
+end
+
 echo "osascript mock: unexpected invocation: $argv" >>"$U_MOCK_LOG"
 exit 64' >"$u_mock_bin/osascript"
 
 echo '#!/usr/bin/env fish
 echo "gum $argv" >>"$U_MOCK_LOG"
-if test "$argv[1]" = confirm; and test -e "$U_MOCK_DIR/gum-confirm-decline"
-    exit 1
+if test "$argv[1]" = confirm
+    if string match -q -- "*Force quit*" "$argv[2..-1]"; and test -e "$U_MOCK_DIR/gum-force-decline"
+        exit 1
+    end
+    if test -e "$U_MOCK_DIR/gum-confirm-decline"
+        exit 1
+    end
 end
 exit 0' >"$u_mock_bin/gum"
 
-chmod +x "$u_mock_bin/brew" "$u_mock_bin/osascript" "$u_mock_bin/gum"
+echo '#!/usr/bin/env fish
+echo "sleep $argv" >>"$U_MOCK_LOG"
+exit 0' >"$u_mock_bin/sleep"
+
+echo '#!/usr/bin/env fish
+echo "open $argv" >>"$U_MOCK_LOG"
+if test -e "$U_MOCK_DIR/signal-on-first-open"; and not test -e "$U_MOCK_DIR/signal-sent"
+    touch "$U_MOCK_DIR/signal-sent"
+    kill -INT "$U_TEST_FISH_PID"
+end
+exit 0' >"$u_mock_bin/open"
+
+chmod +x "$u_mock_bin/brew" "$u_mock_bin/osascript" "$u_mock_bin/gum" "$u_mock_bin/sleep" "$u_mock_bin/open"
 set -gx PATH "$u_mock_bin" $PATH
 
 function u_test_write_cask --argument-names token json
@@ -251,7 +313,10 @@ end
 
 function u_test_reset
     rm -f "$U_STATE_DIR/apps.tsv" "$U_STATE_DIR/skips.tsv" "$U_STATE_DIR/failures.tsv"
-    rm -f "$U_MOCK_DIR/gum-confirm-decline"
+    rm -f "$U_MOCK_DIR"/gum-confirm-decline "$U_MOCK_DIR"/gum-force-decline
+    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'post-*' -o -name 'signal-*' \))
+        rm -f "$fixture"
+    end
     printf '' >"$U_MOCK_LOG"
 end
 
@@ -470,6 +535,183 @@ u_confirm_running_apps >/dev/null
 assert_equal 1 $status 'confirm reports a declined prompt for a multi-app cask'; or set test_status 1
 assert_equal 'multi|declined closing running applications' "$(u_test_state skips.tsv)" \
     'a declined prompt skips a multi-app cask exactly once'; or set test_status 1
+
+# u_stop_cask_apps, u_reopen_token_apps, and u_cleanup
+#
+# Every lifecycle command below is the PATH mock above. These tests never invoke
+# AppKit or terminate a real process.
+
+function u_test_write_apps
+    printf '%b\n' $argv >"$U_STATE_DIR/apps.tsv"
+end
+
+function u_test_running --argument-names bundle_id
+    set -l states $argv[2..-1]
+    for index in (seq (count $states))
+        if test -z "$states[$index]"
+            set states[$index] -
+        end
+    end
+    printf '%s\n' $states >"$U_MOCK_DIR/running-$bundle_id"
+end
+
+function u_test_post_operation --argument-names bundle_id command
+    set -l state "$argv[3]"
+    if test -z "$state"
+        set state -
+    end
+    printf '%s\n' "$state" >"$U_MOCK_DIR/post-$bundle_id-$command"
+end
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111,222\t1\t0\t0'
+u_test_running com.cursor.Cursor '111,222' ''
+u_stop_cask_apps cursor
+assert_equal 0 $status 'stop accepts graceful termination before timeout'; or set test_status 1
+assert_equal 1 (u_test_calls ' terminate com.cursor.Cursor 111 222$') \
+    'stop requests graceful termination for every exact recorded PID'; or set test_status 1
+assert_equal 2 (u_test_calls ' running com.cursor.Cursor 111 222$') \
+    'stop polls exact recorded PIDs until graceful termination finishes'; or set test_status 1
+assert_equal 2 (u_test_calls '^sleep 1$') \
+    'stop waits one second before each graceful running check'; or set test_status 1
+assert_equal 0 (u_test_calls ' force-terminate ') \
+    'stop never force-terminates an app that exits gracefully'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111,222|1|1|0' "$(u_test_state apps.tsv)" \
+    'graceful termination marks the app closed for later reopen'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor 111
+touch "$U_MOCK_DIR/gum-force-decline"
+u_stop_cask_apps cursor >/dev/null
+assert_equal 1 $status 'stop rejects a cask when force termination is declined'; or set test_status 1
+assert_equal 10 (u_test_calls ' running com.cursor.Cursor 111$') \
+    'stop performs no more than ten running checks before force confirmation'; or set test_status 1
+assert_equal 10 (u_test_calls '^sleep 1$') \
+    'stop waits no more than ten one-second polling intervals'; or set test_status 1
+assert_equal 1 (u_test_calls '^gum confirm Force quit Cursor') \
+    'a still-running app gets one dedicated force confirmation'; or set test_status 1
+assert_equal 0 (u_test_calls ' force-terminate ') \
+    'declining force confirmation never invokes force termination'; or set test_status 1
+assert_equal 'cursor|application remained running after force termination was declined' "$(u_test_state skips.tsv)" \
+    'declined force termination skips the complete cask'; or set test_status 1
+
+u_test_reset
+printf 'google-chrome\tprior skip\n' >"$U_STATE_DIR/skips.tsv"
+u_test_write_apps 'chrome\t/Applications/Chrome.app\tcom.example.Chrome\t111\t1\t0\t0'
+u_test_running com.example.Chrome 111
+touch "$U_MOCK_DIR/gum-force-decline"
+u_stop_cask_apps chrome >/dev/null
+assert_equal 'chrome
+google-chrome' "$(cut -f1 "$U_STATE_DIR/skips.tsv" | sort)" \
+    'skip deduplication matches the exact cask token field'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor 111
+u_test_post_operation com.cursor.Cursor force-terminate ''
+u_stop_cask_apps cursor >/dev/null
+assert_equal 0 $status 'accepted force termination makes the cask eligible'; or set test_status 1
+assert_equal 1 (u_test_calls ' force-terminate com.cursor.Cursor 111$') \
+    'accepted force confirmation targets only the exact recorded PID'; or set test_status 1
+assert_equal 11 (u_test_calls ' running com.cursor.Cursor 111$') \
+    'stop reconciles exact PIDs after force termination'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|0' "$(u_test_state apps.tsv)" \
+    'successful force termination tracks the app for reopen'; or set test_status 1
+assert_equal '' "$(u_test_state skips.tsv)" \
+    'successful force termination does not skip the cask'; or set test_status 1
+
+# A multi-PID helper operation can close one process and then exit 70. The
+# coordinator must query every original PID again, preserve that partial close
+# for cleanup, and skip rather than assume the remaining process stopped.
+u_test_reset
+u_test_write_apps 'chrome\t/Applications/Google Chrome.app\tcom.google.Chrome\t222,333\t1\t0\t0'
+u_test_running com.google.Chrome '222,333'
+u_test_post_operation com.google.Chrome force-terminate 333
+printf '70\n' >"$U_MOCK_DIR/exit-com.google.Chrome-force-terminate"
+u_stop_cask_apps chrome >/dev/null
+assert_equal 1 $status 'failed force termination rejects the cask'; or set test_status 1
+assert_equal 11 (u_test_calls ' running com.google.Chrome 222 333$') \
+    'helper errors are reconciled against every originally recorded PID'; or set test_status 1
+assert_equal 'chrome|/Applications/Google Chrome.app|com.google.Chrome|222,333|1|0|0' "$(u_test_state apps.tsv)" \
+    'a multi-PID app remains open while any recorded PID is still running'; or set test_status 1
+assert_equal 'chrome|force termination helper failed' "$(u_test_state skips.tsv)" \
+    'failed force termination skips the complete cask'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'chrome\t/Applications/Google Chrome.app\tcom.google.Chrome\t222,333\t1\t0\t0'
+u_test_running com.google.Chrome '222,333'
+u_test_post_operation com.google.Chrome force-terminate ''
+printf '70\n' >"$U_MOCK_DIR/exit-com.google.Chrome-force-terminate"
+u_stop_cask_apps chrome >/dev/null
+assert_equal 1 $status 'a force helper error skips even when reconciliation finds the app closed'; or set test_status 1
+assert_equal 'chrome|/Applications/Google Chrome.app|com.google.Chrome|222,333|1|1|0' "$(u_test_state apps.tsv)" \
+    'helper-error reconciliation preserves reopen tracking when every PID closed'; or set test_status 1
+assert_equal 'chrome|force termination helper failed' "$(u_test_state skips.tsv)" \
+    'a force helper error skips the complete cask after successful reconciliation'; or set test_status 1
+
+u_test_reset
+u_test_write_apps \
+    'multi\t/Applications/One.app\tcom.example.One\t111\t1\t0\t0' \
+    'multi\t/Applications/Two.app\tcom.example.Two\t222\t1\t0\t0'
+u_test_running com.example.One ''
+u_test_running com.example.Two 222
+touch "$U_MOCK_DIR/gum-force-decline"
+u_stop_cask_apps multi >/dev/null
+assert_equal 1 $status 'one failed artifact rejects a multi-app cask'; or set test_status 1
+assert_equal 'multi|/Applications/One.app|com.example.One|111|1|1|0
+multi|/Applications/Two.app|com.example.Two|222|1|0|0' "$(u_test_state apps.tsv)" \
+    'a multi-app failure keeps already closed artifacts tracked'; or set test_status 1
+assert_equal 1 (u_test_state_count skips.tsv) \
+    'a failed artifact skips its multi-app cask exactly once'; or set test_status 1
+
+u_test_reset
+u_test_write_apps \
+    'multi\t/Applications/One.app\tcom.example.One\t\t0\t0\t0' \
+    'multi\t/Applications/Two.app\tcom.example.Two\t222\t1\t1\t0'
+u_reopen_token_apps multi
+assert_equal 0 $status 'reopen accepts a token with closed tracked apps'; or set test_status 1
+assert_equal 0 (u_test_calls 'open /Applications/One.app$') \
+    'reopen never opens an app that was not initially running'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Two.app$') \
+    'reopen opens an initially running app that was closed'; or set test_status 1
+assert_equal 'multi|/Applications/One.app|com.example.One||0|0|0
+multi|/Applications/Two.app|com.example.Two|222|1|1|1' "$(u_test_state apps.tsv)" \
+    'reopen marks only the successfully opened state row'; or set test_status 1
+
+u_cleanup
+u_cleanup
+assert_equal 1 (u_test_calls 'open /Applications/Two.app$') \
+    'overlapping cleanup paths do not reopen an app twice'; or set test_status 1
+
+u_test_reset
+u_test_write_apps \
+    'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t1\t0' \
+    'chrome\t/Applications/Google Chrome.app\tcom.google.Chrome\t222,333\t1\t1\t0' \
+    'calm\t/Applications/Calm.app\tcom.calm.Calm\t\t0\t0\t0'
+u_cleanup
+assert_equal 1 (u_test_calls 'open /Applications/Cursor.app$') \
+    'early-exit cleanup reopens the first closed tracked app'; or set test_status 1
+assert_equal 1 (u_test_calls 'open /Applications/Google Chrome.app$') \
+    'early-exit cleanup reopens every closed tracked app'; or set test_status 1
+assert_equal 0 (u_test_calls 'open /Applications/Calm.app$') \
+    'early-exit cleanup ignores apps that were not initially running'; or set test_status 1
+u_cleanup
+assert_equal 2 (u_test_calls '^open ') \
+    'early-exit cleanup remains idempotent when called again'; or set test_status 1
+
+u_test_reset
+u_test_write_apps \
+    'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t1\t0' \
+    'chrome\t/Applications/Google Chrome.app\tcom.google.Chrome\t222\t1\t1\t0'
+touch "$U_MOCK_DIR/signal-on-first-open"
+set -lx U_STATE_DIR "$U_STATE_DIR"
+fish -c 'set -gx U_TEST_FISH_PID $fish_pid; source "$argv[1]"; u_cleanup; /bin/sleep 0.1' "$repo_root/bin/u"
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|1
+chrome|/Applications/Google Chrome.app|com.google.Chrome|222|1|1|1' "$(u_test_state apps.tsv)" \
+    'SIGINT overlapping normal cleanup reopens every closed tracked app'; or set test_status 1
+assert_equal 2 (u_test_calls '^open ') \
+    'overlapping signal cleanup opens each tracked app exactly once'; or set test_status 1
 
 rm -rf "$U_STATE_DIR" "$u_mock_root"
 exit $test_status

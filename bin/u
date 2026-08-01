@@ -295,6 +295,224 @@ function u_confirm_running_apps
     return 1
 end
 
+# Runs one exact helper operation and emits its PID result as CSV. The helper's
+# output is treated as state only after the complete JSON object validates.
+function u_lifecycle_operation --argument-names command bundle_id
+    set -l output (osascript -l JavaScript "$U_LIFECYCLE_HELPER" "$command" "$bundle_id" $argv[3..-1])
+    or return $status
+
+    printf '%s\n' $output | jq -er --arg bundle_id "$bundle_id" '
+        if (.bundleId | type) == "string" and .bundleId == $bundle_id
+            and (.pids | type) == "array"
+            and all(.pids[]; type == "number" and . == floor and . > 0)
+        then
+            .pids | map(tostring) | join(",")
+        else
+            "u_lifecycle_operation: unusable helper output for \($bundle_id)\n" | halt_error(1)
+        end
+    '
+end
+
+# Rewrites one exact app row through a temporary file, so readers see either the
+# old lifecycle flags or the complete new pair.
+function u_set_app_flags --argument-names requested_token requested_path new_closed new_reopened
+    set -l apps_file "$U_STATE_DIR/apps.tsv"
+    set -l pending (mktemp)
+    or return 1
+
+    while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
+        if test "$token" = "$requested_token"; and test "$app_path" = "$requested_path"
+            set closed "$new_closed"
+            set reopened "$new_reopened"
+        end
+
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$token" "$app_path" "$bundle_id" "$pids_csv" "$was_running" "$closed" "$reopened" >>$pending
+    end <"$apps_file"
+
+    mv -f $pending "$apps_file"
+end
+
+function u_record_app_closure --argument-names token app_path running_csv
+    # One app artifact can own several processes. It is closed only when none of
+    # its exact originally recorded PIDs still identifies a running instance.
+    if test -n "$running_csv"
+        return 0
+    end
+
+    u_set_app_flags "$token" "$app_path" 1 0
+end
+
+function u_skip_stop_once --argument-names requested_token reason
+    set -l skips_file "$U_STATE_DIR/skips.tsv"
+    if test -e "$skips_file"
+        while read -l --delimiter \t token existing_reason
+            if test "$token" = "$requested_token"
+                return 0
+            end
+        end <"$skips_file"
+    end
+    u_record_skip "$requested_token" "$reason"
+end
+
+# Stops every initially running app artifact for one cask token. Any artifact
+# left running makes the whole token ineligible, while already closed artifacts
+# remain tracked so cleanup can restore them.
+function u_stop_cask_apps --argument-names requested_token
+    if not test -d "$U_STATE_DIR"
+        echo "u_stop_cask_apps: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    set -l apps_file "$U_STATE_DIR/apps.tsv"
+    if test -z "$requested_token"; or not test -e "$apps_file"
+        return 0
+    end
+
+    while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
+        if test "$token" != "$requested_token"; or test "$was_running" != 1; or test "$closed" = 1
+            continue
+        end
+
+        set -l original_pids (string split , -- "$pids_csv")
+        u_lifecycle_operation terminate "$bundle_id" $original_pids >/dev/null
+        set -l terminate_status $status
+        if test $terminate_status -ne 0
+            u_record_failure app-terminate "$token" "graceful termination helper failed for $app_path"
+        end
+
+        set -l running_csv
+        set -l running_status
+        for attempt in (seq 10)
+            sleep 1
+            set running_csv (u_lifecycle_operation running "$bundle_id" $original_pids)
+            set running_status $status
+            if test $running_status -ne 0
+                break
+            end
+
+            u_record_app_closure "$token" "$app_path" "$running_csv"
+            or return 1
+
+            if test -z "$running_csv"
+                break
+            end
+        end
+
+        if test $running_status -ne 0
+            u_record_failure app-running "$token" "unable to reconcile $app_path after graceful termination"
+            u_skip_stop_once "$token" 'unable to determine whether an application stopped'
+            return 1
+        end
+
+        if test -z "$running_csv"
+            continue
+        end
+
+        set -l display (string replace -r '\.app$' '' -- (basename "$app_path"))
+        if not gum confirm "Force quit $display so $token can upgrade?"
+            u_skip_stop_once "$token" 'application remained running after force termination was declined'
+            return 1
+        end
+
+        u_lifecycle_operation force-terminate "$bundle_id" $original_pids >/dev/null
+        set -l force_status $status
+        if test $force_status -ne 0
+            u_record_failure app-force-terminate "$token" "force termination helper failed for $app_path"
+        end
+
+        # A multi-PID helper may act on earlier PIDs before returning 70. Always
+        # reconcile the complete original set and track any partial close.
+        set running_csv (u_lifecycle_operation running "$bundle_id" $original_pids)
+        set running_status $status
+        if test $running_status -eq 0
+            u_record_app_closure "$token" "$app_path" "$running_csv"
+            or return 1
+        end
+
+        if test $running_status -ne 0
+            u_record_failure app-running "$token" "unable to reconcile $app_path after force termination"
+            u_skip_stop_once "$token" 'unable to determine whether a force-terminated application stopped'
+            return 1
+        end
+
+        if test $force_status -ne 0
+            u_skip_stop_once "$token" 'force termination helper failed'
+            return 1
+        end
+
+        if test -n "$running_csv"
+            u_skip_stop_once "$token" 'application remained running after force termination'
+            return 1
+        end
+    end <"$apps_file"
+
+    return 0
+end
+
+# Claims each closed row atomically before launching it. A failed launch rolls
+# the claim back, while signal/exit cleanup sees the claimed row and cannot open
+# the same app a second time.
+function u_reopen_token_apps --argument-names requested_token
+    block -l
+
+    if not test -d "$U_STATE_DIR"
+        return 0
+    end
+
+    set -l apps_file "$U_STATE_DIR/apps.tsv"
+    if not test -e "$apps_file"
+        return 0
+    end
+
+    set -l reopen_status 0
+    while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
+        if test -n "$requested_token"; and test "$token" != "$requested_token"
+            continue
+        end
+        if test "$was_running" != 1; or test "$closed" != 1; or test "$reopened" = 1
+            continue
+        end
+
+        u_set_app_flags "$token" "$app_path" 1 1
+        or begin
+            set reopen_status 1
+            continue
+        end
+
+        if not open "$app_path"
+            u_set_app_flags "$token" "$app_path" 1 0
+            u_record_failure app-reopen "$token" "unable to reopen $app_path"
+            set reopen_status 1
+        end
+    end <"$apps_file"
+
+    return $reopen_status
+end
+
+function u_cleanup
+    # Queue signal and exit events until this pass has claimed or reopened every
+    # eligible row. A queued handler then runs another harmless idempotent pass.
+    block -l
+    u_reopen_token_apps
+end
+
+function u_cleanup_on_exit --on-event fish_exit
+    set -l exit_status $status
+    u_cleanup
+    return $exit_status
+end
+
+function u_cleanup_on_sigint --on-signal SIGINT
+    u_cleanup
+    exit 130
+end
+
+function u_cleanup_on_sigterm --on-signal SIGTERM
+    u_cleanup
+    exit 143
+end
+
 function u_main
     gum style \
         --foreground 12 --border-foreground 12 --border double \
