@@ -155,6 +155,18 @@ sleep 3
 check "SIGTERM lowers the sentinel" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
 check "watch exited" 1 (kill -0 $watch_pid 2>/dev/null; echo $status)
 
+# --- plist template and install planning -------------------------------
+
+check "template is valid plist" 0 (plutil -lint $repo/amphetamine/dev.newedia.t3-awake.plist >/dev/null 2>&1; echo $status)
+
+set dry (env T3_AWAKE_APP=$workdir/Dry.app $bin install --dry-run)
+check "dry run plans the applet build" 1 (printf '%s\n' $dry | grep -c '^would build applet')
+check "dry run plans the plist write" 1 (printf '%s\n' $dry | grep -c '^would write .*dev\.newedia\.t3-awake\.plist')
+check "dry run plans the bootstrap" 1 (printf '%s\n' $dry | grep -c '^would bootstrap gui/')
+check "dry run creates nothing" 1 (test -d $workdir/Dry.app; echo $status)
+
+check "status runs cleanly" 0 (env T3_AWAKE_APP=$workdir/None.app $bin status >/dev/null 2>&1; echo $status)
+
 # --- summary -----------------------------------------------------------
 
 printf '\n%d checks, %d failures\n' $checks $failures

@@ -234,6 +234,93 @@ cmd_watch() {
 	done
 }
 
+plist_target() {
+	printf '%s/Library/LaunchAgents/%s.plist' "$HOME" "$LABEL"
+}
+
+cmd_status() {
+	local running approvals
+	running='?'
+	approvals='?'
+	if [ -r "$DB" ]; then
+		running="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
+			"SELECT COUNT(*) FROM projection_turns WHERE state='running';" 2>/dev/null || echo '?')"
+		approvals="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
+			"SELECT COUNT(*) FROM projection_pending_approvals WHERE resolved_at IS NULL;" 2>/dev/null || echo '?')"
+	fi
+
+	printf 'database:        %s\n' "$DB"
+	printf 'running turns:   %s\n' "$running"
+	printf 'open approvals:  %s\n' "$approvals"
+	if t3_server_alive; then
+		printf 'T3 Code server:  alive\n'
+	else
+		printf 'T3 Code server:  down\n'
+	fi
+	printf 'sentinel:        %s\n' "$(cmd_sentinel state)"
+	printf 'desired state:   %s\n' "$(t3_probe)"
+	printf 'launch agent:    %s\n' \
+		"$(launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 && echo loaded || echo 'not loaded')"
+	printf 'amphetamine:     session=%s trigger=%s\n' \
+		"$(osascript -e 'tell application "Amphetamine" to session is active' 2>/dev/null || echo '?')" \
+		"$(osascript -e 'tell application "Amphetamine" to session is Trigger' 2>/dev/null || echo '?')"
+}
+
+cmd_install() {
+	local dry=0 template target
+	if [ "${1:-}" = "--dry-run" ]; then
+		dry=1
+	fi
+	template="$REPO_DIR/amphetamine/$LABEL.plist"
+	target="$(plist_target)"
+
+	if [ ! -r "$template" ]; then
+		printf 'missing LaunchAgent template: %s\n' "$template" >&2
+		return 1
+	fi
+
+	if [ "$dry" -eq 1 ]; then
+		printf 'would build applet at %s\n' "$APP"
+		printf 'would write %s\n' "$target"
+		printf 'would bootstrap gui/%s from %s\n' "$(id -u)" "$target"
+		return 0
+	fi
+
+	sentinel_build
+	mkdir -p "$(dirname "$target")"
+	sed -e "s|__T3_AWAKE_BIN__|$REPO_DIR/bin/t3_awake|g" \
+		-e "s|__T3_AWAKE_LOG__|$LOG|g" \
+		"$template" >"$target"
+
+	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+	launchctl bootstrap "gui/$(id -u)" "$target"
+
+	cat <<EOF
+
+Installed. One manual step remains, because Amphetamine's trigger list cannot
+be written safely from outside the app:
+
+  1. Open Amphetamine -> Preferences -> Triggers.
+  2. Add a trigger for a running application and select:
+       $APP
+  3. Leave the frontmost requirement OFF, and allow display sleep ON.
+  4. Delete the existing "t3" and "claude" triggers.
+
+Verify with:  bin/t3_awake status
+EOF
+}
+
+cmd_uninstall() {
+	local target
+	target="$(plist_target)"
+	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+	rm -f "$target"
+	sentinel_down || true
+	rm -rf "$APP"
+	printf 'Removed the LaunchAgent and the applet.\n'
+	printf 'Delete the "t3-busy" trigger in Amphetamine -> Preferences -> Triggers.\n'
+}
+
 usage() {
 	cat <<'EOF'
 usage: bin/t3_awake <command>
@@ -256,6 +343,12 @@ main() {
 		cmd_sentinel "$@"
 		;;
 	watch) cmd_watch ;;
+	status) cmd_status ;;
+	install)
+		shift
+		cmd_install "$@"
+		;;
+	uninstall) cmd_uninstall ;;
 	-h | --help | help | '') usage ;;
 	*)
 		printf 'unknown command: %s\n' "$1" >&2
