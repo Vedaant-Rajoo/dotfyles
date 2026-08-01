@@ -73,6 +73,90 @@ t3_probe() {
 	return 0
 }
 
+sentinel_exec() {
+	printf '%s/Contents/MacOS/applet' "$APP"
+}
+
+sentinel_running() {
+	pgrep -f "$(sentinel_exec)" >/dev/null 2>&1
+}
+
+sentinel_up() {
+	if sentinel_running; then
+		return 0
+	fi
+	if [ ! -d "$APP" ]; then
+		log "sentinel missing at $APP"
+		return 1
+	fi
+	if ! open "$APP" >/dev/null 2>&1; then
+		log "failed to open sentinel at $APP"
+		return 1
+	fi
+	local i
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		if sentinel_running; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	log "sentinel did not appear after open"
+	return 1
+}
+
+sentinel_down() {
+	if ! sentinel_running; then
+		return 0
+	fi
+	pkill -f "$(sentinel_exec)" >/dev/null 2>&1 || true
+	local i
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		if ! sentinel_running; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	log "sentinel did not exit after SIGTERM"
+	return 1
+}
+
+# osacompile ad-hoc signs the bundle, and editing Info.plist invalidates that
+# signature, so the bundle must be re-signed after patching.
+sentinel_build() {
+	local src="$REPO_DIR/amphetamine/t3-busy.applescript"
+	if [ ! -r "$src" ]; then
+		printf 'missing applet source: %s\n' "$src" >&2
+		return 1
+	fi
+	sentinel_down || true
+	mkdir -p "$(dirname "$APP")"
+	rm -rf "$APP"
+	osacompile -s -o "$APP" "$src"
+	/usr/libexec/PlistBuddy -c 'Add :LSUIElement bool true' "$APP/Contents/Info.plist" >/dev/null
+	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist" >/dev/null 2>&1 ||
+		/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$APP/Contents/Info.plist" >/dev/null
+	codesign --force --sign - "$APP" >/dev/null 2>&1
+}
+
+cmd_sentinel() {
+	case "${1:-}" in
+	build) sentinel_build ;;
+	up) sentinel_up ;;
+	down) sentinel_down ;;
+	state)
+		if sentinel_running; then
+			printf 'running\n'
+		else
+			printf 'stopped\n'
+		fi
+		;;
+	*)
+		printf 'usage: bin/t3_awake sentinel <build|up|down|state>\n' >&2
+		return 64
+		;;
+	esac
+}
+
 usage() {
 	cat <<'EOF'
 usage: bin/t3_awake <command>
@@ -90,6 +174,10 @@ EOF
 main() {
 	case "${1:-}" in
 	probe) t3_probe ;;
+	sentinel)
+		shift
+		cmd_sentinel "$@"
+		;;
 	-h | --help | help | '') usage ;;
 	*)
 		printf 'unknown command: %s\n' "$1" >&2

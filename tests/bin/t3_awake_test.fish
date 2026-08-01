@@ -77,6 +77,34 @@ rm $empty/state.sqlite
 sqlite3 $empty/state.sqlite "CREATE TABLE unrelated (x INTEGER);"
 check "database without the projection tables is idle" idle (probe $empty)
 
+# --- sentinel ----------------------------------------------------------
+
+set app $workdir/T3\ Busy\ Test.app
+set -g sentinel_env T3_AWAKE_APP=$app
+
+env $sentinel_env $bin sentinel build
+check "build produces a bundle" 0 (test -d $app; echo $status)
+check "build hides the dock icon" true (/usr/libexec/PlistBuddy -c 'Print :LSUIElement' $app/Contents/Info.plist)
+check "build sets the bundle identifier" dev.newedia.t3-busy (/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' $app/Contents/Info.plist)
+check "build leaves a valid signature" 0 (codesign --verify $app 2>/dev/null; echo $status)
+
+check "starts stopped" stopped (env $sentinel_env $bin sentinel state)
+
+env $sentinel_env $bin sentinel up
+check "up starts it" running (env $sentinel_env $bin sentinel state)
+
+env $sentinel_env $bin sentinel up
+check "up is idempotent" running (env $sentinel_env $bin sentinel state)
+
+env $sentinel_env $bin sentinel down
+check "down stops it" stopped (env $sentinel_env $bin sentinel state)
+
+env $sentinel_env $bin sentinel down
+check "down is idempotent" stopped (env $sentinel_env $bin sentinel state)
+
+set absent $workdir/Nothing.app
+check "up on a missing bundle fails" 1 (env T3_AWAKE_APP=$absent $bin sentinel up >/dev/null 2>&1; echo $status)
+
 # --- summary -----------------------------------------------------------
 
 printf '\n%d checks, %d failures\n' $checks $failures
