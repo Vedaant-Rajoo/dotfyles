@@ -1,6 +1,13 @@
 #!/usr/bin/env fish
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 
+# The lifecycle helper ships beside this script, so resolve it relative to the
+# file itself rather than trusting the caller's working directory or PATH.
+# Symlinks resolve first, so a linked `u` still finds its own helper.
+if not set -q U_LIFECYCLE_HELPER
+    set -g U_LIFECYCLE_HELPER (dirname (path resolve (status filename)))/u-cask-lifecycle.js
+end
+
 function u_log
     echo -e $argv[2..-1] >>"$argv[1]"
 end
@@ -89,6 +96,203 @@ function u_cask_app_paths --argument-names cask_json
     rm -f $pending
 
     return $emit_status
+end
+
+function u_record_failure --argument-names category subject detail
+    if not test -d "$U_STATE_DIR"
+        echo "u_record_failure: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    printf '%s\t%s\t%s\n' "$category" "$subject" "$detail" >>"$U_STATE_DIR/failures.tsv"
+end
+
+# A skip is a deliberate decision, so it is recorded separately from the
+# failures that represent commands which did not do what they were asked to do.
+function u_record_skip --argument-names token reason
+    if not test -d "$U_STATE_DIR"
+        echo "u_record_skip: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    printf '%s\t%s\n' "$token" "$reason" >>"$U_STATE_DIR/skips.tsv"
+end
+
+# Emits one `path<TAB>bundle_id<TAB>pids_csv` record for an installed bundle.
+# Anything the helper cannot describe exactly is a failure, never a guess.
+function u_inspect_app --argument-names bundle_path
+    if test -z "$bundle_path"
+        echo 'u_inspect_app: an app bundle path is required' >&2
+        return 1
+    end
+
+    if not test -e "$U_LIFECYCLE_HELPER"
+        echo "u_inspect_app: lifecycle helper is missing: $U_LIFECYCLE_HELPER" >&2
+        return 1
+    end
+
+    set -l inspect_json (osascript -l JavaScript "$U_LIFECYCLE_HELPER" inspect "$bundle_path")
+    or return 1
+
+    set -l pending (mktemp)
+    or return 1
+
+    printf '%s\n' $inspect_json | jq -r --arg requested "$bundle_path" '
+        if (.path | type) == "string" and (.path | startswith("/"))
+            and (.bundleId | type) == "string" and (.bundleId | length) > 0
+            and (.pids | type) == "array"
+            and all(.pids[]; type == "number" and . == floor and . > 0)
+        then
+            [.path, .bundleId, (.pids | map(tostring) | join(","))] | @tsv
+        else
+            "u_inspect_app: unusable inspect output for \($requested)\n" | halt_error(1)
+        end
+    ' >$pending
+    or begin
+        rm -f $pending
+        return 1
+    end
+
+    # Emit only after the whole document validated, so no partial record escapes.
+    set -l records (cat $pending)
+    set -l read_status $status
+    rm -f $pending
+
+    if test $read_status -ne 0
+        return 1
+    end
+
+    # The helper contract is exactly one JSON object, so anything else is
+    # unreliable metadata rather than something to pick a record out of.
+    if test (count $records) -ne 1
+        echo "u_inspect_app: expected exactly one inspect record for $bundle_path" >&2
+        return 1
+    end
+
+    printf '%s\n' $records[1]
+end
+
+# Records one application-state row per app artifact of an outdated cask.
+function u_prepare_cask --argument-names token
+    if not test -d "$U_STATE_DIR"
+        echo "u_prepare_cask: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    if test -z "$token"
+        echo 'u_prepare_cask: a cask token is required' >&2
+        return 1
+    end
+
+    set -l cask_json (brew info --cask --json=v2 "$token")
+    or begin
+        u_record_failure cask-metadata "$token" 'brew info --cask --json=v2 failed'
+        u_record_skip "$token" 'missing Homebrew cask metadata'
+        return 1
+    end
+
+    # A response that describes no cask says nothing about artifacts, so it must
+    # not be read as "this cask has no applications".
+    if not printf '%s\n' $cask_json | jq -e '(.casks | type) == "array" and (.casks | length) > 0' >/dev/null 2>&1
+        u_record_failure cask-metadata "$token" 'brew info --cask --json=v2 described no cask'
+        u_record_skip "$token" 'missing Homebrew cask metadata'
+        return 1
+    end
+
+    # Unreliable artifact metadata skips the cask instead of assuming a path.
+    set -l app_paths (u_cask_app_paths $cask_json)
+    or begin
+        u_record_failure cask-artifacts "$token" 'unusable app artifact metadata'
+        u_record_skip "$token" 'unusable app artifact metadata'
+        return 1
+    end
+
+    if test (count $app_paths) -eq 0
+        return 0
+    end
+
+    set -l pending (mktemp)
+    or return 1
+
+    for app_path in $app_paths
+        set -l record (u_inspect_app "$app_path")
+        or begin
+            rm -f $pending
+            u_record_failure app-inspect "$token" "unable to inspect $app_path"
+            u_record_skip "$token" "unable to inspect $app_path"
+            return 1
+        end
+
+        set -l fields (string split \t -- "$record")
+        set -l was_running 0
+        if test -n "$fields[3]"
+            set was_running 1
+        end
+
+        # token, path, bundle_id, pids_csv, was_running, closed, reopened
+        printf '%s\t%s\t%s\t%s\t%s\t0\t0\n' \
+            "$token" "$fields[1]" "$fields[2]" "$fields[3]" "$was_running" >>$pending
+    end
+
+    # Publish only fully inspected casks, so no half-prepared cask is tracked.
+    cat $pending >>"$U_STATE_DIR/apps.tsv"
+    set -l publish_status $status
+    rm -f $pending
+
+    return $publish_status
+end
+
+# Asks once, for every running application across every prepared cask.
+# Returns 0 when closing was approved or nothing is running, 1 when declined.
+function u_confirm_running_apps
+    if not test -d "$U_STATE_DIR"
+        echo "u_confirm_running_apps: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    set -l apps_file "$U_STATE_DIR/apps.tsv"
+    if not test -e "$apps_file"
+        return 0
+    end
+
+    set -l descriptions
+    set -l running_tokens
+
+    while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
+        if test "$was_running" != 1
+            continue
+        end
+
+        set -l display (string replace -r '\.app$' '' -- (basename "$app_path"))
+        set -l description "$display ($token)"
+
+        if not contains -- "$description" $descriptions
+            set -a descriptions "$description"
+        end
+
+        if not contains -- "$token" $running_tokens
+            set -a running_tokens "$token"
+        end
+    end <"$apps_file"
+
+    if test (count $running_tokens) -eq 0
+        return 0
+    end
+
+    echo 'These applications are running and their casks are outdated:'
+    for description in $descriptions
+        echo "  - $description"
+    end
+
+    if gum confirm 'Close these applications so their casks can upgrade?'
+        return 0
+    end
+
+    for token in $running_tokens
+        u_record_skip "$token" 'declined closing running applications'
+    end
+
+    return 1
 end
 
 function u_main
