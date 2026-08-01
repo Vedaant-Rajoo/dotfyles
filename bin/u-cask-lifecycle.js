@@ -96,7 +96,7 @@ function inspectBundle(bundlePath) {
         }
 
         var runningURL = application.bundleURL;
-        if (!isNil(runningURL) && resolvedPath(runningURL) !== targetPath) {
+        if (isNil(runningURL) || resolvedPath(runningURL) !== targetPath) {
             continue;
         }
 

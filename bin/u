@@ -9,7 +9,7 @@ if not set -q U_LIFECYCLE_HELPER
 end
 
 function u_log
-    echo -e $argv[2..-1] >>"$argv[1]"
+    printf '%s\n' $argv[2..-1] >>"$argv[1]"
 end
 
 function u_run_logged
@@ -29,6 +29,13 @@ function u_discover_outdated --argument-names json
         echo "u_discover_outdated: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
         return 1
     end
+
+    printf '%s\n' $argv | jq -e '
+        type == "object"
+        and (.formulae | type) == "array"
+        and (.casks | type) == "array"
+    ' >/dev/null
+    or return 1
 
     set -l pending_formulae "$U_STATE_DIR/formulae.tsv.pending"
     set -l pending_casks "$U_STATE_DIR/casks.tsv.pending"
@@ -131,14 +138,17 @@ function u_inspect_app --argument-names bundle_path
         return 1
     end
 
+    set -l requested_path (path resolve "$bundle_path")
+    or return 1
+
     set -l inspect_json (osascript -l JavaScript "$U_LIFECYCLE_HELPER" inspect "$bundle_path")
     or return 1
 
     set -l pending (mktemp)
     or return 1
 
-    printf '%s\n' $inspect_json | jq -r --arg requested "$bundle_path" '
-        if (.path | type) == "string" and (.path | startswith("/"))
+    printf '%s\n' $inspect_json | jq -r --arg requested "$requested_path" '
+        if (.path | type) == "string" and .path == $requested
             and (.bundleId | type) == "string" and (.bundleId | length) > 0
             and (.pids | type) == "array"
             and all(.pids[]; type == "number" and . == floor and . > 0)
@@ -191,11 +201,15 @@ function u_prepare_cask --argument-names token
         return 1
     end
 
-    # A response that describes no cask says nothing about artifacts, so it must
-    # not be read as "this cask has no applications".
-    if not printf '%s\n' $cask_json | jq -e '(.casks | type) == "array" and (.casks | length) > 0' >/dev/null 2>&1
-        u_record_failure cask-metadata "$token" 'brew info --cask --json=v2 described no cask'
-        u_record_skip "$token" 'missing Homebrew cask metadata'
+    # Metadata for no cask, several casks, or a different token says nothing
+    # reliable about this token's artifacts.
+    if not printf '%s\n' $cask_json | jq -e --arg token "$token" '
+        (.casks | type) == "array"
+        and (.casks | length) == 1
+        and .casks[0].token == $token
+    ' >/dev/null 2>&1
+        u_record_failure cask-metadata "$token" 'brew info --cask --json=v2 did not describe the requested cask'
+        u_record_skip "$token" 'unusable Homebrew cask metadata'
         return 1
     end
 
@@ -306,13 +320,17 @@ end
 # Runs one exact helper operation and emits its PID result as CSV. The helper's
 # output is treated as state only after the complete JSON object validates.
 function u_lifecycle_operation --argument-names command bundle_id
+    set -l requested_pids_json (jq -cn --args '$ARGS.positional | map(tonumber)' -- $argv[3..-1])
+    or return 1
+
     set -l output (osascript -l JavaScript "$U_LIFECYCLE_HELPER" "$command" "$bundle_id" $argv[3..-1])
     or return $status
 
-    printf '%s\n' $output | jq -er --arg bundle_id "$bundle_id" '
+    printf '%s\n' $output | jq -er --arg bundle_id "$bundle_id" --argjson requested_pids "$requested_pids_json" '
         if (.bundleId | type) == "string" and .bundleId == $bundle_id
             and (.pids | type) == "array"
             and all(.pids[]; type == "number" and . == floor and . > 0)
+            and all(.pids[]; . as $pid | $requested_pids | index($pid) != null)
         then
             .pids | map(tostring) | join(",")
         else
@@ -325,7 +343,7 @@ end
 # old lifecycle flags or the complete new pair.
 function u_set_app_flags --argument-names requested_token requested_path new_closed new_reopened
     set -l apps_file "$U_STATE_DIR/apps.tsv"
-    set -l pending (mktemp)
+    set -l pending (mktemp "$U_STATE_DIR/.apps.tsv.pending.XXXXXX")
     or return 1
 
     while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
@@ -404,7 +422,7 @@ function u_remove_reopen_fallback --argument-names requested_token requested_pat
         return 0
     end
 
-    set -l pending (mktemp)
+    set -l pending (mktemp "$U_STATE_DIR/.reopen-fallback.tsv.pending.XXXXXX")
     or return 1
     while read -l --delimiter \t token app_path bundle_id pids_csv
         if test "$token" = "$requested_token"; and test "$app_path" = "$requested_path"
@@ -890,7 +908,7 @@ function u_main
         or return 1
         set state_ready 1
     end
-    u_log "$log_file" "$NOW\n"
+    u_log "$log_file" "$NOW" ""
 
     if not gum confirm "Do you wish to update your scripts?"
         exit 1

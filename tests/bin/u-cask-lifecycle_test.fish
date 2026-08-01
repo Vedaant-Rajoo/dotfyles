@@ -48,8 +48,8 @@ assert_equal 66 $status 'nonexistent bundle exits 66'; or set test_status 1
 set -l inspect_json (osascript -l JavaScript "$helper" inspect /System/Applications/Calculator.app 2>"$temp_dir/inspect.err")
 assert_equal 0 $status 'inspect accepts the Calculator bundle'; or set test_status 1
 assert_json "$inspect_json" \
-    '(.path | type == "string" and length > 0) and (.bundleId | type == "string" and length > 0) and (.pids | type == "array" and all(.[]; type == "number"))' \
-    'inspect emits a bundle identifier and numeric PID array'; or set test_status 1
+    '(.path == "/System/Applications/Calculator.app") and (.bundleId | type == "string" and length > 0) and (.pids | type == "array" and all(.[]; type == "number"))' \
+    'inspect emits the exact bundle path, an identifier, and numeric PIDs'; or set test_status 1
 
 set -l running_json (osascript -l JavaScript "$helper" running com.example.missing 2147483647 2>"$temp_dir/running.err")
 assert_equal 0 $status 'running accepts a nonexistent exact PID'; or set test_status 1

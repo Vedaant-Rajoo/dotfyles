@@ -79,6 +79,12 @@ assert_function u_reopen_token_apps 'source exposes u_reopen_token_apps'; or set
 assert_function u_cleanup 'source exposes u_cleanup'; or set test_status 1
 assert_no_mock_calls; or set test_status 1
 
+set -l literal_log (mktemp)
+u_log "$literal_log" 'literal\ntext'
+assert_equal 'literal\ntext' "$(string collect <"$literal_log")" \
+    'log messages preserve literal backslash escapes'; or set test_status 1
+rm -f "$literal_log"
+
 # u_discover_outdated
 
 u_discover_outdated '{"formulae":[],"casks":[]}'
@@ -111,6 +117,12 @@ assert_equal 1 $status 'discover rejects a formula record without a name'; or se
 
 u_discover_outdated '{"formulae":[],"casks":[{"installed_versions":["1.0"]}]}' 2>/dev/null
 assert_equal 1 $status 'discover rejects a cask record without a name'; or set test_status 1
+
+u_discover_outdated '{"formulae":[]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects an outdated document without a cask array'; or set test_status 1
+
+u_discover_outdated '{"formulae":{},"casks":[]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects a non-array formula section'; or set test_status 1
 
 # Real callers pass unquoted command substitutions, which fish splits into one
 # argument per line. The functions must consume every line, not just the first.
@@ -502,6 +514,7 @@ u_test_write_cask font-hack '{"casks":[{"token":"font-hack","artifacts":[{"font"
 u_test_write_cask multi '{"casks":[{"token":"multi","artifacts":[{"app":["One.app"],"target":"/Applications/One.app"},{"app":["Two.app"],"target":"/Applications/Two.app"}]}]}'
 u_test_write_cask bad-target '{"casks":[{"token":"bad-target","artifacts":[{"app":["Bad.app"]}]}]}'
 u_test_write_cask ghost '{"casks":[{"token":"ghost","artifacts":[{"app":["Ghost.app"],"target":"/Applications/Ghost.app"}]}]}'
+u_test_write_cask wrong-token '{"casks":[{"token":"different-token","artifacts":[{"app":["Wrong.app"],"target":"/Applications/Wrong.app"}]}]}'
 
 u_test_write_inspect /Applications/Cursor.app '{"path":"/Applications/Cursor.app","bundleId":"com.todesktop.230313mzl4w4u92","pids":[111]}'
 u_test_write_inspect '/Applications/Google Chrome.app' '{"path":"/Applications/Google Chrome.app","bundleId":"com.google.Chrome","pids":[222,333]}'
@@ -511,6 +524,7 @@ u_test_write_inspect /Applications/Two.app '{"path":"/Applications/Two.app","bun
 u_test_write_inspect /Applications/Broken.app '{"path":"/Applications/Broken.app","bundleId":"","pids":[]}'
 u_test_write_inspect /Applications/Double.app '{"path":"/Applications/Double.app","bundleId":"com.example.Double","pids":[]}
 {"path":"/Applications/Double.app","bundleId":"com.example.Other","pids":[555]}'
+u_test_write_inspect /Applications/Mismatch.app '{"path":"/Applications/Other.app","bundleId":"com.example.Other","pids":[]}'
 
 # Casks whose metadata command succeeds while describing no cask at all.
 printf '' >"$U_MOCK_DIR/cask-silent.json"
@@ -549,6 +563,9 @@ assert_equal 1 $status 'inspect app rejects more than one inspect record'; or se
 
 assert_equal '' "$(u_inspect_app /Applications/Double.app 2>/dev/null)" \
     'inspect app emits nothing when the helper describes several bundles'; or set test_status 1
+
+u_inspect_app /Applications/Mismatch.app >/dev/null 2>&1
+assert_equal 1 $status 'inspect app rejects a different helper-reported bundle path'; or set test_status 1
 
 # u_prepare_cask
 
@@ -615,6 +632,14 @@ assert_equal 1 (u_test_state_count failures.tsv) \
     'prepare records one failure when brew info fails'; or set test_status 1
 assert_equal 1 (u_test_state_count skips.tsv) \
     'prepare skips a cask whose metadata command fails'; or set test_status 1
+
+u_test_reset
+u_prepare_cask wrong-token 2>/dev/null
+assert_equal 1 $status 'prepare rejects metadata for a different cask token'; or set test_status 1
+assert_equal 0 (u_test_calls ' inspect ') \
+    'prepare never inspects artifacts from a different cask token'; or set test_status 1
+assert_equal 1 (u_test_state_count failures.tsv) \
+    'prepare records one failure for mismatched cask metadata'; or set test_status 1
 
 # Metadata that describes no cask is unknown state, never "no applications".
 for silent_token in silent blank no-casks
@@ -734,6 +759,11 @@ function u_test_post_operation --argument-names bundle_id command
     end
     printf '%s\n' "$state" >"$U_MOCK_DIR/post-$bundle_id-$command"
 end
+
+u_test_reset
+u_test_running com.cursor.Cursor 999
+u_lifecycle_operation running com.cursor.Cursor 111 >/dev/null 2>&1
+assert_equal 1 $status 'lifecycle operations reject a PID outside the requested exact set'; or set test_status 1
 
 u_test_reset
 u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111,222\t1\t0\t0'
