@@ -106,6 +106,25 @@ assert_equal 1 $status 'discover rejects a formula record without a name'; or se
 u_discover_outdated '{"formulae":[],"casks":[{"installed_versions":["1.0"]}]}' 2>/dev/null
 assert_equal 1 $status 'discover rejects a cask record without a name'; or set test_status 1
 
+# Real callers pass unquoted command substitutions, which fish splits into one
+# argument per line. The functions must consume every line, not just the first.
+set -l pretty_outdated (printf '%s\n' '{"formulae":[{"name":"jq"}],"casks":[{"name":"cursor"}]}' | jq .)
+assert_equal 12 (count $pretty_outdated) 'pretty outdated fixture splits into several arguments'; or set test_status 1
+u_discover_outdated $pretty_outdated
+assert_equal 0 $status 'discover accepts multiline pretty-printed JSON'; or set test_status 1
+assert_equal jq "$(cat "$U_STATE_DIR/formulae.tsv")" \
+    'discover records formulae from multiline JSON'; or set test_status 1
+assert_equal cursor "$(cat "$U_STATE_DIR/casks.tsv")" \
+    'discover records casks from multiline JSON'; or set test_status 1
+
+# A malformed record after a valid one must leave no partial state behind.
+u_discover_outdated '{"formulae":[{"name":"jq"},{"installed_versions":["1.0"]}],"casks":[{"name":"cursor"}]}' 2>/dev/null
+assert_equal 1 $status 'discover rejects a late malformed formula record'; or set test_status 1
+assert_equal jq "$(cat "$U_STATE_DIR/formulae.tsv")" \
+    'discover leaves previous formula records intact after a parse failure'; or set test_status 1
+assert_equal cursor "$(cat "$U_STATE_DIR/casks.tsv")" \
+    'discover leaves previous cask records intact after a parse failure'; or set test_status 1
+
 set -l saved_state_dir $U_STATE_DIR
 set -g U_STATE_DIR "$saved_state_dir/missing"
 u_discover_outdated '{"formulae":[],"casks":[]}' 2>/dev/null
@@ -139,6 +158,26 @@ assert_equal 1 $status 'cask app paths rejects a non-absolute app target'; or se
 
 u_cask_app_paths 'not json' >/dev/null 2>&1
 assert_equal 1 $status 'cask app paths rejects invalid JSON'; or set test_status 1
+
+set -l cask_spaced_json '{"casks":[{"token":"google-chrome","artifacts":[{"app":["Google Chrome.app"],"target":"/Applications/Google Chrome.app"}]}]}'
+assert_equal '/Applications/Google Chrome.app' "$(u_cask_app_paths $cask_spaced_json)" \
+    'cask app paths preserves an app target containing spaces'; or set test_status 1
+
+set -l cask_app_pretty (printf '%s\n' $cask_app_json | jq .)
+assert_equal 21 (count $cask_app_pretty) 'pretty cask fixture splits into several arguments'; or set test_status 1
+assert_equal /Applications/Cursor.app "$(u_cask_app_paths $cask_app_pretty)" \
+    'cask app paths accepts multiline pretty-printed JSON'; or set test_status 1
+
+set -l cask_spaced_pretty (printf '%s\n' $cask_spaced_json | jq .)
+assert_equal '/Applications/Google Chrome.app' "$(u_cask_app_paths $cask_spaced_pretty)" \
+    'cask app paths handles spaces in multiline JSON'; or set test_status 1
+
+# A malformed artifact after a valid one must not leak partial stdout.
+set -l cask_late_bad_json '{"casks":[{"token":"mixed","artifacts":[{"app":["Good.app"],"target":"/Applications/Good.app"},{"app":["Bad.app"]}]}]}'
+assert_equal '' "$(u_cask_app_paths $cask_late_bad_json 2>/dev/null)" \
+    'cask app paths emits nothing when a later artifact is malformed'; or set test_status 1
+u_cask_app_paths $cask_late_bad_json >/dev/null 2>&1
+assert_equal 1 $status 'cask app paths rejects a late malformed artifact'; or set test_status 1
 
 rm -rf "$U_STATE_DIR"
 exit $test_status

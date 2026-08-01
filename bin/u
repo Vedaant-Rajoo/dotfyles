@@ -15,37 +15,60 @@ function u_run_brew_upgrade
     return $upgrade_status
 end
 
+# The JSON document arrives as every argument, because callers pass an unquoted
+# fish command substitution and fish splits that into one argument per line.
 function u_discover_outdated --argument-names json
     if not test -d "$U_STATE_DIR"
         echo "u_discover_outdated: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
         return 1
     end
 
-    printf '%s\n' $json | jq -r '
+    set -l pending_formulae "$U_STATE_DIR/formulae.tsv.pending"
+    set -l pending_casks "$U_STATE_DIR/casks.tsv.pending"
+
+    printf '%s\n' $argv | jq -r '
         .formulae // [] | .[] | .name // ""
         | if type == "string" and length > 0 then
               .
           else
               "u_discover_outdated: outdated formula record has no name\n" | halt_error(1)
           end
-    ' >"$U_STATE_DIR/formulae.tsv"
-    or return 1
+    ' >$pending_formulae
+    or begin
+        rm -f $pending_formulae
+        return 1
+    end
 
-    printf '%s\n' $json | jq -r '
+    printf '%s\n' $argv | jq -r '
         .casks // [] | .[] | .name // ""
         | if type == "string" and length > 0 then
               .
           else
               "u_discover_outdated: outdated cask record has no name\n" | halt_error(1)
           end
-    ' >"$U_STATE_DIR/casks.tsv"
-    or return 1
+    ' >$pending_casks
+    or begin
+        rm -f $pending_formulae $pending_casks
+        return 1
+    end
+
+    # Publish only complete parses, so a failure never leaves partial records.
+    mv -f $pending_formulae "$U_STATE_DIR/formulae.tsv"
+    and mv -f $pending_casks "$U_STATE_DIR/casks.tsv"
+    or begin
+        rm -f $pending_formulae $pending_casks
+        return 1
+    end
 
     return 0
 end
 
+# Reads the whole document from $argv for the same reason as u_discover_outdated.
 function u_cask_app_paths --argument-names cask_json
-    printf '%s\n' $cask_json | jq -r '
+    set -l pending (mktemp)
+    or return 1
+
+    printf '%s\n' $argv | jq -r '
         .casks // [] | .[] | .artifacts // [] | .[]
         | select(type == "object" and has("app"))
         | .target // ""
@@ -54,10 +77,18 @@ function u_cask_app_paths --argument-names cask_json
           else
               "u_cask_app_paths: app artifact has no absolute target path\n" | halt_error(1)
           end
-    '
-    or return 1
+    ' >$pending
+    or begin
+        rm -f $pending
+        return 1
+    end
 
-    return 0
+    # Emit only after the whole document parsed, so no partial list escapes.
+    cat $pending
+    set -l emit_status $status
+    rm -f $pending
+
+    return $emit_status
 end
 
 function u_main
