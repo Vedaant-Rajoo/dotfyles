@@ -190,6 +190,7 @@ make_fixture $empty
 rm $empty/state.sqlite
 sqlite3 $empty/state.sqlite "CREATE TABLE unrelated (x INTEGER);"
 check "database without the projection tables is idle" idle (probe $empty)
+
 # --- summary -----------------------------------------------------------
 
 printf '\n%d checks, %d failures\n' $checks $failures
@@ -240,6 +241,12 @@ SLEEP_PID=""
 # Set while sentinel_up is failing, so a persistent failure logs once per
 # episode rather than once per poll.
 SENTINEL_FAIL_LOGGED=0
+
+# The same throttle for sentinel_down, which needs its own flag rather than
+# sharing the one above: the two episodes are independent, and a shared flag
+# would let a failed raise silence the far more serious "cannot lower the
+# sentinel" report — the one that means the Mac is pinned awake.
+SENTINEL_DOWN_FAIL_LOGGED=0
 
 log() {
 	local ts
@@ -351,7 +358,7 @@ git commit -m 'feat(t3-awake): add T3 Code turn-activity predicate'
 
 **Files:**
 - Create: `amphetamine/t3-busy.applescript`
-- Modify: `bin/t3_awake` — add `sentinel_exec`, `sentinel_pattern`, `sentinel_running`, `sentinel_fail`, `sentinel_up`, `sentinel_down`, `sentinel_build`, and the `sentinel` subcommand (`SENTINEL_FAIL_LOGGED` is declared with the other globals in Task 1)
+- Modify: `bin/t3_awake` — add `sentinel_exec`, `sentinel_pattern`, `sentinel_running`, `sentinel_fail`, `sentinel_up`, `sentinel_down`, `sentinel_build`, and the `sentinel` subcommand (`SENTINEL_FAIL_LOGGED` and `SENTINEL_DOWN_FAIL_LOGGED` are declared with the other globals in Task 1)
 - Test: `tests/bin/t3_awake_test.fish` — append the sentinel section
 
 **Interfaces:**
@@ -481,12 +488,14 @@ sentinel_up() {
 
 sentinel_down() {
 	if ! sentinel_running; then
+		SENTINEL_DOWN_FAIL_LOGGED=0
 		return 0
 	fi
 	pkill -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
 	local i
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		if ! sentinel_running; then
+			SENTINEL_DOWN_FAIL_LOGGED=0
 			return 0
 		fi
 		sleep 0.5
@@ -495,15 +504,29 @@ sentinel_down() {
 	# loop would re-send it on every poll while Amphetamine holds the machine
 	# awake. Escalate instead: an unkillable sentinel is a worse outcome than
 	# an ungraceful one.
-	log "sentinel ignored SIGTERM; escalating to SIGKILL"
+	#
+	# Both lines below are one episode, so a single flag decides both: the first
+	# failing poll still records the whole story, and every poll after it stays
+	# silent until the sentinel actually comes down. Without this, a pkill that
+	# can never signal its target — EPERM against a same-path process owned by
+	# another user — writes two lines every idle poll, flooding the one file you
+	# read when the machine is stuck awake.
+	local speak="$SENTINEL_DOWN_FAIL_LOGGED"
+	SENTINEL_DOWN_FAIL_LOGGED=1
+	if [ "$speak" -eq 0 ]; then
+		log "sentinel ignored SIGTERM; escalating to SIGKILL"
+	fi
 	pkill -9 -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
 	for i in 1 2 3 4; do
 		if ! sentinel_running; then
+			SENTINEL_DOWN_FAIL_LOGGED=0
 			return 0
 		fi
 		sleep 0.5
 	done
-	log "sentinel survived SIGKILL at $APP"
+	if [ "$speak" -eq 0 ]; then
+		log "sentinel survived SIGKILL at $APP"
+	fi
 	return 1
 }
 
@@ -588,7 +611,7 @@ git commit -m 'feat(t3-awake): add dockless sentinel application'
 
 **Files:**
 - Modify: `bin/t3_awake` — add `watch_cleanup`, `validate_intervals`, `cmd_watch` and the dispatch arm
-- Test: `tests/bin/t3_awake_test.fish` — append the watch, WAL, lockout, and interval-validation sections
+- Test: `tests/bin/t3_awake_test.fish` — append the watch, WAL, lockout, interval-validation, and fractional-linger sections
 
 **Interfaces:**
 - Consumes: `t3_server_alive`, `db_busy`, `sentinel_up`, `sentinel_down`, `log` from Tasks 1 and 2.
@@ -632,10 +655,16 @@ sleep 3
 check "running turn raises the sentinel" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
 sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='completed';"
-sleep 2
+# Observed one second into the linger, not two. `date +%s` is second-granular,
+# so `now - last_busy` reaches 3 while only ~2.3s of wall time has passed: a
+# 3-second linger really expires between 2 and 3 seconds in. Checking at two
+# seconds left roughly 300ms of margin and failed intermittently under load.
+# One second leaves ~1.3s, and the pair of sleeps still totals the same six
+# seconds so the release check below keeps its own margin unchanged.
+sleep 1
 check "sentinel held during linger" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
-sleep 4
+sleep 5
 check "sentinel released after linger" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
 # A dead server must release even while the database still says running.
@@ -745,6 +774,48 @@ sleep 1
 
 # The recovery path must survive a bad value that is merely exported.
 check "a bad interval does not break probe" idle (env T3_AWAKE_POLL=abc T3_AWAKE_DB=$missing/state.sqlite T3_AWAKE_RUNTIME_JSON=$missing/server-runtime.json $bin probe)
+
+# --- fractional linger --------------------------------------------------
+#
+# `watch accepts a decimal interval` only proves the loop survives a fractional
+# knob. This proves it still lets go. LINGER is the one knob compared
+# arithmetically, and `[ 5 -ge 2.5 ]` is a usage error rather than a
+# comparison — which the guarding `if` swallows as "false", so the release
+# branch never runs, the sentinel stays up for the life of the daemon and the
+# Mac is pinned awake. That busy-latch is the exact failure this floor exists
+# to prevent, and it had no regression coverage.
+
+set fapp $workdir/T3\ Busy\ Frac.app
+set frac $workdir/frac
+make_fixture $frac
+env $log_env T3_AWAKE_APP=$fapp $bin sentinel build
+set -a sentinel_apps $fapp
+
+function frac_env
+    echo T3_AWAKE_DB=$frac/state.sqlite
+    echo T3_AWAKE_RUNTIME_JSON=$frac/server-runtime.json
+    echo T3_AWAKE_APP=$fapp
+    echo T3_AWAKE_POLL=1
+    echo T3_AWAKE_IDLE_POLL=1
+    echo T3_AWAKE_LINGER=2.5
+    echo T3_AWAKE_LOG=$frac/t3-awake.log
+end
+
+sqlite3 $frac/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
+
+env (frac_env) $bin watch &
+set -g frac_pid $last_pid
+set -a watch_pids $frac_pid
+
+sleep 3
+check "fractional linger raises the sentinel" running (env T3_AWAKE_APP=$fapp $bin sentinel state)
+
+sqlite3 $frac/state.sqlite "UPDATE projection_turns SET state='completed';"
+sleep 6
+check "fractional linger still releases the sentinel" stopped (env T3_AWAKE_APP=$fapp $bin sentinel state)
+
+kill -TERM $frac_pid
+sleep 2
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -825,7 +896,11 @@ cmd_watch() {
 	last_busy=0
 	fails=0
 
-	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${LINGER}s)"
+	# linger_secs, not LINGER: the floored value is what the release branch
+	# compares, so logging the raw knob would report a 4-second linger as
+	# "4.5s" and send anyone reading the log after a stuck-awake episode
+	# looking for a discrepancy that is not there.
+	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${linger_secs}s)"
 
 	while :; do
 		if t3_server_alive; then
@@ -902,7 +977,7 @@ cmd_watch() {
 		elif [ $((now - last_busy)) -ge "$linger_secs" ]; then
 			if sentinel_down; then
 				if [ "$state" != "idle" ]; then
-					log "idle: sentinel down after ${LINGER}s linger"
+					log "idle: sentinel down after ${linger_secs}s linger"
 				fi
 				state="idle"
 			fi
@@ -932,7 +1007,7 @@ Add the dispatch arm to `main`, before the `*)` case:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `fish tests/bin/t3_awake_test.fish`
-Expected: `37 checks, 0 failures`, exit 0. The watch, WAL, and lockout sections together take roughly 70 seconds.
+Expected: `39 checks, 0 failures`, exit 0. The watch, WAL, lockout, and fractional-linger sections together take roughly 60 seconds.
 
 - [ ] **Step 5: Confirm no watch process or applet leaked**
 
@@ -952,14 +1027,16 @@ git commit -m 'feat(t3-awake): add the activity watch loop'
 
 **Files:**
 - Create: `amphetamine/dev.newedia.t3-awake.plist`
-- Modify: `bin/t3_awake` — add `cmd_status`, `cmd_install`, `cmd_uninstall` and their dispatch arms
-- Test: `tests/bin/t3_awake_test.fish` — append the install section
+- Modify: `bin/t3_awake` — add `cmd_status`, `service_loaded`, `wait_for_bootout`, `cmd_install`, `cmd_uninstall` and their dispatch arms, and guard the trailing `main "$@"` so the file can be sourced
+- Test: `tests/bin/t3_awake_test.fish` — append the install and bootout-wait sections
 
 **Interfaces:**
 - Consumes: everything from Tasks 1 to 3.
-- Produces: `bin/t3_awake status`, `install [--dry-run]`, `uninstall`; the installed LaunchAgent `dev.newedia.t3-awake`.
+- Produces: `bin/t3_awake status`, `install [--dry-run]`, `uninstall`; the shell function `wait_for_bootout`; the installed LaunchAgent `dev.newedia.t3-awake`.
 
 `install --dry-run` prints each mutation it would perform, one per line, so the test can assert the plan without touching `~/Library/LaunchAgents` or the live launchd domain.
+
+Reinstalling over a loaded agent is the normal case — `bin/bootstrap` is documented as safe to re-run and it calls `install` — but `launchctl bootout` returns when launchd *accepts* the request, not when the job is gone. A `bootstrap` fired into that asynchronous window fails with `Bootstrap failed: 5: Input/output error` and leaves *nothing* loaded, so re-running `bin/bootstrap` on a provisioned machine silently killed the daemon it installs. `wait_for_bootout` polls the domain until the label really leaves it, bounded so a wedged job cannot hang the install forever, and is split out from `cmd_install` so the tests can drive it against a shadowed `launchctl` rather than the user's real domain.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -987,12 +1064,51 @@ set st (env $log_env T3_AWAKE_APP=$workdir/None.app $bin status 2>/dev/null)
 set st_rc $status
 check "status exits cleanly" 0 $st_rc
 check "status reports the sentinel state" stopped (printf '%s\n' $st | sed -n 's/^sentinel: *//p')
+
+# --- bootout teardown wait ----------------------------------------------
+#
+# `launchctl bootout` returns when launchd accepts the request, not when the
+# job is gone. A `bootstrap` fired into that window fails with "Bootstrap
+# failed: 5: Input/output error" and leaves nothing loaded, so re-running
+# bin/bootstrap on an already-provisioned machine silently killed the daemon it
+# installs. wait_for_bootout is driven directly here — sourcing the script and
+# shadowing `launchctl` with a shell function — so the user's real launchd
+# domain is never mutated.
+
+# The one check that reaches real launchctl, and only through the read-only
+# `print`. A label that is not in the domain must cost no sleeps at all.
+set t0 (date +%s)
+check "wait returns for an absent label" 0 (bash -c 'source "'$bin'"; wait_for_bootout dev.newedia.t3-awake-absent-fixture'; echo $status)
+check "wait for an absent label does not sleep" 0 (test (math (date +%s) - $t0) -lt 2; echo $status)
+
+# Present, present, gone: the helper must keep polling across the teardown
+# window instead of giving up on the first sighting, and must stop on the first
+# miss instead of burning the whole timeout.
+set seen (bash -c 'source "'$bin'"
+calls=0
+launchctl() {
+    calls=$((calls + 1))
+    if [ "$calls" -lt 3 ]; then
+        return 0
+    fi
+    return 1
+}
+wait_for_bootout fake.label 20
+printf "%s\n" "$calls"')
+set seen_rc $status
+check "wait polls until the label leaves the domain" 0 $seen_rc
+check "wait stops on the first miss" 3 $seen
+
+# A label that never leaves must fail rather than hang the install forever.
+check "wait gives up on a wedged label" 1 (bash -c 'source "'$bin'"
+launchctl() { return 0; }
+wait_for_bootout fake.label 3'; echo $status)
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `fish tests/bin/t3_awake_test.fish`
-Expected: the nine new checks fail; the template does not exist and `install` is unknown.
+Expected: the fourteen new checks fail; the template does not exist and `install` is unknown.
 
 - [ ] **Step 3: Write the LaunchAgent template**
 
@@ -1031,6 +1147,37 @@ Add to `bin/t3_awake`, after `cmd_watch`:
 ```bash
 plist_target() {
 	printf '%s/Library/LaunchAgents/%s.plist' "$HOME" "$LABEL"
+}
+
+# 0 if the label is present in this user's GUI domain, 1 if it is not.
+service_loaded() {
+	launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
+}
+
+# `launchctl bootout` returns as soon as launchd accepts the request, not when
+# the job is gone: the teardown is asynchronous, and this daemon's own
+# watch_cleanup adds a second or more of sentinel takedown to that window. A
+# `bootstrap` fired into the window fails with "Bootstrap failed: 5:
+# Input/output error" and leaves *nothing* loaded — so re-running bin/bootstrap
+# on an already-provisioned machine silently killed the feature it installs.
+# Poll until the label really leaves the domain, bounded so a wedged job cannot
+# hang the install forever.
+#
+# Split out from cmd_install so the tests can drive it without touching the
+# user's real launchd domain: `launchctl` is called as a bare command, so a
+# sourcing test can shadow it with a shell function.
+wait_for_bootout() {
+	local label="$1" tries="${2:-40}" i=0
+	while :; do
+		if ! service_loaded "$label"; then
+			return 0
+		fi
+		i=$((i + 1))
+		if [ "$i" -ge "$tries" ]; then
+			return 1
+		fi
+		sleep 0.25
+	done
 }
 
 cmd_status() {
@@ -1095,8 +1242,25 @@ cmd_install() {
 		-e "s|__T3_AWAKE_ERR__|$ERRLOG|g" \
 		"$template" >"$target"
 
+	# Reinstalling over a loaded agent is the normal case — bin/bootstrap is
+	# documented as safe to re-run and it calls this — so the teardown has to
+	# be waited out rather than assumed.
 	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-	launchctl bootstrap "gui/$(id -u)" "$target"
+	if ! wait_for_bootout "$LABEL"; then
+		printf 'the running %s did not unload; refusing to bootstrap over it\n' "$LABEL" >&2
+		printf 'inspect it with: launchctl print gui/%s/%s\n' "$(id -u)" "$LABEL" >&2
+		return 1
+	fi
+
+	# Reported rather than left to `set -e`, which aborted the function here
+	# and swallowed both the cause and the manual Amphetamine step below —
+	# leaving the user with a bare "Bootstrap failed: 5" and an unloaded agent.
+	local out
+	if ! out="$(launchctl bootstrap "gui/$(id -u)" "$target" 2>&1)"; then
+		printf 'failed to bootstrap %s from %s\n%s\n' "$LABEL" "$target" "$out" >&2
+		printf 'the LaunchAgent is written but not loaded; retry with: bin/t3_awake install\n' >&2
+		return 1
+	fi
 
 	cat <<EOF
 
@@ -1117,6 +1281,15 @@ cmd_uninstall() {
 	local target
 	target="$(plist_target)"
 	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+	# The same asynchronous teardown as in cmd_install, with a different
+	# failure at the end of it: lowering the sentinel while the daemon is still
+	# alive lets its next poll raise it again, and `rm -rf "$APP"` then strands
+	# a running applet with Amphetamine holding the machine awake and no daemon
+	# left to reap it. Unlike install this never aborts — uninstall is the
+	# command that clears a stranded applet, so it warns and finishes.
+	if ! wait_for_bootout "$LABEL"; then
+		printf 'warning: %s is still loaded; it may raise the applet again\n' "$LABEL" >&2
+	fi
 	rm -f "$target"
 	sentinel_down || true
 	rm -rf "$APP"
@@ -1136,10 +1309,23 @@ Add the dispatch arms to `main`, before the `*)` case:
 	uninstall) cmd_uninstall ;;
 ```
 
+Finally, replace the trailing `main "$@"` at the end of the file, so the tests can source the script and drive `wait_for_bootout` without booting anything out of the user's real launchd domain:
+
+```bash
+# Guarded so the tests can source this file and drive one function in
+# isolation — wait_for_bootout above all, which has to be provable without
+# booting anything out of the user's real launchd domain. launchd execs this
+# script, so $0 and BASH_SOURCE[0] are the same path under the LaunchAgent and
+# the daemon still starts normally.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+	main "$@"
+fi
+```
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `fish tests/bin/t3_awake_test.fish`
-Expected: `46 checks, 0 failures`, exit 0. That is the whole suite; no later task adds checks.
+Expected: `53 checks, 0 failures`, exit 0. That is the whole suite; no later task adds checks.
 
 - [ ] **Step 6: Commit**
 
