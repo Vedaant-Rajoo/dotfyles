@@ -277,7 +277,7 @@ run "$FISH_BIN" -c '
 	end
 	set -l manifest $__fish_config_dir/fish_plugins
 	if test -e $manifest; and not set -q _fisher_plugins[1]
-		set -U _fisher_plugins (string match -r -- \'^[^\s]+$\' <$manifest)
+		set -U _fisher_plugins (string match -r -- '\''^[^\s]+$'\'' <$manifest)
 	end
 	fisher update
 '
