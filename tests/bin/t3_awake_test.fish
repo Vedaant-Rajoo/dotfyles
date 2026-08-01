@@ -160,10 +160,16 @@ sleep 3
 check "running turn raises the sentinel" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
 sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='completed';"
-sleep 2
+# Observed one second into the linger, not two. `date +%s` is second-granular,
+# so `now - last_busy` reaches 3 while only ~2.3s of wall time has passed: a
+# 3-second linger really expires between 2 and 3 seconds in. Checking at two
+# seconds left roughly 300ms of margin and failed intermittently under load.
+# One second leaves ~1.3s, and the pair of sleeps still totals the same six
+# seconds so the release check below keeps its own margin unchanged.
+sleep 1
 check "sentinel held during linger" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
-sleep 4
+sleep 5
 check "sentinel released after linger" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
 
 # A dead server must release even while the database still says running.
@@ -274,6 +280,48 @@ sleep 1
 # The recovery path must survive a bad value that is merely exported.
 check "a bad interval does not break probe" idle (env T3_AWAKE_POLL=abc T3_AWAKE_DB=$missing/state.sqlite T3_AWAKE_RUNTIME_JSON=$missing/server-runtime.json $bin probe)
 
+# --- fractional linger --------------------------------------------------
+#
+# `watch accepts a decimal interval` only proves the loop survives a fractional
+# knob. This proves it still lets go. LINGER is the one knob compared
+# arithmetically, and `[ 5 -ge 2.5 ]` is a usage error rather than a
+# comparison — which the guarding `if` swallows as "false", so the release
+# branch never runs, the sentinel stays up for the life of the daemon and the
+# Mac is pinned awake. That busy-latch is the exact failure this floor exists
+# to prevent, and it had no regression coverage.
+
+set fapp $workdir/T3\ Busy\ Frac.app
+set frac $workdir/frac
+make_fixture $frac
+env $log_env T3_AWAKE_APP=$fapp $bin sentinel build
+set -a sentinel_apps $fapp
+
+function frac_env
+    echo T3_AWAKE_DB=$frac/state.sqlite
+    echo T3_AWAKE_RUNTIME_JSON=$frac/server-runtime.json
+    echo T3_AWAKE_APP=$fapp
+    echo T3_AWAKE_POLL=1
+    echo T3_AWAKE_IDLE_POLL=1
+    echo T3_AWAKE_LINGER=2.5
+    echo T3_AWAKE_LOG=$frac/t3-awake.log
+end
+
+sqlite3 $frac/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
+
+env (frac_env) $bin watch &
+set -g frac_pid $last_pid
+set -a watch_pids $frac_pid
+
+sleep 3
+check "fractional linger raises the sentinel" running (env T3_AWAKE_APP=$fapp $bin sentinel state)
+
+sqlite3 $frac/state.sqlite "UPDATE projection_turns SET state='completed';"
+sleep 6
+check "fractional linger still releases the sentinel" stopped (env T3_AWAKE_APP=$fapp $bin sentinel state)
+
+kill -TERM $frac_pid
+sleep 2
+
 # --- plist template and install planning -------------------------------
 
 check "template is valid plist" 0 (plutil -lint $repo/amphetamine/dev.newedia.t3-awake.plist >/dev/null 2>&1; echo $status)
@@ -295,6 +343,45 @@ set st (env $log_env T3_AWAKE_APP=$workdir/None.app $bin status 2>/dev/null)
 set st_rc $status
 check "status exits cleanly" 0 $st_rc
 check "status reports the sentinel state" stopped (printf '%s\n' $st | sed -n 's/^sentinel: *//p')
+
+# --- bootout teardown wait ----------------------------------------------
+#
+# `launchctl bootout` returns when launchd accepts the request, not when the
+# job is gone. A `bootstrap` fired into that window fails with "Bootstrap
+# failed: 5: Input/output error" and leaves nothing loaded, so re-running
+# bin/bootstrap on an already-provisioned machine silently killed the daemon it
+# installs. wait_for_bootout is driven directly here — sourcing the script and
+# shadowing `launchctl` with a shell function — so the user's real launchd
+# domain is never mutated.
+
+# The one check that reaches real launchctl, and only through the read-only
+# `print`. A label that is not in the domain must cost no sleeps at all.
+set t0 (date +%s)
+check "wait returns for an absent label" 0 (bash -c 'source "'$bin'"; wait_for_bootout dev.newedia.t3-awake-absent-fixture'; echo $status)
+check "wait for an absent label does not sleep" 0 (test (math (date +%s) - $t0) -lt 2; echo $status)
+
+# Present, present, gone: the helper must keep polling across the teardown
+# window instead of giving up on the first sighting, and must stop on the first
+# miss instead of burning the whole timeout.
+set seen (bash -c 'source "'$bin'"
+calls=0
+launchctl() {
+    calls=$((calls + 1))
+    if [ "$calls" -lt 3 ]; then
+        return 0
+    fi
+    return 1
+}
+wait_for_bootout fake.label 20
+printf "%s\n" "$calls"')
+set seen_rc $status
+check "wait polls until the label leaves the domain" 0 $seen_rc
+check "wait stops on the first miss" 3 $seen
+
+# A label that never leaves must fail rather than hang the install forever.
+check "wait gives up on a wedged label" 1 (bash -c 'source "'$bin'"
+launchctl() { return 0; }
+wait_for_bootout fake.label 3'; echo $status)
 
 # --- summary -----------------------------------------------------------
 

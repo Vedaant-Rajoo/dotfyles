@@ -33,6 +33,12 @@ SLEEP_PID=""
 # episode rather than once per poll.
 SENTINEL_FAIL_LOGGED=0
 
+# The same throttle for sentinel_down, which needs its own flag rather than
+# sharing the one above: the two episodes are independent, and a shared flag
+# would let a failed raise silence the far more serious "cannot lower the
+# sentinel" report — the one that means the Mac is pinned awake.
+SENTINEL_DOWN_FAIL_LOGGED=0
+
 log() {
 	local ts
 	ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
@@ -143,12 +149,14 @@ sentinel_up() {
 
 sentinel_down() {
 	if ! sentinel_running; then
+		SENTINEL_DOWN_FAIL_LOGGED=0
 		return 0
 	fi
 	pkill -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
 	local i
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		if ! sentinel_running; then
+			SENTINEL_DOWN_FAIL_LOGGED=0
 			return 0
 		fi
 		sleep 0.5
@@ -157,15 +165,29 @@ sentinel_down() {
 	# loop would re-send it on every poll while Amphetamine holds the machine
 	# awake. Escalate instead: an unkillable sentinel is a worse outcome than
 	# an ungraceful one.
-	log "sentinel ignored SIGTERM; escalating to SIGKILL"
+	#
+	# Both lines below are one episode, so a single flag decides both: the first
+	# failing poll still records the whole story, and every poll after it stays
+	# silent until the sentinel actually comes down. Without this, a pkill that
+	# can never signal its target — EPERM against a same-path process owned by
+	# another user — writes two lines every idle poll, flooding the one file you
+	# read when the machine is stuck awake.
+	local speak="$SENTINEL_DOWN_FAIL_LOGGED"
+	SENTINEL_DOWN_FAIL_LOGGED=1
+	if [ "$speak" -eq 0 ]; then
+		log "sentinel ignored SIGTERM; escalating to SIGKILL"
+	fi
 	pkill -9 -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
 	for i in 1 2 3 4; do
 		if ! sentinel_running; then
+			SENTINEL_DOWN_FAIL_LOGGED=0
 			return 0
 		fi
 		sleep 0.5
 	done
-	log "sentinel survived SIGKILL at $APP"
+	if [ "$speak" -eq 0 ]; then
+		log "sentinel survived SIGKILL at $APP"
+	fi
 	return 1
 }
 
@@ -285,7 +307,11 @@ cmd_watch() {
 	last_busy=0
 	fails=0
 
-	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${LINGER}s)"
+	# linger_secs, not LINGER: the floored value is what the release branch
+	# compares, so logging the raw knob would report a 4-second linger as
+	# "4.5s" and send anyone reading the log after a stuck-awake episode
+	# looking for a discrepancy that is not there.
+	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${linger_secs}s)"
 
 	while :; do
 		if t3_server_alive; then
@@ -362,7 +388,7 @@ cmd_watch() {
 		elif [ $((now - last_busy)) -ge "$linger_secs" ]; then
 			if sentinel_down; then
 				if [ "$state" != "idle" ]; then
-					log "idle: sentinel down after ${LINGER}s linger"
+					log "idle: sentinel down after ${linger_secs}s linger"
 				fi
 				state="idle"
 			fi
@@ -384,6 +410,37 @@ cmd_watch() {
 
 plist_target() {
 	printf '%s/Library/LaunchAgents/%s.plist' "$HOME" "$LABEL"
+}
+
+# 0 if the label is present in this user's GUI domain, 1 if it is not.
+service_loaded() {
+	launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
+}
+
+# `launchctl bootout` returns as soon as launchd accepts the request, not when
+# the job is gone: the teardown is asynchronous, and this daemon's own
+# watch_cleanup adds a second or more of sentinel takedown to that window. A
+# `bootstrap` fired into the window fails with "Bootstrap failed: 5:
+# Input/output error" and leaves *nothing* loaded — so re-running bin/bootstrap
+# on an already-provisioned machine silently killed the feature it installs.
+# Poll until the label really leaves the domain, bounded so a wedged job cannot
+# hang the install forever.
+#
+# Split out from cmd_install so the tests can drive it without touching the
+# user's real launchd domain: `launchctl` is called as a bare command, so a
+# sourcing test can shadow it with a shell function.
+wait_for_bootout() {
+	local label="$1" tries="${2:-40}" i=0
+	while :; do
+		if ! service_loaded "$label"; then
+			return 0
+		fi
+		i=$((i + 1))
+		if [ "$i" -ge "$tries" ]; then
+			return 1
+		fi
+		sleep 0.25
+	done
 }
 
 cmd_status() {
@@ -448,8 +505,25 @@ cmd_install() {
 		-e "s|__T3_AWAKE_ERR__|$ERRLOG|g" \
 		"$template" >"$target"
 
+	# Reinstalling over a loaded agent is the normal case — bin/bootstrap is
+	# documented as safe to re-run and it calls this — so the teardown has to
+	# be waited out rather than assumed.
 	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-	launchctl bootstrap "gui/$(id -u)" "$target"
+	if ! wait_for_bootout "$LABEL"; then
+		printf 'the running %s did not unload; refusing to bootstrap over it\n' "$LABEL" >&2
+		printf 'inspect it with: launchctl print gui/%s/%s\n' "$(id -u)" "$LABEL" >&2
+		return 1
+	fi
+
+	# Reported rather than left to `set -e`, which aborted the function here
+	# and swallowed both the cause and the manual Amphetamine step below —
+	# leaving the user with a bare "Bootstrap failed: 5" and an unloaded agent.
+	local out
+	if ! out="$(launchctl bootstrap "gui/$(id -u)" "$target" 2>&1)"; then
+		printf 'failed to bootstrap %s from %s\n%s\n' "$LABEL" "$target" "$out" >&2
+		printf 'the LaunchAgent is written but not loaded; retry with: bin/t3_awake install\n' >&2
+		return 1
+	fi
 
 	cat <<EOF
 
@@ -470,6 +544,15 @@ cmd_uninstall() {
 	local target
 	target="$(plist_target)"
 	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+	# The same asynchronous teardown as in cmd_install, with a different
+	# failure at the end of it: lowering the sentinel while the daemon is still
+	# alive lets its next poll raise it again, and `rm -rf "$APP"` then strands
+	# a running applet with Amphetamine holding the machine awake and no daemon
+	# left to reap it. Unlike install this never aborts — uninstall is the
+	# command that clears a stranded applet, so it warns and finishes.
+	if ! wait_for_bootout "$LABEL"; then
+		printf 'warning: %s is still loaded; it may raise the applet again\n' "$LABEL" >&2
+	fi
 	rm -f "$target"
 	sentinel_down || true
 	rm -rf "$APP"
@@ -514,4 +597,11 @@ main() {
 	esac
 }
 
-main "$@"
+# Guarded so the tests can source this file and drive one function in
+# isolation — wait_for_bootout above all, which has to be provable without
+# booting anything out of the user's real launchd domain. launchd execs this
+# script, so $0 and BASH_SOURCE[0] are the same path under the LaunchAgent and
+# the daemon still starts normally.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+	main "$@"
+fi
