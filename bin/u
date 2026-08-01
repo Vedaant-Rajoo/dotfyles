@@ -17,7 +17,7 @@ function u_run_logged
 end
 
 function u_run_brew_upgrade
-    brew upgrade 2>&1 | tee -a "$argv[1]"
+    brew upgrade $argv[2..-1] 2>&1 | tee -a "$argv[1]"
     set -l upgrade_status $pipestatus[1]
     return $upgrade_status
 end
@@ -242,9 +242,11 @@ function u_prepare_cask --argument-names token
     return $publish_status
 end
 
-# Asks once, for every running application across every prepared cask.
-# Returns 0 when closing was approved or nothing is running, 1 when declined.
+# Asks once, for every running application across every prepared cask. Return 0
+# when closing was approved or nothing is running, 2 for a recorded deliberate
+# decline, and 1 when the decision cannot be recorded safely.
 function u_confirm_running_apps
+    set -g U_CONFIRM_RUNNING_TOKENS
     if not test -d "$U_STATE_DIR"
         echo "u_confirm_running_apps: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
         return 1
@@ -278,6 +280,7 @@ function u_confirm_running_apps
     if test (count $running_tokens) -eq 0
         return 0
     end
+    set -g U_CONFIRM_RUNNING_TOKENS $running_tokens
 
     echo 'These applications are running and their casks are outdated:'
     for description in $descriptions
@@ -288,11 +291,16 @@ function u_confirm_running_apps
         return 0
     end
 
+    set -l record_status 0
     for token in $running_tokens
         u_record_skip "$token" 'declined closing running applications'
+        or set record_status 1
     end
 
-    return 1
+    if test $record_status -ne 0
+        return 1
+    end
+    return 2
 end
 
 # Runs one exact helper operation and emits its PID result as CSV. The helper's
@@ -548,6 +556,7 @@ function u_force_stop_app --argument-names token app_path bundle_id pids_csv
     end
 
     if test -n "$U_LIFECYCLE_RUNNING_CSV"
+        u_record_failure app-force-terminate "$token" "application remained running after force termination: $app_path"
         u_skip_stop_once "$token" 'application remained running after force termination'
         return 1
     end
@@ -557,7 +566,8 @@ end
 
 # Stops every initially running app artifact for one cask token. Any artifact
 # left running makes the whole token ineligible, while already closed artifacts
-# remain tracked so cleanup can restore them.
+# remain tracked so cleanup can restore them. Return 2 only for a deliberate
+# force-confirmation decline and 1 for an operational lifecycle failure.
 function u_stop_cask_apps --argument-names requested_token
     if not test -d "$U_STATE_DIR"
         echo "u_stop_cask_apps: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
@@ -586,7 +596,7 @@ function u_stop_cask_apps --argument-names requested_token
         set -l display (string replace -r '\.app$' '' -- (basename "$app_path"))
         if not gum confirm "Force quit $display so $token can upgrade?"
             u_skip_stop_once "$token" 'application remained running after force termination was declined'
-            return 1
+            return 2
         end
 
         u_force_stop_app "$token" "$app_path" "$bundle_id" "$pids_csv"
@@ -639,6 +649,10 @@ end
 
 function u_reopen_fallback_apps
     block -l
+    if not set -q U_STATE_DIR; or not test -d "$U_STATE_DIR"
+        return 0
+    end
+
     set -l fallback_file "$U_STATE_DIR/reopen-fallback.tsv"
     if not test -e "$fallback_file"
         return 0
@@ -718,6 +732,142 @@ function u_cleanup_on_sigterm --on-signal SIGTERM
     exit 143
 end
 
+# A caller may deliberately reuse a preserved state directory after a failed
+# run. Restore any previously closed apps before clearing the files for a new
+# maintenance pass; unresolved recovery state is never truncated.
+function u_initialize_lifecycle_state
+    if not test -d "$U_STATE_DIR"
+        echo "u_main: U_STATE_DIR is not an existing directory: $U_STATE_DIR" >&2
+        return 1
+    end
+
+    if test -s "$U_STATE_DIR/apps.tsv"; or test -s "$U_STATE_DIR/reopen-fallback.tsv"
+        u_cleanup
+        set -l recovery_status $status
+        if test $recovery_status -ne 0; or test -s "$U_STATE_DIR/reopen-fallback.tsv"
+            echo "u_main: unresolved lifecycle state preserved at $U_STATE_DIR" >&2
+            return 1
+        end
+    end
+
+    for filename in apps.tsv skips.tsv failures.tsv reopen-fallback.tsv
+        if not printf '' >"$U_STATE_DIR/$filename"
+            echo "u_main: unable to initialize lifecycle state: $U_STATE_DIR/$filename" >&2
+            return 1
+        end
+    end
+end
+
+function u_remove_state_dir_if_owned --argument-names owned
+    if test "$owned" != 1; or not test -d "$U_STATE_DIR"
+        return 0
+    end
+
+    rm -rf "$U_STATE_DIR"
+    or return 1
+    set -e U_STATE_DIR
+end
+
+function u_token_is_recorded --argument-names filename requested_token
+    if not test -e "$U_STATE_DIR/$filename"
+        return 1
+    end
+
+    while read -l --delimiter \t token remainder
+        if test "$token" = "$requested_token"
+            return 0
+        end
+    end <"$U_STATE_DIR/$filename"
+
+    return 1
+end
+
+function u_token_has_failure --argument-names requested_token
+    if not test -e "$U_STATE_DIR/failures.tsv"
+        return 1
+    end
+
+    while read -l --delimiter \t category subject detail
+        if test "$subject" = "$requested_token"
+            return 0
+        end
+    end <"$U_STATE_DIR/failures.tsv"
+
+    return 1
+end
+
+function u_report_cask_group --argument-names log_file label
+    set -l tokens $argv[3..-1]
+    set -l names none
+    if test (count $tokens) -gt 0
+        set names (string join ', ' -- $tokens)
+    end
+
+    set -l message "$label casks ("(count $tokens)"): $names"
+    echo "$message"
+    u_log "$log_file" "$message"
+end
+
+function u_report_lifecycle_details --argument-names log_file
+    if test -s "$U_STATE_DIR/skips.tsv"
+        echo 'Skip details:'
+        u_log "$log_file" 'Skip details:'
+        while read -l --delimiter \t token reason
+            set -l message "  - $token: $reason"
+            echo "$message"
+            u_log "$log_file" "$message"
+        end <"$U_STATE_DIR/skips.tsv"
+    end
+
+    if test -s "$U_STATE_DIR/failures.tsv"
+        echo 'Failure details:'
+        u_log "$log_file" 'Failure details:'
+        while read -l --delimiter \t category subject detail
+            set -l message "  - $subject [$category]: $detail"
+            echo "$message"
+            u_log "$log_file" "$message"
+        end <"$U_STATE_DIR/failures.tsv"
+    end
+end
+
+# Stops, upgrades, and restores one cask without preventing later casks from
+# running. Return 0 for a complete upgrade, 2 for a deliberate skip, and 1 for
+# an upgrade or required lifecycle failure.
+function u_upgrade_cask --argument-names log_file token
+    u_stop_cask_apps "$token"
+    set -l stop_status $status
+    set -l lifecycle_failed 0
+    if u_token_has_failure "$token"
+        set lifecycle_failed 1
+    end
+
+    if test $stop_status -ne 0; or test $lifecycle_failed -ne 0
+        u_reopen_token_apps "$token"
+        set -l reopen_status $status
+        if test $reopen_status -ne 0; or test $lifecycle_failed -ne 0
+            return 1
+        end
+        if test $stop_status -eq 2
+            return 2
+        end
+        return 1
+    end
+
+    u_run_brew_upgrade "$log_file" --cask "$token"
+    set -l upgrade_status $status
+    if test $upgrade_status -ne 0
+        u_record_failure cask-upgrade "$token" "brew upgrade --cask failed with status $upgrade_status"
+    end
+
+    u_reopen_token_apps "$token"
+    set -l reopen_status $status
+
+    if test $upgrade_status -ne 0; or test $reopen_status -ne 0
+        return 1
+    end
+    return 0
+end
+
 function u_main
     gum style \
         --foreground 12 --border-foreground 12 --border double \
@@ -733,6 +883,13 @@ function u_main
 
     set -l NOW (date +%Y-%m-%d-%H-%M-%S)
     set -l log_file /tmp/u-$NOW.txt
+    set -l created_state_dir 0
+    set -l state_ready 0
+    if set -q U_STATE_DIR
+        u_initialize_lifecycle_state
+        or return 1
+        set state_ready 1
+    end
     u_log "$log_file" "$NOW\n"
 
     if not gum confirm "Do you wish to update your scripts?"
@@ -755,29 +912,180 @@ function u_main
     u_log "$log_file" ""
     echo "✅ 🍻 brew updated"
 
-    set -l OUTDATED (brew outdated); or exit $status
-    u_log "$log_file" "$OUTDATED"
-
-    if test -n "$OUTDATED"
-        # no spinner here: cask upgrades can prompt for sudo, and gum spin swallows the prompt
-        echo "🍻 brew upgrading..."
-        u_run_brew_upgrade "$log_file"; or exit $status
-        u_log "$log_file" ""
-        echo "✅ 🍻 brew upgraded"
-
-        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all; or exit $status
-        u_log "$log_file" ""
-        echo "✅ 🍻 brew cleaned up"
-    else
-        u_log "$log_file" "No outdated brew packages"
+    # No lifecycle state is needed for the earlier fail-fast maintenance steps.
+    # Creating owned state here avoids leaking an empty directory when they exit.
+    if test $state_ready -eq 0
+        set -l state_dir (mktemp -d)
+        or return 1
+        set -g U_STATE_DIR "$state_dir"
+        set created_state_dir 1
+        u_initialize_lifecycle_state
+        or begin
+            u_remove_state_dir_if_owned $created_state_dir
+            return 1
+        end
     end
 
-    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor; or exit $status
-    u_log "$log_file" ""
-    echo "✅ 🍻 brew doctored"
+    set -l outdated_json (brew outdated --json=v2)
+    set -l outdated_status $status
+    if test $outdated_status -ne 0
+        u_remove_state_dir_if_owned $created_state_dir
+        return $outdated_status
+    end
+    u_log "$log_file" "$outdated_json"
+    u_discover_outdated $outdated_json
+    set -l discovery_status $status
+    if test $discovery_status -ne 0
+        u_remove_state_dir_if_owned $created_state_dir
+        return $discovery_status
+    end
+
+    set -l formulae (cat "$U_STATE_DIR/formulae.tsv")
+    set -l casks (cat "$U_STATE_DIR/casks.tsv")
+    set -l upgraded_casks
+    set -l skipped_casks
+    set -l failed_casks
+    set -l final_status 0
+
+    if test (count $formulae) -eq 0; and test (count $casks) -eq 0
+        u_log "$log_file" "No outdated brew packages"
+    else
+        # no spinner here: upgrades can prompt for sudo, and gum spin swallows the prompt
+        echo "🍻 brew upgrading..."
+
+        # Formulae are one fail-fast phase. No application has been stopped yet.
+        if test (count $formulae) -gt 0
+            u_run_brew_upgrade "$log_file" --formula $formulae
+            set -l formula_status $status
+            if test $formula_status -ne 0
+                u_remove_state_dir_if_owned $created_state_dir
+                return $formula_status
+            end
+        end
+
+        # Inspect every cask before asking once about all running applications.
+        for token in $casks
+            if not u_prepare_cask "$token"
+                if not contains -- "$token" $failed_casks
+                    set -a failed_casks "$token"
+                end
+            end
+        end
+        u_confirm_running_apps
+        set -l confirmation_status $status
+        if test $confirmation_status -eq 1
+            u_record_failure lifecycle-confirm all 'unable to record the running-application decision'
+            set -l affected_tokens $U_CONFIRM_RUNNING_TOKENS
+            if test (count $affected_tokens) -eq 0
+                set affected_tokens $casks
+            end
+            for token in $affected_tokens
+                if not contains -- "$token" $failed_casks
+                    set -a failed_casks "$token"
+                end
+            end
+        end
+        set -e U_CONFIRM_RUNNING_TOKENS
+
+        for token in $casks
+            if contains -- "$token" $failed_casks
+                continue
+            end
+            if u_token_is_recorded skips.tsv "$token"
+                if not contains -- "$token" $skipped_casks
+                    set -a skipped_casks "$token"
+                end
+                continue
+            end
+
+            u_upgrade_cask "$log_file" "$token"
+            set -l cask_status $status
+            switch $cask_status
+                case 0
+                    set -a upgraded_casks "$token"
+                case 2
+                    if not contains -- "$token" $skipped_casks
+                        set -a skipped_casks "$token"
+                    end
+                case '*'
+                    if not contains -- "$token" $failed_casks
+                        set -a failed_casks "$token"
+                    end
+            end
+        end
+
+        u_log "$log_file" ""
+        if test (count $failed_casks) -gt 0
+            set -l phase_message '⚠️ 🍻 brew upgrade phase completed with failures'
+            echo "$phase_message"
+            u_log "$log_file" "$phase_message"
+        else if test (count $skipped_casks) -gt 0
+            set -l phase_message '🍻 brew upgrade phase completed with skipped casks'
+            echo "$phase_message"
+            u_log "$log_file" "$phase_message"
+        else
+            echo "✅ 🍻 brew upgraded"
+        end
+
+        u_cleanup
+        if test $status -ne 0
+            u_record_failure lifecycle-cleanup all 'unable to restore every tracked application'
+            set final_status 1
+        end
+
+        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all
+        if test $status -eq 0
+            u_log "$log_file" ""
+            echo "✅ 🍻 brew cleaned up"
+        else
+            u_record_failure brew-cleanup all 'brew cleanup --prune=all failed'
+            set final_status 1
+        end
+    end
+
+    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor
+    if test $status -eq 0
+        u_log "$log_file" ""
+        echo "✅ 🍻 brew doctored"
+    else
+        u_record_failure brew-doctor all 'brew doctor failed'
+        set final_status 1
+    end
+
+    if test -s "$U_STATE_DIR/reopen-fallback.tsv"
+        set -l fallback_tokens (cut -f1 "$U_STATE_DIR/reopen-fallback.tsv" | sort -u)
+        set -l fallback_message "Unresolved reopen fallback: "(string join ', ' $fallback_tokens)
+        echo "$fallback_message"
+        u_log "$log_file" "$fallback_message"
+        u_record_failure app-reopen-fallback all 'durable reopen fallback remains unresolved'
+        set final_status 1
+    end
+
+    if test (count $casks) -gt 0
+        set -l summary "Cask summary: "(count $upgraded_casks)" upgraded, "(count $skipped_casks)" skipped, "(count $failed_casks)" failed"
+        echo "$summary"
+        u_log "$log_file" "$summary"
+        u_report_cask_group "$log_file" Upgraded $upgraded_casks
+        u_report_cask_group "$log_file" Skipped $skipped_casks
+        u_report_cask_group "$log_file" Failed $failed_casks
+    end
+
+    u_report_lifecycle_details "$log_file"
+
+    if test (count $failed_casks) -gt 0; or test -s "$U_STATE_DIR/failures.tsv"
+        set final_status 1
+    end
 
     echo "✅ 🧾 logged to $log_file"
     bat "$log_file"
+
+    if test $created_state_dir -eq 1; and test $final_status -eq 0
+        u_remove_state_dir_if_owned $created_state_dir
+    else if test $created_state_dir -eq 1
+        echo "Lifecycle state preserved at $U_STATE_DIR"
+    end
+
+    return $final_status
 end
 
 if not set -q U_TEST_MODE

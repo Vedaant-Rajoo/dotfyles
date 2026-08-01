@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
 
-set -l repo_root (path resolve (dirname (status filename))/../..)
+set -g repo_root (path resolve (dirname (status filename))/../..)
 set -g u_test_mock_calls
 
 function assert_function
@@ -200,7 +200,10 @@ set -g u_mock_root (mktemp -d)
 set -gx U_MOCK_DIR "$u_mock_root/fixtures"
 set -gx U_MOCK_LOG "$u_mock_root/calls.log"
 set -g u_mock_bin "$u_mock_root/bin"
-mkdir -p "$U_MOCK_DIR" "$u_mock_bin"
+# Executable Fish mocks must not load the user's configuration and reorder PATH
+# back to the real maintenance tools.
+set -gx XDG_CONFIG_HOME "$u_mock_root/config"
+mkdir -p "$U_MOCK_DIR" "$u_mock_bin" "$XDG_CONFIG_HOME"
 touch "$U_MOCK_LOG"
 
 # The mocks pin the whole invocation shape, so a production change that drops
@@ -215,6 +218,33 @@ if test (count $argv) -eq 4; and test "$argv[1]" = info; and test "$argv[2]" = -
     end
     echo "brew mock: no fixture for $argv[-1]" >>"$U_MOCK_LOG"
     exit 1
+end
+if test "$argv[1]" = outdated; and test "$argv[2]" = --json=v2
+    cat "$U_MOCK_DIR/outdated.json"
+    if test -e "$U_MOCK_DIR/exit-brew-outdated"
+        exit (string trim <"$U_MOCK_DIR/exit-brew-outdated")
+    end
+    exit 0
+end
+if test "$argv[1]" = upgrade; and contains -- "$argv[2]" --formula --cask
+    printf "upgrading %s\n" (string join " " -- $argv[2..-1])
+    set -l kind formula
+    if test "$argv[2]" = --cask
+        set kind cask
+    end
+    set -l token_key (string join + $argv[3..-1])
+    set -l exit_fixture "$U_MOCK_DIR/exit-brew-upgrade-$kind-$token_key"
+    if test -e "$exit_fixture"
+        exit (string trim <"$exit_fixture")
+    end
+    exit 0
+end
+if contains -- "$argv[1]" update cleanup doctor
+    set -l exit_fixture "$U_MOCK_DIR/exit-brew-$argv[1]"
+    if test -e "$exit_fixture"
+        exit (string trim <"$exit_fixture")
+    end
+    exit 0
 end
 echo "brew mock: unexpected invocation: $argv" >>"$U_MOCK_LOG"
 exit 64' >"$u_mock_bin/brew"
@@ -311,11 +341,38 @@ if test "$argv[1]" = confirm
     if string match -q -- "*Force quit*" "$argv[2..-1]"; and test -e "$U_MOCK_DIR/gum-force-decline"
         exit 1
     end
+    if string match -q -- "*Close these applications*" "$argv[2..-1]"; and test -e "$U_MOCK_DIR/gum-running-decline"
+        exit 1
+    end
     if test -e "$U_MOCK_DIR/gum-confirm-decline"
         exit 1
     end
 end
+if test "$argv[1]" = spin
+    set -l separator (contains -i -- -- $argv)
+    if test -n "$separator"
+        set -l command_start (math $separator + 1)
+        command $argv[$command_start..-1]
+        exit $status
+    end
+end
 exit 0' >"$u_mock_bin/gum"
+
+echo '#!/usr/bin/env fish
+echo "nvim $argv" >>"$U_MOCK_LOG"
+exit 0' >"$u_mock_bin/nvim"
+
+echo '#!/usr/bin/env fish
+echo "bat $argv" >>"$U_MOCK_LOG"
+exit 0' >"$u_mock_bin/bat"
+
+echo '#!/usr/bin/env fish
+/usr/bin/tee $argv
+set -l tee_status $status
+if test -e "$U_MOCK_DIR/exit-tee"
+    exit (string trim <"$U_MOCK_DIR/exit-tee")
+end
+exit $tee_status' >"$u_mock_bin/tee"
 
 echo '#!/usr/bin/env fish
 echo "sleep $argv" >>"$U_MOCK_LOG"
@@ -327,13 +384,31 @@ if test -e "$U_MOCK_DIR/signal-on-first-open"; and not test -e "$U_MOCK_DIR/sign
     touch "$U_MOCK_DIR/signal-sent"
     kill -INT "$U_TEST_FISH_PID"
 end
+if test -e "$U_MOCK_DIR/open-always-fail"
+    exit 1
+end
 if test -e "$U_MOCK_DIR/open-fail-once"; and not test -e "$U_MOCK_DIR/open-failed"
     touch "$U_MOCK_DIR/open-failed"
     exit 1
 end
 exit 0' >"$u_mock_bin/open"
 
-chmod +x "$u_mock_bin/brew" "$u_mock_bin/osascript" "$u_mock_bin/gum" "$u_mock_bin/sleep" "$u_mock_bin/open"
+echo '#!/usr/bin/env fish
+if test -e "$U_MOCK_DIR/fail-app-state-rollback"; and string match -q -- "*/apps.tsv" "$argv[-1]"
+    set -l count_file "$U_MOCK_DIR/apps-mv-count"
+    set -l count 0
+    if test -e "$count_file"
+        set count (string trim <"$count_file")
+    end
+    set count (math $count + 1)
+    printf "%s\n" $count >"$count_file"
+    if test $count -eq 3
+        exit 1
+    end
+end
+/bin/mv $argv' >"$u_mock_bin/mv"
+
+chmod +x "$u_mock_bin/brew" "$u_mock_bin/osascript" "$u_mock_bin/gum" "$u_mock_bin/nvim" "$u_mock_bin/bat" "$u_mock_bin/tee" "$u_mock_bin/sleep" "$u_mock_bin/open" "$u_mock_bin/mv"
 set -gx PATH "$u_mock_bin" $PATH
 
 function u_test_write_cask --argument-names token json
@@ -347,8 +422,8 @@ end
 
 function u_test_reset
     rm -f "$U_STATE_DIR/apps.tsv" "$U_STATE_DIR/skips.tsv" "$U_STATE_DIR/failures.tsv" "$U_STATE_DIR/reopen-fallback.tsv"
-    rm -f "$U_MOCK_DIR"/gum-confirm-decline "$U_MOCK_DIR"/gum-force-decline
-    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'post-*' -o -name 'signal-*' -o -name 'force-seen-*' -o -name 'open-fail-*' -o -name 'open-failed' -o -name 'defer-running-*' \))
+    rm -f "$U_MOCK_DIR"/gum-confirm-decline "$U_MOCK_DIR"/gum-running-decline "$U_MOCK_DIR"/gum-force-decline
+    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'post-*' -o -name 'signal-*' -o -name 'force-seen-*' -o -name 'open-fail-*' -o -name 'open-always-fail' -o -name 'open-failed' -o -name 'defer-running-*' -o -name 'outdated.json' -o -name 'apps-mv-count' -o -name 'fail-app-state-rollback' \))
         rm -f "$fixture"
     end
     set -e U_FALLBACK_OPEN_ATTEMPTED
@@ -375,6 +450,49 @@ end
 
 function u_test_matches
     count (string match -a -- "*$argv[1]*" $argv[2..-1])
+end
+
+function u_test_call_line --argument-names pattern
+    grep -n -m 1 -e "$pattern" "$U_MOCK_LOG" | string split -m 1 : | head -n 1
+end
+
+function assert_call_before --argument-names earlier_pattern later_pattern description
+    set -l earlier_line (u_test_call_line "$earlier_pattern")
+    set -l later_line (u_test_call_line "$later_pattern")
+
+    if test -n "$earlier_line"; and test -n "$later_line"; and test "$earlier_line" -lt "$later_line"
+        printf 'ok - %s\n' "$description"
+        return 0
+    end
+
+    printf 'not ok - %s\n' "$description"
+    printf '  earlier line: %s\n' (string escape -- "$earlier_line")
+    printf '  later line:   %s\n' (string escape -- "$later_line")
+    return 1
+end
+
+function u_test_output_contains --argument-names needle
+    if string match -q -- "*$needle*" "$u_test_main_output"
+        echo 1
+    else
+        echo 0
+    end
+end
+
+function u_test_run_main --argument-names case_name preserve_state
+    set -g U_STATE_DIR "$u_mock_root/state-$case_name"
+    if test "$preserve_state" != 1
+        rm -rf "$U_STATE_DIR"
+    end
+    mkdir -p "$U_STATE_DIR"
+    set -l output_file "$u_mock_root/$case_name.out"
+    env U_TEST_MODE=1 U_STATE_DIR="$U_STATE_DIR" U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
+        fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
+    set -g u_test_main_status $status
+    set -g u_test_main_output (string collect <"$output_file")
+    if test $u_test_main_status -eq 127
+        cp "$output_file" "/tmp/u-test-$case_name.out"
+    end
 end
 
 u_test_write_cask cursor '{"casks":[{"token":"cursor","artifacts":[{"app":["Cursor.app"],"target":"/Applications/Cursor.app"},{"binary":["cursor"],"target":"/opt/homebrew/bin/cursor"}]}]}'
@@ -554,7 +672,7 @@ u_prepare_cask calm
 u_prepare_cask font-hack
 touch "$U_MOCK_DIR/gum-confirm-decline"
 u_confirm_running_apps >/dev/null
-assert_equal 1 $status 'confirm reports a declined consolidated prompt'; or set test_status 1
+assert_equal 2 $status 'confirm reports a deliberate consolidated-prompt skip'; or set test_status 1
 assert_equal 1 (u_test_calls '^gum confirm') \
     'a declined prompt is still asked exactly once'; or set test_status 1
 assert_equal 'cursor
@@ -564,10 +682,29 @@ assert_equal '' "$(u_test_state failures.tsv)" \
     'a declined prompt records no command failure'; or set test_status 1
 
 u_test_reset
+u_prepare_cask cursor
+touch "$U_MOCK_DIR/gum-confirm-decline"
+functions -c u_record_skip u_record_skip_real
+function u_record_skip
+    return 1
+end
+u_confirm_running_apps >/dev/null
+set -l unrecorded_confirmation_status $status
+functions -e u_record_skip
+functions -c u_record_skip_real u_record_skip
+functions -e u_record_skip_real
+assert_equal 1 $unrecorded_confirmation_status \
+    'confirm fails closed when a declined decision cannot be recorded'; or set test_status 1
+assert_equal cursor "$U_CONFIRM_RUNNING_TOKENS" \
+    'confirm retains the affected token when recording fails'; or set test_status 1
+assert_equal '' "$(u_test_state skips.tsv)" \
+    'confirm never claims an unrecorded decision was persisted'; or set test_status 1
+
+u_test_reset
 u_prepare_cask multi
 touch "$U_MOCK_DIR/gum-confirm-decline"
 u_confirm_running_apps >/dev/null
-assert_equal 1 $status 'confirm reports a declined prompt for a multi-app cask'; or set test_status 1
+assert_equal 2 $status 'confirm reports a deliberate multi-app cask skip'; or set test_status 1
 assert_equal 'multi|declined closing running applications' "$(u_test_state skips.tsv)" \
     'a declined prompt skips a multi-app cask exactly once'; or set test_status 1
 
@@ -619,7 +756,7 @@ u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t
 u_test_running com.cursor.Cursor 111
 touch "$U_MOCK_DIR/gum-force-decline"
 u_stop_cask_apps cursor >/dev/null
-assert_equal 1 $status 'stop rejects a cask when force termination is declined'; or set test_status 1
+assert_equal 2 $status 'stop reports a deliberate skip when force termination is declined'; or set test_status 1
 assert_equal 10 (u_test_calls ' running com.cursor.Cursor 111$') \
     'stop performs no more than ten running checks before force confirmation'; or set test_status 1
 assert_equal 10 (u_test_calls '^sleep 1$') \
@@ -693,7 +830,7 @@ u_test_running com.example.One ''
 u_test_running com.example.Two 222
 touch "$U_MOCK_DIR/gum-force-decline"
 u_stop_cask_apps multi >/dev/null
-assert_equal 1 $status 'one failed artifact rejects a multi-app cask'; or set test_status 1
+assert_equal 2 $status 'one declined artifact skips a multi-app cask'; or set test_status 1
 assert_equal 'multi|/Applications/One.app|com.example.One|111|1|1|0
 multi|/Applications/Two.app|com.example.Two|222|1|0|0' "$(u_test_state apps.tsv)" \
     'a multi-app failure keeps already closed artifacts tracked'; or set test_status 1
@@ -935,6 +1072,238 @@ assert_equal 0 (u_test_matches mv $u_test_mock_calls) \
     'state rewrite never publishes after a row-write failure'; or set test_status 1
 assert_equal "$prior_apps" "$(u_test_state apps.tsv)" \
     'state rewrite preserves the prior TSV after a row-write failure'; or set test_status 1
+
+# ---------------------------------------------------------------------------
+# u_main end-to-end phased upgrades
+#
+# Every executable that can update Homebrew or affect an application resolves to
+# the temporary PATH mocks above. These cases never run a real upgrade or app.
+# ---------------------------------------------------------------------------
+
+u_test_reset
+set -g U_STATE_DIR "$u_mock_root/state-preexisting-fallback"
+rm -rf "$U_STATE_DIR"
+mkdir -p "$U_STATE_DIR"
+printf 'cursor\t/Applications/Cursor.app\n' >"$U_STATE_DIR/reopen-fallback.tsv"
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/open-always-fail"
+u_test_run_main preexisting-fallback 1
+assert_equal 1 $u_test_main_status 'main fails before maintenance when preserved recovery remains unresolved'; or set test_status 1
+assert_equal 1 (test -s "$U_STATE_DIR/reopen-fallback.tsv"; and echo 1; or echo 0) \
+    'main never truncates an unresolved pre-existing fallback'; or set test_status 1
+assert_equal 0 (u_test_calls '^nvim ') \
+    'main resolves preserved lifecycle state before other maintenance'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'unresolved lifecycle state preserved') \
+    'main identifies the preserved recovery directory'; or set test_status 1
+
+u_test_reset
+set -g U_STATE_DIR "$u_mock_root/state-recovered-fallback"
+rm -rf "$U_STATE_DIR"
+mkdir -p "$U_STATE_DIR"
+printf 'cursor\t/Applications/Cursor.app\n' >"$U_STATE_DIR/reopen-fallback.tsv"
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main recovered-fallback 1
+assert_equal 0 $u_test_main_status 'main continues after restoring preserved lifecycle state'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Cursor.app$') \
+    'main restores a preserved app before maintenance'; or set test_status 1
+assert_equal 0 (test -s "$U_STATE_DIR/reopen-fallback.tsv"; and echo 1; or echo 0) \
+    'main consumes a successfully restored pre-existing fallback'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main no-outdated
+assert_equal 0 $u_test_main_status 'main succeeds when no packages are outdated'; or set test_status 1
+assert_equal 3 (u_test_calls '^nvim ') \
+    'main end-to-end cases use the three Neovim mocks'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew update$') \
+    'main end-to-end cases use the Homebrew update mock'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew outdated --json=v2$') \
+    'main discovers outdated packages with one JSON call'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade ') \
+    'main runs no upgrade when the outdated document is empty'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew cleanup ') \
+    'main preserves the no-outdated path without cleanup'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew doctor$') \
+    'main still doctors Homebrew when nothing is outdated'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+printf '6\n' >"$U_MOCK_DIR/exit-brew-outdated"
+u_test_run_main outdated-failure
+assert_equal 6 $u_test_main_status 'outdated discovery preserves the Homebrew failure status'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew outdated --json=v2$') \
+    'failed outdated discovery still runs exactly once'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade ') \
+    'failed outdated discovery stops before package upgrades'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew doctor$') \
+    'failed outdated discovery stops before Homebrew doctor'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+printf '4\n' >"$U_MOCK_DIR/exit-brew-doctor"
+u_test_run_main doctor-failure
+assert_equal 1 $u_test_main_status 'Homebrew doctor failure produces an aggregate failure'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'all [brew-doctor]: brew doctor failed') \
+    'main surfaces a Homebrew doctor failure in final details'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[{"name":"jq"},{"name":"fish"}],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main formula-only
+assert_equal 0 $u_test_main_status 'main succeeds after a formula-only upgrade'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --formula jq fish$') \
+    'main upgrades named formulae in one formula-only command'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask ') \
+    'formula-only updates never invoke a cask upgrade'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[{"name":"jq"}],"casks":[{"name":"font-hack"}]}' >"$U_MOCK_DIR/outdated.json"
+printf '7\n' >"$U_MOCK_DIR/exit-brew-upgrade-formula-jq"
+u_test_run_main formula-failure
+assert_equal 7 $u_test_main_status 'formula upgrade failure is fail-fast'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew info --cask ') \
+    'formula failure stops before cask preparation'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew cleanup ') \
+    'formula failure stops before Homebrew cleanup'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew doctor$') \
+    'formula failure stops before Homebrew doctor'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"font-hack"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main non-app-cask
+assert_equal 0 $u_test_main_status 'main upgrades a non-app cask'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask font-hack$') \
+    'a non-app cask upgrades in its own cask-only command'; or set test_status 1
+assert_equal 0 (u_test_calls '^osascript ') \
+    'a non-app cask uses no application lifecycle operations'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"font-hack"}]}' >"$U_MOCK_DIR/outdated.json"
+printf '8\n' >"$U_MOCK_DIR/exit-brew-cleanup"
+u_test_run_main cleanup-failure
+assert_equal 1 $u_test_main_status 'Homebrew cleanup failure produces an aggregate failure'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew doctor$') \
+    'main still doctors Homebrew after cleanup fails'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'all [brew-cleanup]: brew cleanup --prune=all failed') \
+    'main surfaces a Homebrew cleanup failure in final details'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"bad-target"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main preparation-failure
+assert_equal 1 $u_test_main_status 'cask preparation failure produces a final failure'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask bad-target$') \
+    'main never upgrades a cask with unreliable app metadata'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask calm$') \
+    'main continues to a later cask after preparation fails'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Failed casks (1): bad-target') \
+    'main names a preparation failure in the failed-cask group'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[{"name":"jq"}],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main eligible-casks
+assert_equal 0 $u_test_main_status 'main upgrades eligible casks independently'; or set test_status 1
+assert_call_before '^brew upgrade --formula jq$' '^brew info --cask --json=v2 cursor$' \
+    'main completes the formula phase before preparing casks'; or set test_status 1
+assert_call_before '^brew info --cask --json=v2 calm$' '^gum confirm Close these applications' \
+    'main prepares every cask before consolidated approval'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask cursor$') \
+    'main upgrades the first eligible cask individually'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask calm$') \
+    'main upgrades the later eligible cask individually'; or set test_status 1
+assert_equal 1 (u_test_calls '^gum confirm Close these applications') \
+    'main obtains one consolidated lifecycle approval'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Cursor.app$') \
+    'main reopens an initially running app after its cask upgrade'; or set test_status 1
+assert_call_before '^brew upgrade --cask cursor$' '^open /Applications/Cursor.app$' \
+    'main reopens an app only after its cask attempt'; or set test_status 1
+assert_call_before '^open /Applications/Cursor.app$' '^brew upgrade --cask calm$' \
+    'main reopens one cask before attempting the next'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Cask summary: 2 upgraded, 0 skipped, 0 failed') \
+    'main prints successful cask aggregate counts'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Upgraded casks (2): cursor, calm') \
+    'main names upgraded casks separately'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Skipped casks (0): none') \
+    'main reports an empty skipped-cask group separately'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Failed casks (0): none') \
+    'main reports an empty failed-cask group separately'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+printf '9\n' >"$U_MOCK_DIR/exit-brew-upgrade-cask-cursor"
+u_test_run_main cask-failure
+assert_equal 1 $u_test_main_status 'one cask failure produces final nonzero status'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask cursor$') \
+    'main attempts the failing cask once'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask calm$') \
+    'main continues to a later cask after one cask fails'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Cursor.app$') \
+    'main reopens the failed cask application'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew cleanup --prune=all$') \
+    'main cleans up Homebrew after a cask-level failure'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew doctor$') \
+    'main doctors Homebrew after a cask-level failure'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 0 skipped, 1 failed') \
+    'main prints failed casks in aggregate counts'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Failed casks (1): cursor') \
+    'main names failed casks separately'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'brew upgrade phase completed with failures') \
+    'main never prints an unconditional success message after a cask failure'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"},{"name":"font-hack"}]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/gum-running-decline"
+u_test_run_main deliberate-skip
+assert_equal 0 $u_test_main_status 'a deliberate lifecycle decline is not a command failure'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask cursor$') \
+    'main does not upgrade a deliberately skipped running-app cask'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask font-hack$') \
+    'main still upgrades a non-running cask after a deliberate skip'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Skipped casks (1): cursor') \
+    'main reports deliberately skipped casks separately'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 1 skipped, 0 failed') \
+    'main keeps skip and failure counts separate'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'brew upgrade phase completed with skipped casks') \
+    'main identifies a phase that completed with deliberate skips'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_running com.todesktop.230313mzl4w4u92 111
+touch "$U_MOCK_DIR/gum-force-decline"
+u_test_run_main force-decline
+assert_equal 0 $u_test_main_status 'declining force termination remains a deliberate skip'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask cursor$') \
+    'main never upgrades a cask whose force termination was declined'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Skipped casks (1): cursor') \
+    'main classifies a declined force termination as skipped'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Failed casks (0): none') \
+    'main does not misclassify a declined force termination as failed'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_running com.todesktop.230313mzl4w4u92 111
+u_test_run_main force-failure
+assert_equal 1 $u_test_main_status 'an unsuccessful approved force termination fails the run'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask cursor$') \
+    'main never upgrades a cask whose application could not be stopped'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Failed casks (1): cursor') \
+    'main classifies an unsuccessful force termination as failed'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+printf '1\n' >"$U_MOCK_DIR/exit-tee"
+u_test_run_main tee-failure
+assert_equal 0 $u_test_main_status 'a tee failure does not replace successful brew pipeline status'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 0 skipped, 0 failed') \
+    'main counts the cask upgrade from brew status rather than tee status'; or set test_status 1
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"}]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/open-always-fail" "$U_MOCK_DIR/fail-app-state-rollback"
+u_test_run_main unresolved-fallback
+assert_equal 1 $u_test_main_status 'unresolved durable reopen fallback produces final failure'; or set test_status 1
+assert_equal 1 (test -s "$U_STATE_DIR/reopen-fallback.tsv"; and echo 1; or echo 0) \
+    'main preserves unresolved durable reopen fallback state'; or set test_status 1
+assert_equal 1 (u_test_output_contains 'Unresolved reopen fallback') \
+    'main surfaces unresolved durable reopen fallback in final output'; or set test_status 1
 
 rm -rf "$U_STATE_DIR" "$u_mock_root"
 exit $test_status
