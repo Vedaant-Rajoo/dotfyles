@@ -57,11 +57,12 @@ it is untracked, and edits belong in the source files. `CLAUDE.md` and `skills/`
 are symlinks into `agents/`, so shared rules and skills are the same bytes here
 as in every other harness.
 
-Tests for the tracked hooks live under `tests/claude/hooks/` and run as Fish
-test files, for example:
+Commit-message style is enforced for every author — human or agent, in any
+harness — by the tracked git hook `git/hooks/commit-msg`, not by a Claude hook
+(see [docs/setup.md](../docs/setup.md)). Its tests run with:
 
 ```bash
-fish tests/claude/hooks/commit-msg-guard_test.fish
+fish tests/git/hooks/commit-msg_test.fish
 ```
 
 ---

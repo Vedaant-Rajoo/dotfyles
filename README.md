@@ -98,7 +98,7 @@ Six Fish suites share [`tests/lib/harness.fish`](tests/lib/harness.fish), emit T
 
 ```
 tests/bin/agents_link_test.fish          tests/bin/u_test.fish
-tests/bin/t3_awake_test.fish             tests/claude/hooks/commit-msg-guard_test.fish
+tests/bin/t3_awake_test.fish             tests/git/hooks/commit-msg_test.fish
 tests/bin/u-cask-lifecycle_test.fish     tests/fish/conf.d/init-cache_test.fish
 ```
 
