@@ -150,7 +150,7 @@ These items influence the daily machine but are intentionally excluded from vers
 - `tmux` 3.7b remains installed locally as legacy state but is deliberately absent from the Brewfile. `bin/tmux-sessionizer` forwards to Herdr.
 - `/etc/shells` contains `/usr/local/bin/fish` twice. This is harmless snapshot drift; bootstrap's exact-match guard does not add another duplicate.
 - No user crontab existed.
-- User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `amphetamine/README.md`.
+- User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.
 - `~/Development` existed; `~/dev` and `~/projects` did not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
 
 ## Security boundary

@@ -282,7 +282,7 @@ if ! run "$REPO_ROOT/bin/legcord_link"; then
 	warn "Legcord settings link failed; run bin/legcord_link again after launching Legcord once"
 fi
 
-printf '\n==> T3 Code activity trigger\n'
+printf '\n==> T3 Code activity wake hold\n'
 if ! run "$REPO_ROOT/bin/t3_awake" install; then
 	warn "t3_awake install failed; run bin/t3_awake install again after launching T3 Code once"
 fi
@@ -323,7 +323,6 @@ Bootstrap complete. Remaining machine-local steps:
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
   - Write your CLIProxyAPI token into claude/auth-token, then run bin/agents_link all.
-  - Add the "t3-busy" trigger in Amphetamine -> Preferences -> Triggers (see amphetamine/README.md).
   - Run `postplan login` and open Neovim once to install plugins.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
