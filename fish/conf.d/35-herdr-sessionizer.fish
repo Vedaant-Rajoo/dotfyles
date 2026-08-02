@@ -9,8 +9,3 @@ function _herdr_sessionizer_launch
 end
 
 bind \co _herdr_sessionizer_launch
-
-# Mirror the binding into vi insert mode if vi/hybrid bindings are ever enabled.
-if string match -rq 'fish_(vi|hybrid)_key_bindings' "$fish_key_bindings"
-	bind -M insert \co _herdr_sessionizer_launch
-end

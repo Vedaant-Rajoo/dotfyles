@@ -56,8 +56,3 @@ function _claude_model_picker_launch
 end
 
 bind \cp _claude_model_picker_launch
-
-# Mirror the binding into vi insert mode if vi/hybrid bindings are ever enabled.
-if string match -rq 'fish_(vi|hybrid)_key_bindings' "$fish_key_bindings"
-	bind -M insert \cp _claude_model_picker_launch
-end

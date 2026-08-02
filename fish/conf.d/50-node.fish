@@ -16,11 +16,6 @@ else if not command -q fnm
 	return
 end
 
-set -l fnm_multishell_dir $XDG_STATE_HOME/fnm_multishells
-
-command mkdir -p $fnm_multishell_dir 2>/dev/null
-or return
-
 set -l fnm_env (fnm env --use-on-cd --shell fish 2>/dev/null | string collect)
 
 if test -n "$fnm_env"
