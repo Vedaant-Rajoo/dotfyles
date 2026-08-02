@@ -70,6 +70,10 @@ fish/completions/*
 !fish/completions/kubectl.fish
 !fish/completions/orbctl.fish
 
+# --- AI planning artifacts: specs and plans are process scaffolding for a
+#     change, not system state; they never belong in the repo. ---
+docs/superpowers/
+
 # --- Large / downloaded app data ---
 raycast/
 raycast-x/
