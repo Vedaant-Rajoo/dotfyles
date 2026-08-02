@@ -271,12 +271,28 @@ end
 set -l command "$argv[4]"
 if test "$command" = inspect; and test (count $argv) -eq 5
     set -l fixture "$U_MOCK_DIR/inspect"(string replace -a / _ -- "$argv[5]")".json"
-    if test -e "$fixture"
+    if not test -e "$fixture"
+        echo "osascript mock: no fixture for $argv[5]" >>"$U_MOCK_LOG"
+        exit 66
+    end
+    # Inspect reports current workspace state, so it reflects the running
+    # queue for the fixture bundle: peek at the head without consuming it.
+    # Prepare-time inspects then see the initial state, and the pre-upgrade
+    # recheck sees whatever the last consumed transition left behind. A
+    # fixture for a bundle without a queue is served verbatim.
+    set -l bundle_id (jq -r .bundleId <"$fixture" | head -n 1)
+    set -l queue "$U_MOCK_DIR/running-"(string replace -a / _ -- "$bundle_id")
+    if not test -e "$queue"
         cat "$fixture"
         exit 0
     end
-    echo "osascript mock: no fixture for $argv[5]" >>"$U_MOCK_LOG"
-    exit 66
+    set -l lines (cat "$queue")
+    set -l pids "[]"
+    if test (count $lines) -gt 0; and test "$lines[1]" != -
+        set pids "[$lines[1]]"
+    end
+    jq --argjson pids "$pids" ".pids = \$pids" <"$fixture"
+    exit 0
 end
 
 if contains -- "$command" running terminate force-terminate; and test (count $argv) -ge 5
@@ -753,11 +769,16 @@ function u_test_running --argument-names bundle_id
 end
 
 function u_test_post_operation --argument-names bundle_id command
-    set -l state "$argv[3]"
-    if test -z "$state"
-        set state -
+    set -l states $argv[3..-1]
+    if test (count $states) -eq 0
+        set states -
     end
-    printf '%s\n' "$state" >"$U_MOCK_DIR/post-$bundle_id-$command"
+    for index in (seq (count $states))
+        if test -z "$states[$index]"
+            set states[$index] -
+        end
+    end
+    printf '%s\n' $states >"$U_MOCK_DIR/post-$bundle_id-$command"
 end
 
 u_test_reset
@@ -823,6 +844,25 @@ assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|0' "$(u_
 assert_equal '' "$(u_test_state skips.tsv)" \
     'successful force termination does not skip the cask'; or set test_status 1
 
+# forceTerminate returns when the kill is delivered, not when the process is
+# reaped, so a PID can outlive the helper call by a beat. One immediate
+# reconciliation misreported that still-dying app as "remained running" and
+# skipped its cask.
+u_test_reset
+u_test_write_apps 'cursor\t/Applications/Cursor.app\tcom.cursor.Cursor\t111\t1\t0\t0'
+u_test_running com.cursor.Cursor 111
+u_test_post_operation com.cursor.Cursor force-terminate 111 ''
+u_stop_cask_apps cursor >/dev/null
+assert_equal 0 $status 'force termination tolerates a PID that dies one poll later'; or set test_status 1
+assert_equal 12 (u_test_calls ' running com.cursor.Cursor 111$') \
+    'force reconciliation polls until the PID is gone'; or set test_status 1
+assert_equal 'cursor|/Applications/Cursor.app|com.cursor.Cursor|111|1|1|0' "$(u_test_state apps.tsv)" \
+    'a slow force death still marks the app closed for reopen'; or set test_status 1
+assert_equal '' "$(u_test_state skips.tsv)" \
+    'a slow force death does not skip the cask'; or set test_status 1
+assert_equal '' "$(u_test_state failures.tsv)" \
+    'a slow force death records no failure'; or set test_status 1
+
 # A multi-PID helper operation can close one process and then exit 70. The
 # coordinator must query every original PID again, preserve that partial close
 # for cleanup, and skip rather than assume the remaining process stopped.
@@ -833,7 +873,7 @@ u_test_post_operation com.google.Chrome force-terminate 333
 printf '70\n' >"$U_MOCK_DIR/exit-com.google.Chrome-force-terminate"
 u_stop_cask_apps chrome >/dev/null
 assert_equal 1 $status 'failed force termination rejects the cask'; or set test_status 1
-assert_equal 11 (u_test_calls ' running com.google.Chrome 222 333$') \
+assert_equal 20 (u_test_calls ' running com.google.Chrome 222 333$') \
     'helper errors are reconciled against every originally recorded PID'; or set test_status 1
 assert_equal 'chrome|/Applications/Google Chrome.app|com.google.Chrome|222,333|1|0|0' "$(u_test_state apps.tsv)" \
     'a multi-PID app remains open while any recorded PID is still running'; or set test_status 1
@@ -1104,6 +1144,73 @@ assert_equal "$prior_apps" "$(u_test_state apps.tsv)" \
     'state rewrite preserves the prior TSV after a row-write failure'; or set test_status 1
 
 # ---------------------------------------------------------------------------
+# u_upgrade_cask pre-upgrade recheck
+#
+# Exact-PID closure only proves the instances inventoried at prepare time
+# stopped. An instance that relaunched — or first launched — between that
+# proof and `brew upgrade --cask` must make the upgrade step back out rather
+# than replace a live bundle.
+# ---------------------------------------------------------------------------
+
+set -g u_recheck_log "$u_mock_root/upgrade-cask.log"
+
+u_test_write_inspect /Applications/Recheck.app '{"path":"/Applications/Recheck.app","bundleId":"com.example.Recheck","pids":[111]}'
+
+u_test_reset
+u_test_write_apps 'recheck\t/Applications/Recheck.app\tcom.example.Recheck\t111\t1\t0\t0'
+u_test_running com.example.Recheck 111 '' 555
+u_upgrade_cask $u_recheck_log recheck >/dev/null 2>&1
+assert_equal 2 $status 'an instance appearing before upgrade is a deliberate skip'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask') \
+    'an instance appearing before upgrade blocks brew upgrade --cask'; or set test_status 1
+assert_equal 'recheck|an application instance appeared before upgrade: /Applications/Recheck.app' "$(u_test_state skips.tsv)" \
+    'a pre-upgrade instance records the skip against its cask'; or set test_status 1
+assert_equal 'recheck|/Applications/Recheck.app|com.example.Recheck|111|1|1|1' "$(u_test_state apps.tsv)" \
+    'a pre-upgrade skip still restores the app the stop flow closed'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Recheck.app$') \
+    'a pre-upgrade skip reopens the closed app exactly once'; or set test_status 1
+
+u_test_reset
+u_test_write_apps 'recheck\t/Applications/Recheck.app\tcom.example.Recheck\t111\t1\t0\t0'
+u_test_running com.example.Recheck 111 ''
+u_upgrade_cask $u_recheck_log recheck >/dev/null 2>&1
+assert_equal 0 $status 'a clean recheck lets the upgrade proceed'; or set test_status 1
+assert_equal 1 (u_test_calls ' inspect /Applications/Recheck.app$') \
+    'the upgrade re-inspects every app artifact first'; or set test_status 1
+assert_equal 1 (u_test_calls '^brew upgrade --cask recheck$') \
+    'a clean recheck still upgrades the cask'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Recheck.app$') \
+    'a clean recheck upgrade reopens the closed app'; or set test_status 1
+
+# A fresh launch of an app that was not running at prepare time is the same
+# hazard: nothing was inventoried, so nothing was stopped or confirmed.
+u_test_write_inspect /Applications/Fresh.app '{"path":"/Applications/Fresh.app","bundleId":"com.example.Fresh","pids":[777]}'
+u_test_reset
+u_test_write_apps 'recheck\t/Applications/Fresh.app\tcom.example.Fresh\t\t0\t0\t0'
+u_upgrade_cask $u_recheck_log recheck >/dev/null 2>&1
+assert_equal 2 $status 'a freshly launched app is a deliberate skip'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask') \
+    'a freshly launched app blocks brew upgrade --cask'; or set test_status 1
+assert_equal 0 (u_test_calls '^open /Applications/Fresh.app$') \
+    'a fresh-launch skip never reopens an app it did not close'; or set test_status 1
+
+# The recheck is state the upgrade depends on: when it cannot be trusted, the
+# cask fails rather than guessing.
+u_test_reset
+u_test_write_apps 'recheck\t/Applications/Unverifiable.app\tcom.example.Unverifiable\t111\t1\t0\t0'
+u_test_running com.example.Unverifiable 111 ''
+u_upgrade_cask $u_recheck_log recheck >/dev/null 2>&1
+assert_equal 1 $status 'an unverifiable recheck fails the cask'; or set test_status 1
+assert_equal 0 (u_test_calls '^brew upgrade --cask') \
+    'an unverifiable recheck blocks brew upgrade --cask'; or set test_status 1
+assert_equal 'app-inspect|recheck|unable to re-inspect /Applications/Unverifiable.app before upgrade' "$(u_test_state failures.tsv)" \
+    'an unverifiable recheck records the inspection failure'; or set test_status 1
+assert_equal 'recheck|unable to verify no application instance remains before upgrade' "$(u_test_state skips.tsv)" \
+    'an unverifiable recheck records why the cask was skipped'; or set test_status 1
+assert_equal 1 (u_test_calls '^open /Applications/Unverifiable.app$') \
+    'an unverifiable recheck still restores the closed app'; or set test_status 1
+
+# ---------------------------------------------------------------------------
 # u_main end-to-end phased upgrades
 #
 # Every executable that can update Homebrew or affect an application resolves to
@@ -1229,6 +1336,9 @@ assert_equal 1 (u_test_output_contains 'Failed casks (1): bad-target') \
 
 u_test_reset
 printf '%s\n' '{"formulae":[{"name":"jq"}],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+# The queue models the running app closing when stopped; the pre-upgrade
+# recheck observes that closed state through the same queue.
+u_test_running com.todesktop.230313mzl4w4u92 111 ''
 u_test_run_main eligible-casks
 assert_equal 0 $u_test_main_status 'main upgrades eligible casks independently'; or set test_status 1
 assert_call_before '^brew upgrade --formula jq$' '^brew info --cask --json=v2 cursor$' \
@@ -1259,6 +1369,7 @@ assert_equal 1 (u_test_output_contains 'Failed casks (0): none') \
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
 printf '9\n' >"$U_MOCK_DIR/exit-brew-upgrade-cask-cursor"
+u_test_running com.todesktop.230313mzl4w4u92 111 ''
 u_test_run_main cask-failure
 assert_equal 1 $u_test_main_status 'one cask failure produces final nonzero status'; or set test_status 1
 assert_equal 1 (u_test_calls '^brew upgrade --cask cursor$') \
@@ -1327,6 +1438,7 @@ assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 0 skipped, 0 f
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"}]}' >"$U_MOCK_DIR/outdated.json"
+u_test_running com.todesktop.230313mzl4w4u92 111 ''
 touch "$U_MOCK_DIR/open-always-fail" "$U_MOCK_DIR/fail-app-state-rollback"
 u_test_run_main unresolved-fallback
 assert_equal 1 $u_test_main_status 'unresolved durable reopen fallback produces final failure'; or set test_status 1

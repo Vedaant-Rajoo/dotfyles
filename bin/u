@@ -551,13 +551,27 @@ function u_force_stop_app --argument-names token app_path bundle_id pids_csv
         u_record_failure app-force-terminate "$token" "force termination helper failed for $app_path"
     end
 
-    # A multi-PID helper may act on earlier PIDs before returning 70. Always
-    # reconcile the complete original set before publishing closure state.
-    set -g U_LIFECYCLE_RUNNING_CSV (u_lifecycle_operation running "$bundle_id" $original_pids)
-    set -l running_status $status
-    if test $running_status -eq 0
+    # forceTerminate returns when the kill is delivered, not when the process
+    # is reaped, so one immediate reconciliation can misreport a dying app as
+    # still running. Poll the complete original set like the graceful path
+    # does. The poll also runs after a helper failure: a multi-PID helper may
+    # act on earlier PIDs before returning 70, and those closures must be
+    # published before the cask is skipped or reopen would miss the app.
+    set -l running_status
+    for attempt in (seq 10)
+        sleep 1
+        set -g U_LIFECYCLE_RUNNING_CSV (u_lifecycle_operation running "$bundle_id" $original_pids)
+        set running_status $status
+        if test $running_status -ne 0
+            break
+        end
+
         u_record_app_closure "$token" "$app_path" "$U_LIFECYCLE_RUNNING_CSV"
         or return 1
+
+        if test -z "$U_LIFECYCLE_RUNNING_CSV"
+            break
+        end
     end
 
     if test $running_status -ne 0
@@ -619,6 +633,41 @@ function u_stop_cask_apps --argument-names requested_token
 
         u_force_stop_app "$token" "$app_path" "$bundle_id" "$pids_csv"
         or return 1
+    end <"$apps_file"
+
+    return 0
+end
+
+# Exact-PID closure only proves the instances inventoried at prepare time
+# stopped. An instance that relaunched — or first launched — after that proof
+# is invisible to the stop flow, and `brew upgrade --cask` would replace the
+# bundle under it. Re-inspect every app artifact immediately before the
+# upgrade; an instance alive now is a deliberate skip rather than something to
+# kill, because it was never part of the confirmed stop decision. Return 2 for
+# that skip and 1 when the recheck itself cannot be trusted.
+function u_recheck_cask_apps --argument-names requested_token
+    set -l apps_file "$U_STATE_DIR/apps.tsv"
+    if test -z "$requested_token"; or not test -e "$apps_file"
+        return 0
+    end
+
+    while read -l --delimiter \t token app_path bundle_id pids_csv was_running closed reopened
+        if test "$token" != "$requested_token"
+            continue
+        end
+
+        set -l record (u_inspect_app "$app_path")
+        or begin
+            u_record_failure app-inspect "$token" "unable to re-inspect $app_path before upgrade"
+            u_skip_stop_once "$token" 'unable to verify no application instance remains before upgrade'
+            return 1
+        end
+
+        set -l fields (string split \t -- "$record")
+        if test -n "$fields[3]"
+            u_skip_stop_once "$token" "an application instance appeared before upgrade: $app_path"
+            return 2
+        end
     end <"$apps_file"
 
     return 0
@@ -869,6 +918,17 @@ function u_upgrade_cask --argument-names log_file token
             return 2
         end
         return 1
+    end
+
+    u_recheck_cask_apps "$token"
+    set -l recheck_status $status
+    if test $recheck_status -ne 0
+        u_reopen_token_apps "$token"
+        set -l reopen_status $status
+        if test $reopen_status -ne 0; or test $recheck_status -eq 1
+            return 1
+        end
+        return 2
     end
 
     u_run_brew_upgrade "$log_file" --cask "$token"
