@@ -14,7 +14,7 @@ Credentials still never enter the repository. `claude/settings.json` carries an
 `apiKeyHelper` command rather than a token; `claude/api-key-helper.sh` is
 tracked and reads `claude/auth-token`, which is gitignored and mode `600`. The
 base URL is a localhost proxy and the model ids are not secrets, so those stay
-tracked in `env`. `claude_link --check` fails hard if a literal
+tracked in `env`. `bin/agents_link --check claude` fails hard if a literal
 `ANTHROPIC_AUTH_TOKEN` ever appears in the tracked settings.
 
 ## Runtime state
@@ -28,9 +28,9 @@ this: it stays at the home root, holding OAuth and per-project state.
 ## Linking
 
 ```bash
-bin/claude_link            # ensure the symlink and seed claude/auth-token
-bin/claude_link --check    # symlink, settings, helper, and token status
-bin/claude_link --migrate  # fold a pre-existing real ~/.claude in, backup first
+bin/agents_link claude            # link ~/.claude, seed the token, generate subagents
+bin/agents_link --check claude    # symlink, settings, helper, and token status
+bin/agents_link --migrate claude  # fold a pre-existing real ~/.claude in, backup first
 ```
 
 `--migrate` clones `~/.claude` to `~/.claude.pre-migrate-backup` (an APFS clone,

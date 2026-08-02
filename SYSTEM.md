@@ -160,6 +160,6 @@ The repository intentionally omits tokens, API keys, browser/account sessions, p
 At snapshot time:
 
 - the working tree was clean before implementation;
-- `bin/claude_link --check` passed;
+- `bin/agents_link --check claude` passed;
 - there were no ordinary untracked files under `~/.config`;
 - ignored files matched the documented secret/runtime policy.

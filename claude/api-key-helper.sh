@@ -8,7 +8,7 @@
 #
 # Reads, in order of preference:
 #   $CLAUDE_AUTH_TOKEN_FILE      explicit override
-#   ~/.config/claude/auth-token  the gitignored default, seeded by claude_link
+#   ~/.config/claude/auth-token  the gitignored default, seeded by agents_link
 set -eu
 
 token_file="${CLAUDE_AUTH_TOKEN_FILE:-$HOME/.config/claude/auth-token}"

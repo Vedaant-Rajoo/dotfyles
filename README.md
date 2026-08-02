@@ -77,7 +77,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
   [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).
 
 Then verify the wiring: [agents/README.md](agents/README.md) covers `bin/agents_link --check all`
-and `bin/agents_conform`, [claude/README.md](claude/README.md) covers `bin/claude_link --check`.
+and `bin/agents_conform`, [claude/README.md](claude/README.md) covers `bin/agents_link --check claude`.
 
 ## Updating
 

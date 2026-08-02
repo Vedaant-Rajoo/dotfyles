@@ -274,7 +274,7 @@ fi
 if ! run "$REPO_ROOT/bin/agents_link" all; then
 	warn "agent links were seeded, but one or more adapters need attention"
 	warn "write your CLIProxyAPI token into claude/auth-token, then re-run bin/agents_link all"
-	warn "if ~/.claude is still a real directory, fold it in with bin/claude_link --migrate"
+	warn "if ~/.claude is still a real directory, fold it in with bin/agents_link --migrate claude"
 fi
 
 printf '\n==> Legcord settings\n'
