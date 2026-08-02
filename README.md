@@ -42,7 +42,7 @@ The bootstrap is safe to re-run. It:
 1. Checks Xcode Command Line Tools and Homebrew.
 2. Installs the full [`Brewfile`](Brewfile), including graphical and App Store apps.
 3. Installs Homebrew Fish, adds it to `/etc/shells`, and selects it as the login shell.
-4. Installs and selects Node `24.14.1` through fnm and Python `3.14.4` through pyenv.
+4. Installs and selects Node through fnm and Python through pyenv, at the versions pinned in [`.node-version`](.node-version) and [`.python-version`](.python-version).
 5. Installs the npm tools required by this configuration, including `postplan@0.0.4`.
 6. Installs Claude Code, projects shared agent rules/skills/subagents/hooks into every installed harness, enables the gitleaks hook, and installs Fisher plugins.
 7. Installs the `dev.newedia.t3-awake` LaunchAgent, which keeps the Mac awake while a T3 Code thread is working.
@@ -231,6 +231,8 @@ OrbStack is installed by the Brewfile and supplies `docker`, `kubectl`, `orbctl`
 fisher update
 ```
 
+Fisher installs into this repository itself — `$fisher_path` defaults to `$__fish_config_dir`, which *is* `fish/` — so the ~82 plugin files land in the working tree and are gitignored. The manifest is the only tracked source; `.gitignore` ignores everything under `fish/functions/`, `fish/conf.d/`, `fish/completions/`, and `fish/themes/` and whitelists the hand-written config by name, so a new hand-written file has to be added there on purpose. Pure owns `fish_prompt.fish`, `fish_mode_prompt.fish`, and `fish_title.fish`: they look hand-written but are plugin output, and editing them loses the change on the next `fisher update`.
+
 ## macOS defaults
 
 `bin/macdefaults` covers selected keyboard, Dock, Finder, screenshot, and window-dragging preferences. It is intentionally opt-in because it restarts Dock, Finder, and related UI services:
@@ -263,6 +265,7 @@ gitleaks detect --source . -v
 |------|----------------------|
 | `fish/local/` | Shell secrets and machine-specific exports |
 | `fish/fish_variables` | Fish runtime/universal variables |
+| Fisher-installed plugin files under `fish/{functions,conf.d,completions,themes}/` | Fisher installs into this repo; `fish/fish_plugins` is the tracked source, and `fisher update` reinstalls them |
 | `opencode/agents/`, `claude/agents/` | Generated from `agents/subagents/`; regenerate with `bin/agents_link all` |
 | `claude/auth-token` | CLIProxyAPI token read by the tracked `apiKeyHelper`; mode `600` |
 | `claude/` runtime state (`sessions/`, `projects/`, `plugins/`, `security/`, `history.jsonl`, caches) | Claude Code writes it into the working tree because `~/.claude` links here; only config is tracked |
@@ -297,7 +300,7 @@ For Linux:
 1. Clone the repository directly to `~/.config`.
 2. Install Fish through the distribution package manager and make it the login shell.
 3. Install compatible Brewfile formulae through Linuxbrew or native packages; skip all casks and `mas` entries.
-4. Install Node `24.14.1` with fnm and Python `3.14.4` with pyenv.
+4. Install Node with fnm and Python with pyenv, at the versions in `.node-version` and `.python-version`.
 5. Run `bin/agents_link all` and `fish -c 'fisher update'`.
 6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, and `macos-*` Ghostty settings) with Linux equivalents.
 

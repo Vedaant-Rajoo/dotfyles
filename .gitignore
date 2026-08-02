@@ -37,6 +37,39 @@ fish/fish_variables
 nvim/tmp/
 zed/prompts/
 
+# --- Fish plugins: Fisher installs straight into this repo ($fisher_path
+#     defaults to $__fish_config_dir), so its output lands in the working tree.
+#     fish_plugins is the source of truth; tracking the installed files as well
+#     meant 82 vendored third-party files plus a bootstrap hack to seed
+#     _fisher_plugins so `fisher update` would not treat them as conflicts.
+#     Ignore what Fisher writes and whitelist the hand-written config. New
+#     config files must be whitelisted here on purpose. Note that Pure owns
+#     fish_prompt.fish, fish_mode_prompt.fish, and fish_title.fish -- those
+#     look hand-written but are plugin output. ---
+fish/themes/
+fish/functions/*
+!fish/functions/bin-chmod.fish
+!fish/functions/reload.fish
+fish/conf.d/*
+!fish/conf.d/00-paths.fish
+!fish/conf.d/10-env.fish
+!fish/conf.d/20-abbreviations.fish
+!fish/conf.d/30-fzf.fish
+!fish/conf.d/35-herdr-sessionizer.fish
+!fish/conf.d/36-claude-model-picker.fish
+!fish/conf.d/40-zoxide.fish
+!fish/conf.d/45-zig.fish
+!fish/conf.d/50-node.fish
+!fish/conf.d/55-python.fish
+!fish/conf.d/60-pure.fish
+!fish/conf.d/rustup.fish
+fish/completions/*
+!fish/completions/bun.fish
+!fish/completions/docker.fish
+!fish/completions/herdr.fish
+!fish/completions/kubectl.fish
+!fish/completions/orbctl.fish
+
 # --- Large / downloaded app data ---
 raycast/
 raycast-x/
@@ -53,6 +86,7 @@ legcord/storage/*
 # --- Logs / caches (defensive) ---
 *.log
 .cache/
+__pycache__/
 
 # --- Herdr runtime (keep config.toml) ---
 herdr/*.sock
@@ -62,8 +96,7 @@ herdr/session-history.json
 herdr/release-notes.json
 .claude/plans
 
-# --- Claude Code: never let sensitive ~/.claude subpaths land under claude/ ---
-claude/settings.local.json
+# --- Claude Code: never let sensitive .claude subpaths land in nested trees ---
 **/.claude.json
 **/.claude.json.backup.*
 **/.claude/backups/
@@ -89,30 +122,16 @@ claude/settings.local.json
 **/.claude/plugins/plugin-catalog-cache.json
 **/.claude/settings.json.backup.*
 
-# --- Same protection, repo-relative (in case ~/.claude subpaths get copied
-#     flat into the tracked claude/ mirror rather than nested under .claude/) ---
-claude/.claude.json
-claude/.claude.json.backup.*
-claude/backups/
-claude/projects/
-claude/sessions/
-claude/session-env/
-claude/shell-snapshots/
-claude/daemon/
-claude/daemon.log
-claude/telemetry/
-claude/debug/
-claude/history.jsonl
-claude/tasks/
-claude/jobs/
-claude/file-history/
-claude/downloads/
-claude/cache/
-claude/.last-cleanup
-claude/.last-update-result.json
-claude/mcp-needs-auth-cache.json
-claude/plugins/
-claude/security/
-claude/plans/
-claude/settings.json.backup.*
-claude/.last_inuse_sweep
+# --- Claude Code, repo-relative: ~/.claude IS this repo's claude/, so the live
+#     runtime keeps inventing new state files here (caches, transcripts,
+#     credentials). Enumerating known paths cannot keep up with that, so ignore
+#     everything under claude/ and whitelist the tracked configuration; a new
+#     runtime file can then never ride into a commit on `git add -A`. New
+#     config files must be whitelisted here on purpose. ---
+claude/*
+!claude/CLAUDE.md
+!claude/api-key-helper.sh
+!claude/hooks/
+!claude/settings.json
+!claude/skills
+!claude/statusline-command.sh
