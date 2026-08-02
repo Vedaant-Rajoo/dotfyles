@@ -36,7 +36,7 @@ The duplicated Go and Rust providers are intentional snapshot facts, not a desir
 
 ## Shared agent configuration
 
-`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries.
+`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries. The evergreen guide to that layer is [agents/README.md](agents/README.md).
 
 | Harness | Rules | Skills | Subagents | Portable hook coverage |
 |---------|-------|--------|-----------|------------------------|
@@ -59,7 +59,7 @@ Rules and skills are symlinks elsewhere, so all other harnesses read the same by
 
 Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
 
-Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
+Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`; [claude/README.md](claude/README.md) documents that arrangement and what is tracked inside it. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
 
 About 340 MB of Claude runtime state — `security/` alone is a 297 MB agent SDK venv — now sits inside the working tree and is gitignored wholesale. `~/.claude.json` is deliberately left at the home root: it is OAuth and per-project state, not configuration.
 
