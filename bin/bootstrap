@@ -3,8 +3,6 @@
 
 set -euo pipefail
 
-NODE_VERSION="24.14.1"
-PYTHON_VERSION="3.14.4"
 POSTPLAN_VERSION="0.0.4"
 
 DRY_RUN=0
@@ -30,16 +28,46 @@ quote_command() {
 	printf '\n'
 }
 
+warn() {
+	printf 'warning: %s\n' "$*" >&2
+}
+
+die() {
+	printf 'bootstrap: %s\n' "$*" >&2
+	exit 1
+}
+
+# True in print-only mode. Guarding every state probe with `dry_run ||` makes
+# --dry-run a static plan: it lists what a fresh machine would do, instead of
+# what this machine still needs.
+dry_run() {
+	[[ "$DRY_RUN" -eq 1 ]]
+}
+
 run() {
-	if [[ "$DRY_RUN" -eq 1 ]]; then
+	if dry_run; then
 		quote_command "$@"
 		return 0
 	fi
 	"$@"
 }
 
-warn() {
-	printf 'warning: %s\n' "$*" >&2
+# A fresh machine has none of the Brewfile's tools during a dry run, so assume
+# they are present and let the `dry_run ||` probes decide what gets printed.
+have() {
+	if dry_run; then
+		return 0
+	fi
+	command -v "$1" >/dev/null 2>&1
+}
+
+# `eval "$(tool env)"` cannot route through `run` -- it must affect this shell.
+load_env() {
+	if dry_run; then
+		printf 'would load: %s\n' "$*"
+		return 0
+	fi
+	eval "$("$@")"
 }
 
 for arg in "$@"; do
@@ -68,87 +96,72 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 EXPECTED_ROOT="$(cd "$HOME/.config" 2>/dev/null && pwd -P || true)"
 
 if [[ "$DRY_RUN" -eq 0 && "$REPO_ROOT" != "$EXPECTED_ROOT" ]]; then
-	echo "bootstrap: clone this repository directly to $HOME/.config before running bootstrap" >&2
-	exit 1
+	die "clone this repository directly to $HOME/.config before running bootstrap"
 fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-	echo "bootstrap: automatic setup currently supports macOS only; see README.md#linux" >&2
-	exit 1
+	die "automatic setup currently supports macOS only; see README.md#linux"
 fi
 
+BREWFILE="$REPO_ROOT/Brewfile"
+
+# Toolchain versions live in the files fnm and pyenv already read natively --
+# `fnm env --use-on-cd` and `pyenv init -` are both active in fish/conf.d -- so
+# the pin is data this script consumes rather than a constant it owns.
+read_pin() {
+	local file="$REPO_ROOT/$1"
+	[[ -r "$file" ]] || die "missing version pin: $1"
+	tr -d '[:space:]' <"$file"
+}
+
+NODE_VERSION="$(read_pin .node-version)"
+PYTHON_VERSION="$(read_pin .python-version)"
+
 printf '\n==> Xcode Command Line Tools\n'
-if ! xcode-select -p >/dev/null 2>&1; then
+if dry_run || ! xcode-select -p >/dev/null 2>&1; then
 	run xcode-select --install
-	if [[ "$DRY_RUN" -eq 0 ]]; then
+	if ! dry_run; then
 		echo "Re-run bin/bootstrap after the Command Line Tools installation finishes."
 		exit 1
 	fi
 fi
 
 printf '\n==> Homebrew\n'
+# A real `command -v` even in dry-run: BREW_PREFIX has to come from the live
+# install when there is one, and "would install Homebrew" is not a step a
+# machine that already has it would take.
 if command -v brew >/dev/null 2>&1; then
 	BREW_PREFIX="$(brew --prefix)"
-	eval "$("$BREW_PREFIX/bin/brew" shellenv)"
 else
 	case "$(uname -m)" in
 	arm64) BREW_PREFIX="/opt/homebrew" ;;
 	x86_64) BREW_PREFIX="/usr/local" ;;
-	*)
-		echo "bootstrap: unsupported architecture: $(uname -m)" >&2
-		exit 1
-		;;
+	*) die "unsupported architecture: $(uname -m)" ;;
 	esac
 
 	run /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash'
-	if [[ "$DRY_RUN" -eq 1 ]]; then
-		printf 'would load: %s/bin/brew shellenv\n' "$BREW_PREFIX"
-	else
-		eval "$("$BREW_PREFIX/bin/brew" shellenv)"
-	fi
 fi
+load_env "$BREW_PREFIX/bin/brew" shellenv
 
-if command -v brew >/dev/null 2>&1; then
-	if env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle check --file="$REPO_ROOT/Brewfile" >/dev/null 2>&1; then
+if have brew; then
+	# Two passes so an unsigned-in App Store cannot abort the run. Pass 1 is
+	# everything but the Mac App Store and stays fatal on failure.
+	if dry_run || ! env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle check --file="$BREWFILE" >/dev/null 2>&1; then
+		run env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle install --file="$BREWFILE"
+	else
 		echo "Brewfile formulae and casks are already satisfied."
-	else
-		run env HOMEBREW_BUNDLE_MAS_SKIP=1 brew bundle install --file="$REPO_ROOT/Brewfile"
-	fi
-elif [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command env HOMEBREW_BUNDLE_MAS_SKIP=1 "$BREW_PREFIX/bin/brew" bundle install --file="$REPO_ROOT/Brewfile"
-fi
-
-MAS_INSTALLED_IDS=""
-if command -v mas >/dev/null 2>&1; then
-	MAS_INSTALLED_IDS="$(mas list 2>/dev/null | awk '{print $1}')"
-fi
-
-install_mas_app() {
-	local id="$1"
-	local name="$2"
-
-	if grep -qx "$id" <<<"$MAS_INSTALLED_IDS"; then
-		return
 	fi
 
-	if [[ "$DRY_RUN" -eq 1 ]]; then
-		quote_command mas install "$id"
-		return
-	fi
-
-	if ! mas install "$id"; then
-		warn "could not install $name from the Mac App Store (id $id); sign in, then re-run bootstrap"
-	fi
-}
-
-if command -v mas >/dev/null 2>&1 || [[ "$DRY_RUN" -eq 1 ]]; then
-	while IFS= read -r line; do
-		if [[ "$line" =~ ^mas\ \"([^\"]+)\",\ id:\ ([0-9]+)$ ]]; then
-			install_mas_app "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
+	# Pass 2: only the mas entries are left. brew bundle owns the Brewfile
+	# format and reports App Store failures itself, so this only has to
+	# downgrade them to a warning.
+	if dry_run || ! brew bundle check --file="$BREWFILE" >/dev/null 2>&1; then
+		if ! run brew bundle install --file="$BREWFILE"; then
+			warn "Mac App Store installs did not complete; sign in to the App Store, then re-run bootstrap"
 		fi
-	done <"$REPO_ROOT/Brewfile"
+	fi
 else
-	warn "mas is unavailable; sign in to the App Store and install the Brewfile before retrying"
+	die "Homebrew installation did not complete"
 fi
 
 printf '\n==> Fish login shell\n'
@@ -156,56 +169,43 @@ if [[ -x "$BREW_PREFIX/bin/fish" ]]; then
 	FISH_BIN="$BREW_PREFIX/bin/fish"
 elif [[ -x /usr/local/bin/fish ]]; then
 	FISH_BIN="/usr/local/bin/fish"
-elif [[ "$DRY_RUN" -eq 1 ]]; then
-	FISH_BIN="$BREW_PREFIX/bin/fish"
 else
-	echo "bootstrap: Fish was not installed by the Brewfile" >&2
-	exit 1
+	FISH_BIN="$BREW_PREFIX/bin/fish"
+	dry_run || die "Fish was not installed by the Brewfile"
 fi
 
-if ! grep -qxF "$FISH_BIN" /etc/shells; then
+if dry_run || ! grep -qxF "$FISH_BIN" /etc/shells; then
 	run sudo /bin/sh -c "printf '%s\\n' '$FISH_BIN' >> /etc/shells"
 fi
 
-CURRENT_SHELL="$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}')"
-if [[ "$CURRENT_SHELL" != "$FISH_BIN" ]]; then
+if dry_run || [[ "$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}')" != "$FISH_BIN" ]]; then
 	run chsh -s "$FISH_BIN"
 fi
 
 printf '\n==> Node %s via fnm\n' "$NODE_VERSION"
 export FNM_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fnm"
-if command -v fnm >/dev/null 2>&1; then
-	if ! fnm list 2>/dev/null | grep -Eq "(^|[^0-9])v?${NODE_VERSION}([^0-9]|$)"; then
+if have fnm; then
+	if dry_run || ! fnm list 2>/dev/null | grep -Eq "(^|[^0-9])v?${NODE_VERSION}([^0-9]|$)"; then
 		run fnm install "$NODE_VERSION"
 	fi
-	if ! fnm default 2>/dev/null | grep -q "$NODE_VERSION"; then
+	if dry_run || ! fnm default 2>/dev/null | grep -q "$NODE_VERSION"; then
 		run fnm default "$NODE_VERSION"
 	fi
-	if [[ "$DRY_RUN" -eq 0 ]]; then
-		eval "$(fnm env --shell bash)"
-	fi
-elif [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command fnm install "$NODE_VERSION"
-	quote_command fnm default "$NODE_VERSION"
+	load_env fnm env --shell bash
 else
-	echo "bootstrap: fnm was not installed by the Brewfile" >&2
-	exit 1
+	die "fnm was not installed by the Brewfile"
 fi
 
 printf '\n==> Python %s via pyenv\n' "$PYTHON_VERSION"
-if command -v pyenv >/dev/null 2>&1; then
-	if ! pyenv versions --bare 2>/dev/null | grep -qx "$PYTHON_VERSION"; then
+if have pyenv; then
+	if dry_run || ! pyenv versions --bare 2>/dev/null | grep -qx "$PYTHON_VERSION"; then
 		run pyenv install -s "$PYTHON_VERSION"
 	fi
-	if [[ "$(pyenv global 2>/dev/null || true)" != "$PYTHON_VERSION" ]]; then
+	if dry_run || [[ "$(pyenv global 2>/dev/null || true)" != "$PYTHON_VERSION" ]]; then
 		run pyenv global "$PYTHON_VERSION"
 	fi
-elif [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command pyenv install -s "$PYTHON_VERSION"
-	quote_command pyenv global "$PYTHON_VERSION"
 else
-	echo "bootstrap: pyenv was not installed by the Brewfile" >&2
-	exit 1
+	die "pyenv was not installed by the Brewfile"
 fi
 
 printf '\n==> npm global tools\n'
@@ -215,50 +215,75 @@ NPM_GLOBALS=(
 	"@augmentcode/auggie"
 	"localtunnel"
 )
+NPM_GLOBAL_ENTRIES=()
 
-install_npm_global() {
-	local spec="$1"
-	if npm list -g --depth=0 "$spec" >/dev/null 2>&1; then
-		return
-	fi
-	run npm install -g "$spec"
+# One `npm ls` answers every spec. Multi-argument `npm ls` cannot stand in for
+# it: with several filters it exits 0 when *any* of them matches, so the whole
+# global tree gets read once here instead.
+read_npm_globals() {
+	local entry
+	while IFS= read -r entry; do
+		if [[ -n "$entry" ]]; then
+			NPM_GLOBAL_ENTRIES+=("$entry")
+		fi
+	done < <(npm ls -g --depth=0 --json 2>/dev/null |
+		jq -r '.dependencies // {} | to_entries[] | "\(.key)@\(.value.version)"' 2>/dev/null)
 }
 
-if command -v npm >/dev/null 2>&1; then
-	for spec in "${NPM_GLOBALS[@]}"; do
-		install_npm_global "$spec"
+# An entry satisfies a spec either exactly ("postplan@0.0.4") or by name alone,
+# for unpinned specs. ${entry%@*} strips the version and leaves scoped names
+# ("@augmentcode/auggie") intact.
+npm_global_present() {
+	local spec="$1" entry
+	if [[ ${#NPM_GLOBAL_ENTRIES[@]} -eq 0 ]]; then
+		return 1
+	fi
+	for entry in "${NPM_GLOBAL_ENTRIES[@]}"; do
+		if [[ "$entry" == "$spec" || "${entry%@*}" == "$spec" ]]; then
+			return 0
+		fi
 	done
-elif [[ "$DRY_RUN" -eq 1 ]]; then
+	return 1
+}
+
+if have npm; then
+	# No snapshot in dry-run, or without jq: everything reads as missing, which
+	# is the safe answer -- `npm install -g` on an installed spec is a no-op.
+	if ! dry_run && have jq; then
+		read_npm_globals
+	fi
+
+	NPM_MISSING=()
 	for spec in "${NPM_GLOBALS[@]}"; do
-		quote_command npm install -g "$spec"
+		if ! npm_global_present "$spec"; then
+			NPM_MISSING+=("$spec")
+		fi
 	done
+
+	if [[ ${#NPM_MISSING[@]} -gt 0 ]]; then
+		run npm install -g "${NPM_MISSING[@]}"
+	fi
 else
 	warn "npm is unavailable; re-run bootstrap after fnm activates Node $NODE_VERSION"
 fi
 
 printf '\n==> AI harness configuration\n'
-if ! command -v claude >/dev/null 2>&1; then
+if dry_run || ! command -v claude >/dev/null 2>&1; then
 	run /bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
 fi
-if [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command "$REPO_ROOT/bin/agents_link" all
-elif ! "$REPO_ROOT/bin/agents_link" all; then
+if ! run "$REPO_ROOT/bin/agents_link" all; then
 	warn "agent links were seeded, but one or more adapters need attention"
 	warn "write your CLIProxyAPI token into claude/auth-token, then re-run bin/agents_link all"
 	warn "if ~/.claude is still a real directory, fold it in with bin/claude_link --migrate"
 fi
 
 printf '\n==> Legcord settings\n'
-if [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command "$REPO_ROOT/bin/legcord_link"
-elif ! "$REPO_ROOT/bin/legcord_link"; then
+if ! run "$REPO_ROOT/bin/legcord_link"; then
 	warn "Legcord settings link failed; run bin/legcord_link again after launching Legcord once"
 fi
 
 printf '\n==> T3 Code activity trigger\n'
-if [[ "$DRY_RUN" -eq 1 ]]; then
-	quote_command "$REPO_ROOT/bin/t3_awake" install
-elif ! "$REPO_ROOT/bin/t3_awake" install; then
+if ! run "$REPO_ROOT/bin/t3_awake" install; then
 	warn "t3_awake install failed; run bin/t3_awake install again after launching T3 Code once"
 fi
 
@@ -266,18 +291,13 @@ printf '\n==> Repository hooks\n'
 run git -C "$REPO_ROOT" config core.hooksPath git/hooks
 
 printf '\n==> Fisher plugins\n'
-# Plugin files are vendored under fish/. On a fresh machine Fisher has no
-# _fisher_plugins state, so `fisher update` tries installs, hits conflicts,
-# and then deletes fish_plugins. Seed the universal list first so Fisher
-# treats them as updates and overwrites the vendored copies.
+# fish_plugins is the source of truth and .gitignore keeps Fisher's output
+# untracked. Nothing is vendored, so `fisher update` has no conflicting files
+# to trip over and needs no seeded _fisher_plugins state.
 run "$FISH_BIN" -c '
 	if not functions -q fisher
 		curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source
 		and fisher install jorgebucaran/fisher
-	end
-	set -l manifest $__fish_config_dir/fish_plugins
-	if test -e $manifest; and not set -q _fisher_plugins[1]
-		set -U _fisher_plugins (string match -r -- '\''^[^\s]+$'\'' <$manifest)
 	end
 	fisher update
 '
@@ -289,10 +309,10 @@ fi
 
 if [[ "$WITH_HERDR_SERVICE" -eq 1 ]]; then
 	printf '\n==> Herdr service\n'
-	if command -v brew >/dev/null 2>&1 && brew services list 2>/dev/null | awk '$1 == "herdr" && $2 == "started" { found=1 } END { exit !found }'; then
-		echo "Herdr service is already running."
-	else
+	if dry_run || ! brew services list 2>/dev/null | awk '$1 == "herdr" && $2 == "started" { found = 1 } END { exit !found }'; then
 		run brew services start herdr
+	else
+		echo "Herdr service is already running."
 	fi
 fi
 

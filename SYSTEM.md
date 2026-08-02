@@ -22,8 +22,8 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | Tool | Active snapshot state | Reproduction policy |
 |------|-----------------------|---------------------|
 | Fish | 4.6.0, official signed macOS pkg at `/usr/local/bin/fish`; login shell | Fresh machines install Homebrew Fish; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
-| Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `bin/bootstrap` |
-| Python | 3.14.4, pyenv global | Pinned in `bin/bootstrap` |
+| Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `.node-version`; `bin/bootstrap` installs and selects it, and `fnm env --use-on-cd` reads the same file |
+| Python | 3.14.4, pyenv global | Pinned in `.python-version`; `bin/bootstrap` installs and selects it, and `pyenv init -` reads the same file |
 | Go | Official Go 1.26.2 at `/usr/local/go` wins over Homebrew Go 1.26.5 | Keep `fish/conf.d/00-paths.fish` preference; Brewfile Go is the fresh-machine fallback |
 | Rust | Homebrew Rust 1.97.1 wins on PATH; rustup stable ARM64 1.96.0 also exists | Brewfile reproduces Homebrew Rust; rustup remains documented local state |
 | Bun | 1.3.14, Homebrew | Declared in Brewfile; the former `~/.bun` native install is no longer present |
