@@ -1,5 +1,12 @@
 # Homebrew Cask Application Lifecycle Design
 
+> **Superseded 2026-08-01.** A simplification review replaced the durable
+> on-disk lifecycle state this design specifies (TSV stores, atomic pending
+> publication, signal fences, reopen-fallback queue) with in-memory fish lists
+> (commit cb305c2). The behavior contract — consolidated confirmation,
+> graceful-then-force stop, pre-upgrade recheck, immediate reopen, skip/failure
+> reporting — still holds and remains tested.
+
 ## Summary
 
 Enhance `bin/u` so Homebrew cask upgrades do not leave already-running applications executing the old version after Homebrew replaces their bundles. The update workflow will identify outdated casks with `.app` artifacts, determine which corresponding applications are running, close only those applications, upgrade their casks, and reopen the applications that were running before the upgrade.

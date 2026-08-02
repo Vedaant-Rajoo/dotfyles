@@ -1,5 +1,9 @@
 # Homebrew Cask Application Lifecycle Implementation Plan
 
+> **Superseded 2026-08-01.** The durable state machinery this plan builds was
+> replaced by an in-memory rewrite of `bin/u` (commit cb305c2). Kept for the
+> design history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `bin/u` close running applications before their Homebrew casks upgrade and reliably reopen only the applications that were running initially.
