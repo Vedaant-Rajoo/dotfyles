@@ -349,13 +349,16 @@ project_cursor_rule() {
 # not be overwritten silently.
 cursor_hooks_wholly_ours() {
 	local file="$1" cmd found=0
+	# jq missing or the file unparsable both mean "not provably ours"; the
+	# caller then preserves the file in a backup instead of overwriting it.
+	command -v jq >/dev/null 2>&1 || return 1
 	while IFS= read -r cmd; do
 		found=1
 		case "$cmd" in
 		*"$AGENTS_ROOT/hooks/"*) ;;
 		*) return 1 ;;
 		esac
-	done < <(grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$file")
+	done < <(jq -r '.. | objects | .command? | strings' "$file" 2>/dev/null)
 	[[ "$found" -eq 1 ]]
 }
 

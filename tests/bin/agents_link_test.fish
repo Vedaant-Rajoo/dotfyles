@@ -87,6 +87,14 @@ check "a foreign file is backed up" 0 (run_link $h3)
 check "the foreign backup preserves its content" 0 (grep -q /opt/foreign-hook $h3/$backup_rel 2>/dev/null; echo $status)
 check "the foreign file is replaced with ours" 0 (grep -q $repo/agents/hooks/ $h3/$hooks_rel; echo $status)
 
+# Unparsable JSON cannot be proven ours, so it is treated as foreign and
+# preserved in the backup.
+set h4 (fresh_home)
+printf 'not json at all\n' >$h4/$hooks_rel
+check "an unparsable file is backed up" 0 (run_link $h4)
+check "the unparsable backup preserves its content" 0 (grep -q "not json at all" $h4/$backup_rel 2>/dev/null; echo $status)
+check "the unparsable file is replaced with ours" 0 (grep -q $repo/agents/hooks/ $h4/$hooks_rel; echo $status)
+
 # --- summary ------------------------------------------------------------
 
 printf '\n%d checks, %d failures\n' $checks $failures
