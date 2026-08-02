@@ -38,8 +38,8 @@ brew "lazygit"
 # Node is installed and selected by bin/bootstrap; the version is pinned in
 # .node-version, which fnm also reads directly through `fnm env --use-on-cd`.
 brew "fnm"
-# On this snapshot machine, official Go under /usr/local/go wins on PATH;
-# Homebrew Go is the fallback on a fresh machine. See fish/conf.d/00-paths.fish.
+# The only Go on PATH: the official /usr/local/go install is gone, so this
+# supplies `go` and `gofmt` everywhere. See fish/conf.d/00-paths.fish.
 brew "go"
 # Python is installed and selected by bin/bootstrap; the version is pinned in
 # .python-version, which pyenv also resolves directly through `pyenv init -`.
