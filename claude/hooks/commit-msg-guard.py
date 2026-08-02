@@ -55,15 +55,20 @@ def extract_message(command):
 
     # inline form: -m "...", -am '...', --message=...
     # git joins repeated -m into paragraphs, so every occurrence is collected:
-    # `-m subject -m body` is a body just as much as a heredoc is.
-    for pattern in (
-        r"(?:^|\s)(?:-[a-zA-Z]*m|--message)[= ]\s*\"((?:[^\"\\]|\\.)*)\"",
-        r"(?:^|\s)(?:-[a-zA-Z]*m|--message)[= ]\s*'([^']*)'",
-        r"(?:^|\s)(?:-[a-zA-Z]*m|--message)[= ]\s*(\S+)",
-    ):
-        parts = [m.group(1) for m in re.finditer(pattern, command)]
-        if parts:
-            return "\n\n".join(parts)
+    # `-m subject -m body` is a body just as much as a heredoc is. One pattern
+    # covers all three quoting styles — per-style passes let a command mixing
+    # them (`-m "subject" -m 'body'`) return only the first style's matches
+    # and smuggle the body past the check.
+    pattern = (
+        r"(?:^|\s)(?:-[a-zA-Z]*m|--message)[= ]\s*"
+        r"(?:\"((?:[^\"\\]|\\.)*)\"|'([^']*)'|(\S+))"
+    )
+    parts = [
+        next(g for g in m.groups() if g is not None)
+        for m in re.finditer(pattern, command)
+    ]
+    if parts:
+        return "\n\n".join(parts)
     return None  # no message on the command line (amend --no-edit, -F file, …)
 
 
