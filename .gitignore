@@ -113,6 +113,7 @@ herdr/release-notes.json
 #     runtime file can then never ride into a commit on `git add -A`. New
 #     config files must be whitelisted here on purpose. ---
 claude/*
+!claude/README.md
 !claude/CLAUDE.md
 !claude/api-key-helper.sh
 !claude/hooks/

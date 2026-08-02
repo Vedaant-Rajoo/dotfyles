@@ -84,8 +84,9 @@ These are deliberate, and the reason the table above is the contract:
 
 - **Codex** has no stable subagent file format; `agents_link` prints an INFO
   line rather than writing a guess.
-- **Cursor** has a `~/.cursor/agents` directory whose format is unverified in
-  the installed build. Left unmanaged, also reported as INFO.
+- **Cursor** reads subagents only from a workspace `.cursor/agents`; it has no
+  supported user-global projection. `~/.cursor/agents` is deliberately not
+  generated, and `agents_link` reports the target as N/A/INFO.
 
 ## Adding one
 
