@@ -146,14 +146,17 @@ remain outside scope.
 
 ## Git hooks and secret scanning
 
-Bootstrap enables the tracked hook for this clone:
+Bootstrap enables the tracked hooks for this clone:
 
 ```bash
 git config core.hooksPath git/hooks
 ```
 
-The hook runs `gitleaks protect --staged -v`. Before commits that affect
-credential-adjacent config, also run:
+Two hooks run from there: `pre-commit` scans staged changes with
+`gitleaks protect --staged -v`, and `commit-msg` enforces the commit style —
+a single lowercase conventional-commit subject of at most 100 characters, no
+prose body, trailers only — for every author, human or agent. Before commits
+that affect credential-adjacent config, also run:
 
 ```bash
 gitleaks detect --source . -v

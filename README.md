@@ -58,7 +58,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | [`agents/`](agents/README.md) | Canonical cross-harness rules, skills, subagents, hooks |
 | [`claude/`](claude/README.md) | Claude-native settings, hooks, statusline, adapters into `agents/` |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
-| `git/` | Global XDG Git identity, ignore rules, and opt-in repository hook |
+| `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
 | leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `monid/`, `rectangle-pro/`, `zed/`, `.vscode/` |
