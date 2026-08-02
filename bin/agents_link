@@ -364,6 +364,24 @@ project_cursor_rule() {
 	fi
 }
 
+# JSON carries no comment header, so Cursor hook ownership is inferred from
+# the command paths: a file is wholly ours only when it has hook commands and
+# every one of them points into agents/hooks/. A file the user extended with a
+# custom hook still contains our marker commands, but it is not wholly ours —
+# the extra commands are configuration this script never generated and must
+# not be overwritten silently.
+cursor_hooks_wholly_ours() {
+	local file="$1" cmd found=0
+	while IFS= read -r cmd; do
+		found=1
+		case "$cmd" in
+		*"$AGENTS_ROOT/hooks/"*) ;;
+		*) return 1 ;;
+		esac
+	done < <(grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$file")
+	[[ "$found" -eq 1 ]]
+}
+
 write_cursor_hooks() {
 	local live="$HOME/.cursor/hooks.json"
 	local expected
@@ -390,11 +408,11 @@ write_cursor_hooks() {
 		say 'ok:' "Cursor portable hooks already current"
 		return
 	fi
-	# JSON carries no comment header, so ownership is inferred from the command
-	# path: a file already pointing into agents/hooks/ is a previous generation
-	# of ours and is replaced outright. Backing those up would leave a stale
-	# backup that makes the *next* format change refuse to write.
-	if [[ -f "$live" ]] && ! grep -qF "$AGENTS_ROOT/hooks/" "$live"; then
+	# A wholly-ours file is a previous generation and is replaced outright:
+	# backing those up would leave a stale backup that makes the *next* format
+	# change refuse to write. Anything else — foreign or user-extended — is
+	# preserved in a backup first, and refused while that backup still stands.
+	if [[ -f "$live" ]] && ! cursor_hooks_wholly_ours "$live"; then
 		local backup="${live}.pre-agents-link-backup"
 		if [[ ! -e "$backup" ]]; then
 			cp "$live" "$backup"
