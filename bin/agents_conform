@@ -76,16 +76,6 @@ check_repo_link() {
 	fi
 }
 
-check_json() {
-	local path="$1" label="$2"
-	if python3 -m json.tool "$path" >/dev/null 2>&1; then
-		say OK "$label parses"
-	else
-		say BROKEN "$label is invalid JSON"
-		static_failed=1
-	fi
-}
-
 # The manifest shape and the Claude hook wiring are checked by agents_render,
 # which owns the manifest contract rather than restating it here.
 check_render() {
@@ -119,12 +109,10 @@ check_skill_sources() {
 	done
 }
 
+# JSON validity is not restated here: the delegated agents_link --check covers
+# Claude settings (jq) and Cursor hooks (byte-compare against the rendered
+# form), and validate-manifest parses the manifest itself.
 check_repo_link
-check_json "$REPO_ROOT/agents/hooks/manifest.json" "portable hooks manifest"
-check_json "$REPO_ROOT/claude/settings.json" "Claude settings"
-if command -v cursor-agent >/dev/null 2>&1 || command -v agent >/dev/null 2>&1 || [[ -d "$HOME/.cursor" ]]; then
-	check_json "$HOME/.cursor/hooks.json" "Cursor hooks"
-fi
 check_render validate-manifest "portable hooks manifest is well-formed"
 check_render check-claude-hooks "Claude settings run every portable hook"
 check_skill_sources
