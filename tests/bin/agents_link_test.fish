@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# Tests for bin/agents_link Cursor hook ownership handling.
+# Tests for bin/agents_link: Cursor hook ownership and the adopt subcommand.
 # Run: fish tests/bin/agents_link_test.fish
 
 set -g repo (path resolve (status dirname)/../..)
@@ -94,6 +94,54 @@ printf 'not json at all\n' >$h4/$hooks_rel
 check "an unparsable file is backed up" 0 (run_link $h4)
 check "the unparsable backup preserves its content" 0 (grep -q "not json at all" $h4/$backup_rel 2>/dev/null; echo $status)
 check "the unparsable file is replaced with ours" 0 (grep -q $repo/agents/hooks/ $h4/$hooks_rel; echo $status)
+
+# --- adopt subcommand ---------------------------------------------------
+#
+# Validation-failure cases and dry-run touch nothing, so they run against the
+# real repository script with a fake home. Only the happy path mutates its
+# repo, and that one runs against a disposable skeleton clone.
+
+set h5 (fresh_home)
+mkdir -p $h5/.agents/skills/zz-adopt-fixture
+printf 'name: zz-adopt-fixture\ndescription: test fixture\n' >$h5/.agents/skills/zz-adopt-fixture/SKILL.md
+
+check "adopt without a name is a usage error" 1 (env HOME=$h5 $bin adopt >/dev/null 2>&1; echo $status)
+check "check before adopt is a usage error" 1 (env HOME=$h5 $bin --check adopt >/dev/null 2>&1; echo $status)
+check "adopt rejects linker flags" 1 (env HOME=$h5 $bin adopt --check zz-adopt-fixture >/dev/null 2>&1; echo $status)
+check "adopt rejects an uppercase name" 1 (env HOME=$h5 $bin adopt UPPER >/dev/null 2>&1; echo $status)
+check "adopt rejects a missing source" 1 (env HOME=$h5 $bin adopt no-such-skill >/dev/null 2>&1; echo $status)
+check "adopt dry-run succeeds" 0 (env HOME=$h5 $bin adopt --dry-run zz-adopt-fixture >/dev/null 2>&1; echo $status)
+check "adopt dry-run moves nothing" 0 (test -d $h5/.agents/skills/zz-adopt-fixture; echo $status)
+check "adopt dry-run creates nothing in the repo" 1 (test -e $repo/agents/skills/zz-adopt-fixture; echo $status)
+
+mkdir -p $h5/.agents/skills/no-skill-md
+check "adopt rejects a source without SKILL.md" 1 (env HOME=$h5 $bin adopt no-skill-md >/dev/null 2>&1; echo $status)
+
+mkdir -p $h5/.agents/skills/wrong-name
+printf 'name: something-else\n' >$h5/.agents/skills/wrong-name/SKILL.md
+check "adopt rejects a frontmatter name mismatch" 1 (env HOME=$h5 $bin adopt wrong-name >/dev/null 2>&1; echo $status)
+
+# A fixture named after a real repo skill hits the existing-destination refusal.
+mkdir -p $h5/.agents/skills/html-planning
+printf 'name: html-planning\n' >$h5/.agents/skills/html-planning/SKILL.md
+check "adopt refuses an existing destination" 1 (env HOME=$h5 $bin adopt html-planning >/dev/null 2>&1; echo $status)
+check "the refused source is untouched" 0 (test -d $h5/.agents/skills/html-planning; echo $status)
+
+# Happy path: a skeleton repo with just enough of bin/ and agents/ for the
+# move plus a reprojection into the same fake home.
+set skel $workdir/skel
+mkdir -p $skel/bin/lib $skel/agents/skills $skel/agents/subagents $skel/agents/hooks/scripts $skel/claude
+cp $repo/bin/agents_link $repo/bin/agents_render $skel/bin/
+cp $repo/bin/lib/ui.sh $skel/bin/lib/
+printf '# rules\n' >$skel/agents/AGENTS.md
+printf '{"version":1,"hooks":[]}\n' >$skel/agents/hooks/manifest.json
+
+set h6 (fresh_home)
+mkdir -p $h6/.agents/skills/adoptee
+printf 'name: adoptee\ndescription: test fixture\n' >$h6/.agents/skills/adoptee/SKILL.md
+check "adopt moves the skill and reprojects" 0 (env HOME=$h6 $skel/bin/agents_link adopt adoptee >/dev/null 2>&1; echo $status)
+check "the adopted skill is canonical" 0 (test -f $skel/agents/skills/adoptee/SKILL.md; echo $status)
+check "the shared link points back at the canonical copy" 0 (test -L $h6/.agents/skills/adoptee; echo $status)
 
 # --- summary ------------------------------------------------------------
 

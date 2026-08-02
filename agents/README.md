@@ -75,8 +75,8 @@ It works immediately but only on this machine, so `bin/agents_link --check`
 reports it as unmanaged. Promote it:
 
 ```bash
-bin/agents_adopt --dry-run <name>   # show what would move
-bin/agents_adopt <name>             # move into agents/skills, relink, reproject
+bin/agents_link adopt --dry-run <name>   # show what would move
+bin/agents_link adopt <name>             # move into agents/skills, relink, reproject
 ```
 
 The directory is moved into `agents/skills/<name>` and linked back where it was.
