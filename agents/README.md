@@ -103,7 +103,8 @@ bin/agents_conform --live --skills  # also test skill discovery/invocation
 ```
 
 The static tier exits non-zero on drift. It also validates
-`agents/hooks/manifest.json` against its own schema, checks that Claude's
+`agents/hooks/manifest.json` directly — shape, portable events, executable
+commands — checks that Claude's
 tracked settings really run every hook the manifest calls portable, and requires
 each `agents/skills/*/SKILL.md` to declare a `name:` matching its directory. The
 live tier prints a scorecard and is informational by default because model

@@ -86,8 +86,8 @@ check_json() {
 	fi
 }
 
-# The manifest schema and the Claude hook wiring are checked by agents_render,
-# which reads the schema file rather than restating it here.
+# The manifest shape and the Claude hook wiring are checked by agents_render,
+# which owns the manifest contract rather than restating it here.
 check_render() {
 	local subcommand="$1" label="$2" output
 	if output="$("$REPO_ROOT/bin/agents_render" "$subcommand" 2>&1)"; then
@@ -125,7 +125,7 @@ check_json "$REPO_ROOT/claude/settings.json" "Claude settings"
 if command -v cursor-agent >/dev/null 2>&1 || command -v agent >/dev/null 2>&1 || [[ -d "$HOME/.cursor" ]]; then
 	check_json "$HOME/.cursor/hooks.json" "Cursor hooks"
 fi
-check_render validate-manifest "portable hooks manifest matches its schema"
+check_render validate-manifest "portable hooks manifest is well-formed"
 check_render check-claude-hooks "Claude settings run every portable hook"
 check_skill_sources
 
