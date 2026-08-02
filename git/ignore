@@ -8,6 +8,7 @@
 **/.claude/sessions/
 **/.claude/session-env/
 **/.claude/shell-snapshots/
+**/.claude/worktrees/
 **/.claude/daemon/
 **/.claude/daemon.log
 **/.claude/telemetry/
