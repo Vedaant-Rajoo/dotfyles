@@ -24,7 +24,7 @@
 #   legcord_link --check  Report status only; make no changes.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 REPO_SETTINGS="$REPO_ROOT/legcord/storage/settings.json"
 LIVE_STORAGE="$HOME/Library/Application Support/legcord/storage"
 LIVE_SETTINGS="$LIVE_STORAGE/settings.json"

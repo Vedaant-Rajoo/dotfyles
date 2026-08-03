@@ -1,563 +1,358 @@
 #!/usr/bin/env bash
-# Hold an Amphetamine trigger session while a T3 Code thread is actively working.
-#
-# The daemon reads T3 Code's own orchestration projections read-only and
-# reflects "a turn is running" by opening or terminating a dockless sentinel
-# application. A native Amphetamine trigger keyed to that application supplies
-# the wake session; Amphetamine's own session state is never scripted.
+# Hold a parent-bound caffeinate assertion while a T3 Code thread is working.
 
 set -euo pipefail
 
 DB="${T3_AWAKE_DB:-$HOME/.t3/userdata/state.sqlite}"
 RUNTIME_JSON="${T3_AWAKE_RUNTIME_JSON:-$HOME/.t3/userdata/server-runtime.json}"
-APP="${T3_AWAKE_APP:-$HOME/Applications/T3 Busy.app}"
 POLL="${T3_AWAKE_POLL:-2}"
 IDLE_POLL="${T3_AWAKE_IDLE_POLL:-15}"
 LINGER="${T3_AWAKE_LINGER:-30}"
 LOG="${T3_AWAKE_LOG:-$HOME/Library/Logs/t3-awake.log}"
-
-# launchd holds its own descriptor on StandardErrorPath at its own offset. If it
-# pointed at LOG, every truncation in log() would leave launchd writing past the
-# new end of file and re-inflating it with NUL padding, so stderr gets its own
-# file. It follows LOG so an override still keeps the pair together.
+STATE_FILE="${T3_AWAKE_STATE:-$HOME/Library/Caches/dev.newedia.t3-awake.state}"
 ERRLOG="${LOG%.log}.err"
 
-BUNDLE_ID="dev.newedia.t3-busy"
 LABEL="dev.newedia.t3-awake"
+DOMAIN="gui/$UID"
+CAFFEINATE="/usr/bin/caffeinate"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Tracks the backgrounded poll sleep so a signal handler can interrupt it.
 SLEEP_PID=""
-
-# Set while sentinel_up is failing, so a persistent failure logs once per
-# episode rather than once per poll.
-SENTINEL_FAIL_LOGGED=0
-
-# The same throttle for sentinel_down, which needs its own flag rather than
-# sharing the one above: the two episodes are independent, and a shared flag
-# would let a failed raise silence the far more serious "cannot lower the
-# sentinel" report — the one that means the Mac is pinned awake.
-SENTINEL_DOWN_FAIL_LOGGED=0
+WAKE_PID=""
+WAKE_FAIL_LOGGED=0
 
 log() {
 	local ts
 	ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 	mkdir -p "$(dirname "$LOG")"
-	if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG")" -gt 1048576 ]; then
-		: >"$LOG"
-	fi
+	if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG")" -gt 1048576 ]; then : >"$LOG"; fi
 	printf '%s %s\n' "$ts" "$*" >>"$LOG"
 }
 
-# 0 alive, 1 dead or unreadable.
+is_pid() { [[ ${1:-} =~ ^[1-9][0-9]*$ ]]; }
+
 t3_server_alive() {
-	local pid
-	if [ ! -r "$RUNTIME_JSON" ]; then
-		return 1
-	fi
-	pid="$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' "$RUNTIME_JSON" | head -1)"
-	if [ -z "$pid" ]; then
-		return 1
-	fi
-	kill -0 "$pid" 2>/dev/null
+	local runtime pattern pid
+	[ -r "$RUNTIME_JSON" ] || return 1
+	runtime="$(<"$RUNTIME_JSON")" || return 1
+	pattern='"pid"[[:space:]]*:[[:space:]]*([0-9]+)'
+	[[ "$runtime" =~ $pattern ]] || return 1
+	pid="${BASH_REMATCH[1]}"
+	is_pid "$pid" && kill -0 "$pid" 2>/dev/null
 }
 
 # 0 busy, 1 idle, 2 unreadable or query error.
 db_busy() {
 	local out
-	if [ ! -r "$DB" ]; then
-		return 2
-	fi
-	if ! out="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
+	[ -r "$DB" ] || return 2
+	out="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
 		"SELECT EXISTS(SELECT 1 FROM projection_turns WHERE state = 'running')
-		     OR EXISTS(SELECT 1 FROM projection_pending_approvals WHERE resolved_at IS NULL);" 2>/dev/null)"; then
-		return 2
-	fi
-	if [ "$out" = "1" ]; then
-		return 0
-	fi
-	return 1
+		     OR EXISTS(SELECT 1 FROM projection_pending_approvals WHERE resolved_at IS NULL);" 2>/dev/null)" || return 2
+	[ "$out" = "1" ]
 }
 
 t3_probe() {
-	if ! t3_server_alive; then
-		printf 'idle\n'
-		return 0
+	if t3_server_alive && db_busy; then printf 'busy\n'; else printf 'idle\n'; fi
+}
+
+state_read() {
+	local daemon child extra
+	[ -r "$STATE_FILE" ] || return 1
+	IFS=' ' read -r daemon child extra <"$STATE_FILE" || return 1
+	is_pid "$daemon" && is_pid "$child" && [ -z "${extra:-}" ] || return 1
+	printf '%s %s\n' "$daemon" "$child"
+}
+
+state_matches_current() { [ "$(state_read 2>/dev/null)" = "$$ $WAKE_PID" ]; }
+
+state_write_current() {
+	local dir="${STATE_FILE%/*}"
+	[ "$dir" != "$STATE_FILE" ] || dir='.'
+	[ -n "$dir" ] || dir='/'
+	[ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null || return 1
+	{ printf '%s %s\n' "$$" "$WAKE_PID" >"$STATE_FILE"; } 2>/dev/null
+}
+
+# State is active only when ps verifies the exact direct child recorded on disk.
+wake_state() {
+	local pair daemon child process pattern
+	[ -e "$STATE_FILE" ] || { printf 'inactive\n'; return; }
+	pair="$(state_read)" || { printf 'stale\n'; return; }
+	read -r daemon child <<<"$pair"
+	if ! kill -0 "$daemon" 2>/dev/null || ! kill -0 "$child" 2>/dev/null; then
+		printf 'stale\n'; return
 	fi
-	if db_busy; then
-		printf 'busy\n'
+	process="$(/bin/ps -ww -p "$child" -o ppid=,command= 2>/dev/null)" || { printf 'stale\n'; return; }
+	pattern='^[[:space:]]*([0-9]+)[[:space:]]+/usr/bin/caffeinate[[:space:]]+-i[[:space:]]+-w[[:space:]]+([0-9]+)[[:space:]]*$'
+	if [[ "$process" =~ $pattern ]] && [ "${BASH_REMATCH[1]}" = "$daemon" ] && [ "${BASH_REMATCH[2]}" = "$daemon" ]; then
+		printf 'active (pid %s)\n' "$child"
 	else
-		printf 'idle\n'
+		printf 'stale\n'
 	fi
-	return 0
 }
 
-sentinel_exec() {
-	printf '%s/Contents/MacOS/applet' "$APP"
-}
-
-# pgrep and pkill match their operand as an extended regular expression. An APP
-# path holding regex metacharacters would match nothing, or be rejected outright
-# as an invalid pattern; either way sentinel_running reports "stopped" for an
-# applet that is genuinely running, and sentinel_down then returns success
-# without having killed anything — leaving the machine pinned awake. Quote the
-# path so it is matched literally.
-sentinel_pattern() {
-	sentinel_exec | sed 's/[][^$.*+?(){}|\]/\\&/g'
-}
-
-sentinel_running() {
-	pgrep -f "$(sentinel_pattern)" >/dev/null 2>&1
-}
-
-# The watch loop reconciles on every poll, so a sentinel that cannot be started
-# would otherwise write a log line every POLL seconds — turning a missing bundle
-# into a log flood in the one file you read when the machine is stuck awake. Log
-# the first failure of an episode and stay quiet until the sentinel comes up.
-sentinel_fail() {
-	if [ "$SENTINEL_FAIL_LOGGED" -eq 0 ]; then
-		log "$1"
-		SENTINEL_FAIL_LOGGED=1
-	fi
+wake_fail() {
+	if [ "$WAKE_FAIL_LOGGED" -eq 0 ]; then log "$1"; WAKE_FAIL_LOGGED=1; fi
 	return 1
 }
 
-sentinel_up() {
-	if sentinel_running; then
-		SENTINEL_FAIL_LOGGED=0
-		return 0
-	fi
-	if [ ! -d "$APP" ]; then
-		sentinel_fail "sentinel missing at $APP"
-		return 1
-	fi
-	if ! open "$APP" >/dev/null 2>&1; then
-		sentinel_fail "failed to open sentinel at $APP"
-		return 1
-	fi
-	local i
-	for i in 1 2 3 4 5 6 7 8 9 10; do
-		if sentinel_running; then
-			SENTINEL_FAIL_LOGGED=0
-			return 0
+wake_pid_alive() { is_pid "$WAKE_PID" && kill -0 "$WAKE_PID" 2>/dev/null; }
+
+state_remove_owned() {
+	local daemon=''
+	if [ -r "$STATE_FILE" ]; then IFS=' ' read -r daemon _ <"$STATE_FILE" || true; fi
+	[ "$daemon" != "$$" ] || rm -f "$STATE_FILE" 2>/dev/null || true
+}
+
+wake_discard() {
+	local pid="$WAKE_PID"
+	WAKE_PID=""
+	if is_pid "$pid"; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+	state_remove_owned
+}
+
+wake_up() {
+	if wake_pid_alive; then
+		if ! state_matches_current && ! state_write_current; then
+			wake_discard
+			wake_fail "cannot record caffeinate state at $STATE_FILE"
+			return 1
 		fi
-		sleep 0.5
+		WAKE_FAIL_LOGGED=0
+		return
+	fi
+
+	if is_pid "$WAKE_PID"; then wait "$WAKE_PID" 2>/dev/null || true; fi
+	WAKE_PID=""
+	[ -x "$CAFFEINATE" ] || { wake_fail "caffeinate is unavailable at $CAFFEINATE"; return 1; }
+	"$CAFFEINATE" -i -w "$$" &
+	WAKE_PID=$!
+	if ! wake_pid_alive; then
+		wait "$WAKE_PID" 2>/dev/null || true
+		WAKE_PID=""
+		wake_fail "caffeinate exited before acquiring the wake assertion"
+		return 1
+	fi
+	if ! state_write_current; then
+		wake_discard
+		wake_fail "cannot record caffeinate state at $STATE_FILE"
+		return 1
+	fi
+	WAKE_FAIL_LOGGED=0
+}
+
+wake_down() { wake_discard; WAKE_FAIL_LOGGED=0; }
+
+validate_intervals() {
+	local knob value
+	for knob in POLL IDLE_POLL; do
+		value="${!knob}"
+		if [[ ! "$value" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ || ! "$value" =~ [1-9] ]]; then
+			printf 'T3_AWAKE_%s must be a positive number, got: %s\n' "$knob" "$value" >&2
+			return 78
+		fi
 	done
-	sentinel_fail "sentinel did not appear after open"
-	return 1
-}
-
-sentinel_down() {
-	if ! sentinel_running; then
-		SENTINEL_DOWN_FAIL_LOGGED=0
-		return 0
-	fi
-	pkill -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
-	local i
-	for i in 1 2 3 4 5 6 7 8 9 10; do
-		if ! sentinel_running; then
-			SENTINEL_DOWN_FAIL_LOGGED=0
-			return 0
-		fi
-		sleep 0.5
-	done
-	# Repeating SIGTERM cannot win against an applet that ignores it, and the
-	# loop would re-send it on every poll while Amphetamine holds the machine
-	# awake. Escalate instead: an unkillable sentinel is a worse outcome than
-	# an ungraceful one.
-	#
-	# Both lines below are one episode, so a single flag decides both: the first
-	# failing poll still records the whole story, and every poll after it stays
-	# silent until the sentinel actually comes down. Without this, a pkill that
-	# can never signal its target — EPERM against a same-path process owned by
-	# another user — writes two lines every idle poll, flooding the one file you
-	# read when the machine is stuck awake.
-	local speak="$SENTINEL_DOWN_FAIL_LOGGED"
-	SENTINEL_DOWN_FAIL_LOGGED=1
-	if [ "$speak" -eq 0 ]; then
-		log "sentinel ignored SIGTERM; escalating to SIGKILL"
-	fi
-	pkill -9 -f "$(sentinel_pattern)" >/dev/null 2>&1 || true
-	for i in 1 2 3 4; do
-		if ! sentinel_running; then
-			SENTINEL_DOWN_FAIL_LOGGED=0
-			return 0
-		fi
-		sleep 0.5
-	done
-	if [ "$speak" -eq 0 ]; then
-		log "sentinel survived SIGKILL at $APP"
-	fi
-	return 1
-}
-
-# osacompile ad-hoc signs the bundle, and editing Info.plist invalidates that
-# signature, so the bundle must be re-signed after patching.
-sentinel_build() {
-	local src="$REPO_DIR/amphetamine/t3-busy.applescript"
-	if [ ! -r "$src" ]; then
-		printf 'missing applet source: %s\n' "$src" >&2
-		return 1
-	fi
-	sentinel_down || true
-	mkdir -p "$(dirname "$APP")"
-	rm -rf "$APP"
-	# Both tools ad-hoc sign and announce "replacing existing signature" on
-	# success, which is pure noise; but a codesign failure is what aborts an
-	# install, so it must not be swallowed. Capture each and report only on
-	# failure: quiet when it works, diagnosable when it does not.
-	local out
-	if ! out="$(osacompile -s -o "$APP" "$src" 2>&1)"; then
-		printf 'failed to compile applet: %s\n%s\n' "$src" "$out" >&2
-		return 1
-	fi
-	/usr/libexec/PlistBuddy -c 'Add :LSUIElement bool true' "$APP/Contents/Info.plist" >/dev/null
-	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist" >/dev/null 2>&1 ||
-		/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$APP/Contents/Info.plist" >/dev/null
-	if ! out="$(codesign --force --sign - "$APP" 2>&1)"; then
-		printf 'failed to sign applet: %s\n%s\n' "$APP" "$out" >&2
-		return 1
+	if [[ ! "$LINGER" =~ ^[1-9][0-9]*$ ]]; then
+		printf 'T3_AWAKE_LINGER must be a positive whole number, got: %s\n' "$LINGER" >&2
+		return 78
 	fi
 }
 
-cmd_sentinel() {
-	case "${1:-}" in
-	build) sentinel_build ;;
-	up) sentinel_up ;;
-	down) sentinel_down ;;
-	state)
-		if sentinel_running; then
-			printf 'running\n'
-		else
-			printf 'stopped\n'
-		fi
-		;;
-	*)
-		printf 'usage: bin/t3_awake sentinel <build|up|down|state>\n' >&2
-		return 64
-		;;
-	esac
-}
-
-# Runs on every exit path, and takes down any applet that is registered by the
-# time it runs. It cannot promise more than that: a signal arriving while
-# sentinel_up is still waiting on LaunchServices lands before the applet has
-# registered, so the first sentinel_down finds nothing to kill and returns
-# success. The second pass, after a short pause, catches an applet that
-# registers in that window. An applet that takes longer than the pause to appear
-# can still outlive the daemon; `bin/t3_awake sentinel down` clears it.
 watch_cleanup() {
 	local rc=$?
-	if [ -n "$SLEEP_PID" ]; then
-		kill "$SLEEP_PID" 2>/dev/null || true
-		SLEEP_PID=""
-	fi
-	sentinel_down || true
-	sleep 1
-	sentinel_down || true
+	trap - TERM INT HUP
+	if is_pid "$SLEEP_PID"; then kill "$SLEEP_PID" 2>/dev/null || true; wait "$SLEEP_PID" 2>/dev/null || true; fi
+	SLEEP_PID=""
+	wake_down
 	return "$rc"
 }
 
-# Only the watch loop consumes these, so only the watch loop is gated on them.
-# Validating at top level instead made an exported bad value break `probe`,
-# `status` and — the part that matters — `uninstall`, so the guard meant to stop
-# a stranded applet became the reason the user could not clear one.
-#
-# Decimals are legal because POLL and IDLE_POLL feed `sleep`, which accepts
-# fractions. Zero is not: it would spin the poll loop with no delay. A
-# non-numeric value is the real hazard, because LINGER's arithmetic comparison
-# would then error rather than evaluate false, and the guarding `if` swallows
-# that — skipping the linger branch on every iteration so the sentinel never
-# comes down.
-validate_intervals() {
-	local knob
-	for knob in POLL IDLE_POLL LINGER; do
-		case "${!knob}" in
-		*[!0-9.]* | *.*.*) ;; # not a plain decimal number
-		*[1-9]*) continue ;;  # a number, and not zero
-		esac
-		printf 'T3_AWAKE_%s must be a positive number, got: %s\n' "$knob" "${!knob}" >&2
-		return 78
-	done
-}
-
 cmd_watch() {
-	local state want interval now last_busy fails rc cached linger_secs
+	local state='unknown' cached='idle' want interval rc fails=0 existing
+	local last_busy now
 
 	validate_intervals || return $?
+	last_busy=$((SECONDS - LINGER))
+	if [ -e "$STATE_FILE" ]; then
+		existing="$(wake_state)"
+		case "$existing" in
+		active*) printf 'another t3-awake watch owns %s (%s)\n' "$STATE_FILE" "$existing" >&2; return 1 ;;
+		*) rm -f "$STATE_FILE" 2>/dev/null || { printf 'cannot clear stale t3-awake state: %s\n' "$STATE_FILE" >&2; return 1; } ;;
+		esac
+	fi
 
-	# LINGER is the one knob compared arithmetically, and `[ x -ge 2.5 ]` is an
-	# error rather than a comparison. Floor it once to whole seconds — the same
-	# granularity `date +%s` reports — so a fractional value cannot wedge the
-	# release branch shut.
-	linger_secs="${LINGER%%.*}"
-	[ -n "$linger_secs" ] || linger_secs=0
-
-	# EXIT covers every way out, not just the signals: a `set -e` abort inside
-	# the loop would otherwise leave the applet running with Amphetamine holding
-	# the machine awake, and launchd's KeepAlive would not rescue it because the
-	# respawned process dies before it can reconcile. The signal handlers only
-	# exit; EXIT performs the single cleanup, so nothing runs twice and the
-	# status is preserved.
 	trap 'watch_cleanup' EXIT
 	trap 'exit 0' TERM INT HUP
-
-	state="unknown"
-	cached="idle"
-	last_busy=0
-	fails=0
-
-	# linger_secs, not LINGER: the floored value is what the release branch
-	# compares, so logging the raw knob would report a 4-second linger as
-	# "4.5s" and send anyone reading the log after a stuck-awake episode
-	# looking for a discrepancy that is not there.
-	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${linger_secs}s)"
+	log "watch started (poll=${POLL}s idle=${IDLE_POLL}s linger=${LINGER}s backend=caffeinate-i)"
 
 	while :; do
 		if t3_server_alive; then
 			interval="$POLL"
-			# Queried unconditionally on every poll. An earlier revision
-			# short-circuited on the mtime of state.sqlite-wal, which could
-			# latch the busy state permanently: the change signal was consumed
-			# before the query result was known, so a transient error stopped
-			# the retry from ever running again, and the second-granular mtime
-			# could miss a commit landing in the same second. Two EXISTS
-			# probes against small projections cost single-digit milliseconds,
-			# which buys nothing worth that risk.
-			rc=0
-			db_busy || rc=$?
+			rc=0; db_busy || rc=$?
 			case "$rc" in
-			0)
-				cached="busy"
-				fails=0
-				;;
-			1)
-				cached="idle"
-				fails=0
-				;;
+			0) cached='busy'; fails=0 ;;
+			1) cached='idle'; fails=0 ;;
 			*)
 				fails=$((fails + 1))
-				# Logged the first time the threshold is crossed, whatever
-				# the cached state was. Gating this on `cached != idle`
-				# hid the case that matters most: a T3 Code upgrade that
-				# renames a table or column breaks the query permanently,
-				# and a daemon restarting after that upgrade is already
-				# idle — so the feature would be dead forever with an
-				# empty log to diagnose it from. "Failed" rather than
-				# "unreadable", because a schema break is not an
-				# unreadable file and the wrong word sends the reader
-				# after the wrong cause. `-eq` keeps it to one line per
-				# failure episode; `fails` resets on the next success.
-				if [ "$fails" -eq 5 ]; then
-					log "busy query failed for $fails consecutive polls; falling back to idle"
-				fi
-				if [ "$fails" -ge 5 ]; then
-					cached="idle"
-				fi
+				[ "$fails" -ne 5 ] || log "busy query failed for $fails consecutive polls; falling back to idle"
+				[ "$fails" -lt 5 ] || cached='idle'
 				;;
 			esac
 			want="$cached"
 		else
-			interval="$IDLE_POLL"
-			want="idle"
-			cached="idle"
-			fails=0
+			interval="$IDLE_POLL"; want='idle'; cached='idle'; fails=0
 		fi
 
-		now="$(date +%s)"
-		if [ "$want" = "busy" ]; then
+		now=$SECONDS
+		if [ "$want" = 'busy' ]; then
 			last_busy="$now"
+			if wake_up; then
+				[ "$state" = 'busy' ] || log "busy: wake assertion acquired"
+				state='busy'
+			fi
+		elif [ $((now - last_busy)) -ge "$LINGER" ]; then
+			wake_down
+			[ "$state" = 'idle' ] || log "idle: wake assertion released after ${LINGER}s linger"
+			state='idle'
 		fi
 
-		# Reconciled on every poll rather than only on a transition. Both
-		# helpers are idempotent and cost one pgrep, and a cached state that
-		# is never re-checked drifts from reality in both directions: an
-		# applet that dies on its own leaves the daemon believing the machine
-		# is still held awake, and an applet started by anything else — a
-		# stranded instance, or macOS reopening it at login — is held up for
-		# as long as the daemon runs. That second direction is the one the
-		# design forbids. Only the log lines stay gated on the transition, so
-		# the log still records changes and not every poll.
-		if [ "$want" = "busy" ]; then
-			if sentinel_up; then
-				if [ "$state" != "busy" ]; then
-					log "busy: sentinel up"
-				fi
-				state="busy"
-			fi
-		elif [ $((now - last_busy)) -ge "$linger_secs" ]; then
-			if sentinel_down; then
-				if [ "$state" != "idle" ]; then
-					log "idle: sentinel down after ${linger_secs}s linger"
-				fi
-				state="idle"
-			fi
-		fi
-
-		# Bash defers a caught signal until the running foreground child exits,
-		# and the sleep process does not receive the signal itself. A plain
-		# sleep would therefore delay shutdown by up to IDLE_POLL seconds —
-		# past launchd's SIGTERM-to-SIGKILL grace window, where a SIGKILL
-		# would leave the applet running with nothing left to clean it up.
-		# Backgrounding the sleep and waiting on it makes the trap fire at
-		# once; watch_cleanup kills the child so no orphan is left behind.
-		sleep "$interval" &
-		SLEEP_PID=$!
-		wait "$SLEEP_PID" || true
+		sleep "$interval" & SLEEP_PID=$!
+		wait "$SLEEP_PID" 2>/dev/null || true
 		SLEEP_PID=""
 	done
 }
 
-plist_target() {
-	printf '%s/Library/LaunchAgents/%s.plist' "$HOME" "$LABEL"
-}
+plist_target() { printf '%s/Library/LaunchAgents/%s.plist' "$HOME" "$LABEL"; }
+service_loaded() { launchctl print "$DOMAIN/$1" >/dev/null 2>&1; }
 
-# 0 if the label is present in this user's GUI domain, 1 if it is not.
-service_loaded() {
-	launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
-}
-
-# `launchctl bootout` returns as soon as launchd accepts the request, not when
-# the job is gone: the teardown is asynchronous, and this daemon's own
-# watch_cleanup adds a second or more of sentinel takedown to that window. A
-# `bootstrap` fired into the window fails with "Bootstrap failed: 5:
-# Input/output error" and leaves *nothing* loaded — so re-running bin/bootstrap
-# on an already-provisioned machine silently killed the feature it installs.
-# Poll until the label really leaves the domain, bounded so a wedged job cannot
-# hang the install forever.
-#
-# Split out from cmd_install so the tests can drive it without touching the
-# user's real launchd domain: `launchctl` is called as a bare command, so a
-# sourcing test can shadow it with a shell function.
 wait_for_bootout() {
 	local label="$1" tries="${2:-40}" i=0
-	while :; do
-		if ! service_loaded "$label"; then
-			return 0
-		fi
-		i=$((i + 1))
-		if [ "$i" -ge "$tries" ]; then
-			return 1
-		fi
+	while service_loaded "$label"; do
+		i=$((i + 1)); [ "$i" -lt "$tries" ] || return 1
 		sleep 0.25
 	done
 }
 
-cmd_status() {
-	local running approvals
-	running='?'
-	approvals='?'
-	if [ -r "$DB" ]; then
-		running="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
-			"SELECT COUNT(*) FROM projection_turns WHERE state='running';" 2>/dev/null || echo '?')"
-		approvals="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" \
-			"SELECT COUNT(*) FROM projection_pending_approvals WHERE resolved_at IS NULL;" 2>/dev/null || echo '?')"
-	fi
-
-	printf 'database:        %s\n' "$DB"
-	printf 'running turns:   %s\n' "$running"
-	printf 'open approvals:  %s\n' "$approvals"
-	if t3_server_alive; then
-		printf 'T3 Code server:  alive\n'
-	else
-		printf 'T3 Code server:  down\n'
-	fi
-	printf 'sentinel:        %s\n' "$(cmd_sentinel state)"
-	printf 'desired state:   %s\n' "$(t3_probe)"
-	printf 'launch agent:    %s\n' \
-		"$(launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 && echo loaded || echo 'not loaded')"
-	printf 'amphetamine:     session=%s trigger=%s\n' \
-		"$(osascript -e 'tell application "Amphetamine" to session is active' 2>/dev/null || echo '?')" \
-		"$(osascript -e 'tell application "Amphetamine" to session is Trigger' 2>/dev/null || echo '?')"
+script_sha() {
+	local out
+	out="$(/usr/bin/shasum -a 256 "$REPO_DIR/bin/t3_awake")" || return 1
+	printf '%s\n' "${out%% *}"
 }
 
-cmd_install() {
-	local dry=0 template target
-	# Anything that was not exactly --dry-run used to fall through to a real
-	# install, so `install --dryrun` built the applet, wrote the LaunchAgent
-	# and booted it — the opposite of what the typo asked for.
-	case "$#:${1:-}" in
-	0:) ;;
-	1:--dry-run) dry=1 ;;
-	*)
-		printf 'usage: bin/t3_awake install [--dry-run]\n' >&2
-		return 64
-		;;
-	esac
-	template="$REPO_DIR/amphetamine/$LABEL.plist"
-	target="$(plist_target)"
+valid_sha() { [[ $1 =~ ^[0-9a-f]{64}$ ]]; }
+escape_sed_replacement() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 
-	if [ ! -r "$template" ]; then
-		printf 'missing LaunchAgent template: %s\n' "$template" >&2
-		return 1
+render_plist() {
+	local sha="$1" output="$2" template="$REPO_DIR/launchd/$LABEL.plist" bin_path err_path
+	[ -r "$template" ] || { printf 'missing LaunchAgent template: %s\n' "$template" >&2; return 1; }
+	bin_path="$(escape_sed_replacement "$REPO_DIR/bin/t3_awake")"
+	err_path="$(escape_sed_replacement "$ERRLOG")"
+	sed -e "s|__T3_AWAKE_BIN__|$bin_path|g" -e "s|__T3_AWAKE_ERR__|$err_path|g" \
+		-e "s|__T3_AWAKE_SHA256__|$sha|g" "$template" >"$output"
+}
+
+installed_script_sha() {
+	sed -n 's/.*t3-awake-script-sha256: \([0-9a-f][0-9a-f]*\).*/\1/p' "$1" | head -1
+}
+
+atomic_write_plist() {
+	local source="$1" target="$2" tmp
+	mkdir -p "${target%/*}"
+	tmp="$(mktemp "${target}.XXXXXX")" || return 1
+	if ! /bin/cp "$source" "$tmp" || ! /bin/chmod 644 "$tmp" || ! /bin/mv -f "$tmp" "$target"; then
+		rm -f "$tmp" 2>/dev/null || true; return 1
 	fi
+}
 
-	if [ "$dry" -eq 1 ]; then
-		printf 'would build applet at %s\n' "$APP"
-		printf 'would write %s\n' "$target"
-		printf 'would bootstrap gui/%s from %s\n' "$(id -u)" "$target"
-		return 0
-	fi
-
-	sentinel_build
-	mkdir -p "$(dirname "$target")"
-	sed -e "s|__T3_AWAKE_BIN__|$REPO_DIR/bin/t3_awake|g" \
-		-e "s|__T3_AWAKE_ERR__|$ERRLOG|g" \
-		"$template" >"$target"
-
-	# Reinstalling over a loaded agent is the normal case — bin/bootstrap is
-	# documented as safe to re-run and it calls this — so the teardown has to
-	# be waited out rather than assumed.
-	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-	if ! wait_for_bootout "$LABEL"; then
-		printf 'the running %s did not unload; refusing to bootstrap over it\n' "$LABEL" >&2
-		printf 'inspect it with: launchctl print gui/%s/%s\n' "$(id -u)" "$LABEL" >&2
-		return 1
-	fi
-
-	# Reported rather than left to `set -e`, which aborted the function here
-	# and swallowed both the cause and the manual Amphetamine step below —
-	# leaving the user with a bare "Bootstrap failed: 5" and an unloaded agent.
-	local out
-	if ! out="$(launchctl bootstrap "gui/$(id -u)" "$target" 2>&1)"; then
+bootstrap_service() {
+	local target="$1" out
+	if ! out="$(launchctl bootstrap "$DOMAIN" "$target" 2>&1)"; then
 		printf 'failed to bootstrap %s from %s\n%s\n' "$LABEL" "$target" "$out" >&2
 		printf 'the LaunchAgent is written but not loaded; retry with: bin/t3_awake install\n' >&2
 		return 1
 	fi
-
-	cat <<EOF
-
-Installed. One manual step remains, because Amphetamine's trigger list cannot
-be written safely from outside the app:
-
-  1. Open Amphetamine -> Preferences -> Triggers.
-  2. Add a trigger for a running application, name it "t3-busy", and select:
-       $APP
-  3. Leave the frontmost requirement OFF, and allow display sleep ON.
-  4. Delete the existing "t3" and "claude" triggers.
-
-Verify with:  bin/t3_awake status
-EOF
 }
+
+kickstart_service() {
+	local out
+	out="$(launchctl kickstart -k "$DOMAIN/$LABEL" 2>&1)" || { printf 'failed to restart %s\n%s\n' "$LABEL" "$out" >&2; return 1; }
+}
+
+cmd_status() {
+	local running='?' approvals='?' server='down' agent='not loaded'
+	if [ -r "$DB" ]; then
+		running="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" "SELECT COUNT(*) FROM projection_turns WHERE state='running';" 2>/dev/null || echo '?')"
+		approvals="$(sqlite3 -readonly -cmd '.timeout 1000' "$DB" "SELECT COUNT(*) FROM projection_pending_approvals WHERE resolved_at IS NULL;" 2>/dev/null || echo '?')"
+	fi
+	t3_server_alive && server='alive'
+	service_loaded "$LABEL" && agent='loaded'
+	printf 'database:        %s\nrunning turns:   %s\nopen approvals:  %s\n' "$DB" "$running" "$approvals"
+	printf 'T3 Code server:  %s\nwake assertion:  %s\ndesired state:   %s\nlaunch agent:    %s\n' \
+		"$server" "$(wake_state)" "$(t3_probe)" "$agent"
+}
+
+cmd_install() (
+	local dry=0 target desired compare sha old_sha class='structural' loaded=0 key
+	case "$#:${1:-}" in
+	0:) ;; 1:--dry-run) dry=1 ;;
+	*) printf 'usage: bin/t3_awake install [--dry-run]\n' >&2; return 64 ;;
+	esac
+
+	target="$(plist_target)"
+	desired="$(mktemp "${TMPDIR:-/tmp}/t3-awake-desired.XXXXXX")" || return 1
+	compare="$(mktemp "${TMPDIR:-/tmp}/t3-awake-compare.XXXXXX")" || { rm -f "$desired"; return 1; }
+	trap 'rm -f "$desired" "$compare"' EXIT
+	sha="$(script_sha)" || return 1
+	render_plist "$sha" "$desired" || return 1
+	plutil -lint "$desired" >/dev/null 2>&1 || { printf 'rendered LaunchAgent is not a valid plist\n' >&2; return 1; }
+	service_loaded "$LABEL" && loaded=1
+
+	if [ -f "$target" ] && cmp -s "$desired" "$target"; then
+		class='identical'
+	elif [ -f "$target" ]; then
+		old_sha="$(installed_script_sha "$target")"
+		if valid_sha "$old_sha" && render_plist "$old_sha" "$compare" && cmp -s "$compare" "$target"; then class='script'; fi
+	fi
+	key="$loaded:$class"
+
+	if [ "$dry" -eq 1 ]; then
+		case "$key" in
+		1:identical) printf 'already installed and loaded; would make no changes\n' ;;
+		1:script) printf 'would kickstart -k %s/%s\nwould update %s\n' "$DOMAIN" "$LABEL" "$target" ;;
+		1:structural) printf 'would bootout %s/%s and wait for it to unload\nwould write %s\nwould bootstrap %s from %s\n' "$DOMAIN" "$LABEL" "$target" "$DOMAIN" "$target" ;;
+		0:identical) printf 'would bootstrap %s from %s\n' "$DOMAIN" "$target" ;;
+		0:*) printf 'would write %s\nwould bootstrap %s from %s\n' "$target" "$DOMAIN" "$target" ;;
+		esac
+		return
+	fi
+
+	case "$key" in
+	1:identical) printf '%s is already installed and loaded; no changes.\n' "$LABEL" ;;
+	1:script)
+		kickstart_service || return 1
+		atomic_write_plist "$desired" "$target" || { printf '%s restarted, but its revision marker could not be updated at %s\n' "$LABEL" "$target" >&2; return 1; }
+		printf 'Restarted %s for the updated script.\n' "$LABEL"
+		;;
+	1:structural)
+		launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+		wait_for_bootout "$LABEL" || { printf 'the running %s did not unload; leaving %s untouched\n' "$LABEL" "$target" >&2; return 1; }
+		atomic_write_plist "$desired" "$target" && bootstrap_service "$target" || return 1
+		printf 'Installed and loaded %s.\n' "$LABEL"
+		;;
+	0:identical) bootstrap_service "$target" || return 1; printf 'Loaded %s from the existing plist.\n' "$LABEL" ;;
+	0:*) atomic_write_plist "$desired" "$target" && bootstrap_service "$target" || return 1; printf 'Installed and loaded %s.\n' "$LABEL" ;;
+	esac
+)
 
 cmd_uninstall() {
 	local target
 	target="$(plist_target)"
-	launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-	# The same asynchronous teardown as in cmd_install, with a different
-	# failure at the end of it: lowering the sentinel while the daemon is still
-	# alive lets its next poll raise it again, and `rm -rf "$APP"` then strands
-	# a running applet with Amphetamine holding the machine awake and no daemon
-	# left to reap it. Unlike install this never aborts — uninstall is the
-	# command that clears a stranded applet, so it warns and finishes.
-	if ! wait_for_bootout "$LABEL"; then
-		printf 'warning: %s is still loaded; it may raise the applet again\n' "$LABEL" >&2
+	if service_loaded "$LABEL"; then
+		launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+		wait_for_bootout "$LABEL" || { printf 'the running %s did not unload; leaving %s in place\n' "$LABEL" "$target" >&2; return 1; }
 	fi
-	rm -f "$target"
-	sentinel_down || true
-	rm -rf "$APP"
-	printf 'Removed the LaunchAgent and the applet.\n'
-	printf 'Delete the "t3-busy" trigger in Amphetamine -> Preferences -> Triggers.\n'
+	rm -f "$target" "$STATE_FILE"
+	printf 'Removed the %s LaunchAgent.\n' "$LABEL"
 }
 
 usage() {
@@ -565,43 +360,20 @@ usage() {
 usage: bin/t3_awake <command>
 
   probe                 Print "busy" or "idle" for the current state.
-  sentinel <build|up|down|state>
-                        Manage the marker application directly.
   watch                 Run the daemon loop (what launchd runs).
   status                Print a diagnostic summary.
-  install [--dry-run]   Build the applet and load the LaunchAgent.
-  uninstall             Remove the LaunchAgent and the applet.
+  install [--dry-run]   Reconcile and load the LaunchAgent.
+  uninstall             Unload and remove the LaunchAgent.
 EOF
 }
 
 main() {
 	case "${1:-}" in
-	probe) t3_probe ;;
-	sentinel)
-		shift
-		cmd_sentinel "$@"
-		;;
-	watch) cmd_watch ;;
-	status) cmd_status ;;
-	install)
-		shift
-		cmd_install "$@"
-		;;
-	uninstall) cmd_uninstall ;;
+	probe) t3_probe ;; watch) cmd_watch ;; status) cmd_status ;;
+	install) shift; cmd_install "$@" ;; uninstall) cmd_uninstall ;;
 	-h | --help | help | '') usage ;;
-	*)
-		printf 'unknown command: %s\n' "$1" >&2
-		usage >&2
-		return 64
-		;;
+	*) printf 'unknown command: %s\n' "$1" >&2; usage >&2; return 64 ;;
 	esac
 }
 
-# Guarded so the tests can source this file and drive one function in
-# isolation — wait_for_bootout above all, which has to be provable without
-# booting anything out of the user's real launchd domain. launchd execs this
-# script, so $0 and BASH_SOURCE[0] are the same path under the LaunchAgent and
-# the daemon still starts normally.
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-	main "$@"
-fi
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi

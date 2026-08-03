@@ -22,9 +22,9 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | Tool | Active snapshot state | Reproduction policy |
 |------|-----------------------|---------------------|
 | Fish | 4.6.0, official signed macOS pkg at `/usr/local/bin/fish`; login shell | Fresh machines install Homebrew Fish; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
-| Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `bin/bootstrap` |
-| Python | 3.14.4, pyenv global | Pinned in `bin/bootstrap` |
-| Go | Official Go 1.26.2 at `/usr/local/go` wins over Homebrew Go 1.26.5 | Keep `fish/conf.d/00-paths.fish` preference; Brewfile Go is the fresh-machine fallback |
+| Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `.node-version`; `bin/bootstrap` installs and selects it, and `fnm env --use-on-cd` reads the same file |
+| Python | 3.14.4, pyenv global | Pinned in `.python-version`; `bin/bootstrap` installs and selects it, and `pyenv init -` reads the same file |
+| Go | Homebrew Go 1.26.5; the official `/usr/local/go` install has been removed | Brewfile Go is the only source; `fish/conf.d/00-paths.fish` puts `$GOPATH/bin` above it for `go install` output |
 | Rust | Homebrew Rust 1.97.1 wins on PATH; rustup stable ARM64 1.96.0 also exists | Brewfile reproduces Homebrew Rust; rustup remains documented local state |
 | Bun | 1.3.14, Homebrew | Declared in Brewfile; the former `~/.bun` native install is no longer present |
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
@@ -36,7 +36,7 @@ The duplicated Go and Rust providers are intentional snapshot facts, not a desir
 
 ## Shared agent configuration
 
-`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries.
+`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries. The evergreen guide to that layer is [agents/README.md](agents/README.md).
 
 | Harness | Rules | Skills | Subagents | Portable hook coverage |
 |---------|-------|--------|-----------|------------------------|
@@ -59,7 +59,7 @@ Rules and skills are symlinks elsewhere, so all other harnesses read the same by
 
 Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
 
-Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
+Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`; [claude/README.md](claude/README.md) documents that arrangement and what is tracked inside it. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
 
 About 340 MB of Claude runtime state — `security/` alone is a 297 MB agent SDK venv — now sits inside the working tree and is gitignored wholesale. `~/.claude.json` is deliberately left at the home root: it is OAuth and per-project state, not configuration.
 
@@ -150,7 +150,7 @@ These items influence the daily machine but are intentionally excluded from vers
 - `tmux` 3.7b remains installed locally as legacy state but is deliberately absent from the Brewfile. `bin/tmux-sessionizer` forwards to Herdr.
 - `/etc/shells` contains `/usr/local/bin/fish` twice. This is harmless snapshot drift; bootstrap's exact-match guard does not add another duplicate.
 - No user crontab existed.
-- User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `amphetamine/README.md`.
+- User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.
 - `~/Development` existed; `~/dev` and `~/projects` did not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
 
 ## Security boundary
@@ -160,6 +160,6 @@ The repository intentionally omits tokens, API keys, browser/account sessions, p
 At snapshot time:
 
 - the working tree was clean before implementation;
-- `bin/claude_link --check` passed;
+- `bin/agents_link --check claude` passed;
 - there were no ordinary untracked files under `~/.config`;
 - ignored files matched the documented secret/runtime policy.

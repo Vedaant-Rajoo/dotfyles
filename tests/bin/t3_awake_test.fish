@@ -6,27 +6,23 @@ set -g bin $repo/bin/t3_awake
 set -g failures 0
 set -g checks 0
 set -g workdir (mktemp -d /tmp/t3-awake-test.XXXXXX)
-
-# Every invocation that can write a log line must be given this. Overriding only
-# T3_AWAKE_APP still leaves T3_AWAKE_LOG at its default, and ~/Library/Logs/
-# t3-awake.log is the first file you read when the machine is stuck awake — the
-# suite must not fill it with lines about deleted temp paths.
-set -g log_env T3_AWAKE_LOG=$workdir/sentinel.log
-
-# Daemons and applets started by the suite. Removing $workdir is not enough: if
-# the run aborts between starting a watch daemon and stopping it, the orphan and
-# its applet survive — leaking exactly the process that pins the machine awake.
 set -g watch_pids
-set -g sentinel_apps
+set -g state_files
+set -g last_watch_pid
 
 function teardown --on-event fish_exit
     for pid in $watch_pids
         kill -TERM $pid 2>/dev/null
     end
-    for stray in $sentinel_apps
-        env $log_env T3_AWAKE_APP=$stray $bin sentinel down >/dev/null 2>&1
+    for state in $state_files
+        if test -r $state
+            set -l child (awk 'NR == 1 { print $2 }' $state 2>/dev/null)
+            string match -qr '^[1-9][0-9]*$' -- $child; and kill $child 2>/dev/null
+        end
     end
-    test -n "$workdir"; and rm -rf $workdir
+    if string match -q '/tmp/t3-awake-test.*' -- $workdir
+        rm -rf -- $workdir
+    end
 end
 
 function check --argument-names label expected actual
@@ -35,12 +31,89 @@ function check --argument-names label expected actual
         printf 'ok   %s\n' $label
     else
         set -g failures (math $failures + 1)
-        printf 'FAIL %s\n       expected: %s\n       actual:   %s\n' $label $expected $actual
+        printf 'FAIL %s\n       expected: %s\n       actual:   %s\n' $label "$expected" "$actual"
     end
 end
 
-# Build a scratch database with only the two tables the predicate reads,
-# plus a runtime file naming a PID that is guaranteed to be alive.
+# Run a command until it succeeds, checking every delay seconds. Commands are
+# passed as argv, so no eval or shell quoting is involved.
+function wait_until --argument-names tries delay
+    set -e argv[1..2]
+    for ignored in (seq $tries)
+        if $argv
+            return 0
+        end
+        sleep $delay
+    end
+    return 1
+end
+
+function pid_alive
+    kill -0 $argv[1] 2>/dev/null
+end
+
+function pid_gone
+    not kill -0 $argv[1] 2>/dev/null
+end
+
+function file_absent
+    not test -e $argv[1]
+end
+
+function wake_state_at
+    env T3_AWAKE_STATE=$argv[1] bash -c 'source "$1"; wake_state' _ $bin
+end
+
+function state_is_active
+    set -l actual (wake_state_at $argv[1])
+    string match -q 'active*' -- $actual
+end
+
+function state_is_inactive
+    test (wake_state_at $argv[1]) = inactive
+end
+
+function state_is_stale
+    test (wake_state_at $argv[1]) = stale
+end
+
+function state_child
+    awk 'NR == 1 { print $2 }' $argv[1]
+end
+
+function state_has_new_child
+    set -l state $argv[1]
+    set -l old $argv[2]
+    state_is_active $state; or return 1
+    set -l current (state_child $state)
+    test -n "$current"; and test "$current" != "$old"
+end
+
+function child_has_idle_assertion
+    /usr/bin/pmset -g assertions | awk -v pid=$argv[1] '
+        index($0, "pid " pid "(caffeinate)") && index($0, "PreventUserIdleSystemSleep") { found = 1 }
+        END { exit !found }
+    '
+end
+
+function child_has_display_assertion
+    /usr/bin/pmset -g assertions | awk -v pid=$argv[1] '
+        index($0, "pid " pid "(caffeinate)") && index($0, "DisplaySleep") { found = 1 }
+        END { exit !found }
+    '
+end
+
+function direct_caffeinate_child_count
+    /bin/ps -ww -axo ppid=,command= | awk -v parent=$argv[1] '
+        $1 == parent {
+            $1 = ""
+            sub(/^[[:space:]]+/, "")
+            if ($0 == "/usr/bin/caffeinate -i -w " parent) count++
+        }
+        END { print count + 0 }
+    '
+end
+
 function make_fixture --argument-names dir
     mkdir -p $dir
     sqlite3 $dir/state.sqlite "CREATE TABLE projection_turns (thread_id TEXT NOT NULL, turn_id TEXT, state TEXT NOT NULL, requested_at TEXT NOT NULL, completed_at TEXT);
@@ -48,15 +121,32 @@ CREATE TABLE projection_pending_approvals (request_id TEXT PRIMARY KEY, thread_i
     printf '{"version":1,"pid":%d,"host":"127.0.0.1","port":3773}\n' $fish_pid >$dir/server-runtime.json
 end
 
-# Production runs journal_mode=WAL, while a plain sqlite3 database is
-# journal_mode=delete. This variant exercises the mode the daemon really meets.
 function make_wal_fixture --argument-names dir
     make_fixture $dir
-    sqlite3 $dir/state.sqlite "PRAGMA journal_mode=WAL;" >/dev/null
+    sqlite3 $dir/state.sqlite 'PRAGMA journal_mode=WAL;' >/dev/null
 end
 
 function probe --argument-names dir
     env T3_AWAKE_DB=$dir/state.sqlite T3_AWAKE_RUNTIME_JSON=$dir/server-runtime.json $bin probe
+end
+
+function start_watch --argument-names dir state linger
+    env T3_AWAKE_DB=$dir/state.sqlite \
+        T3_AWAKE_RUNTIME_JSON=$dir/server-runtime.json \
+        T3_AWAKE_STATE=$state \
+        T3_AWAKE_POLL=0.1 \
+        T3_AWAKE_IDLE_POLL=0.1 \
+        T3_AWAKE_LINGER=$linger \
+        T3_AWAKE_LOG=$dir/t3-awake.log \
+        $bin watch >$dir/watch.stdout 2>$dir/watch.stderr &
+    set -g last_watch_pid $last_pid
+    set -ga watch_pids $last_pid
+    set -ga state_files $state
+end
+
+function stop_watch --argument-names pid
+    kill -TERM $pid 2>/dev/null
+    wait $pid 2>/dev/null
 end
 
 # --- predicate ---------------------------------------------------------
@@ -64,324 +154,326 @@ end
 set d $workdir/predicate
 make_fixture $d
 
-check "empty database is idle" idle (probe $d)
+check 'empty database is idle' idle (probe $d)
 
 sqlite3 $d/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
-check "running turn is busy" busy (probe $d)
+check 'running turn is busy' busy (probe $d)
 
 sqlite3 $d/state.sqlite "UPDATE projection_turns SET state='completed', completed_at='2026-08-01T00:01:00Z';"
-check "completed turn is idle" idle (probe $d)
+check 'completed turn is idle' idle (probe $d)
 
 sqlite3 $d/state.sqlite "INSERT INTO projection_pending_approvals VALUES ('r1','t1','pending','2026-08-01T00:02:00Z',NULL);"
-check "unresolved approval is busy" busy (probe $d)
+check 'unresolved approval is busy' busy (probe $d)
 
 sqlite3 $d/state.sqlite "UPDATE projection_pending_approvals SET resolved_at='2026-08-01T00:03:00Z';"
-check "resolved approval is idle" idle (probe $d)
-
-# --- liveness gate -----------------------------------------------------
+check 'resolved approval is idle' idle (probe $d)
 
 set dead $workdir/dead
 make_fixture $dead
 sqlite3 $dead/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
-printf '{"version":1,"pid":999999,"host":"127.0.0.1","port":3773}\n' >$dead/server-runtime.json
-check "running turn with dead server is idle" idle (probe $dead)
+printf '{"version":1,"pid":999999}\n' >$dead/server-runtime.json
+check 'running turn with dead server is idle' idle (probe $dead)
 
 printf 'not json at all\n' >$dead/server-runtime.json
-check "unparseable runtime file is idle" idle (probe $dead)
+check 'unparseable runtime file is idle' idle (probe $dead)
 
-# --- degraded inputs ---------------------------------------------------
+printf '{ "port": 3773, "pid" : %d, "version": 1 }\n' $fish_pid >$dead/server-runtime.json
+check 'bash regex accepts reordered runtime fields' busy (probe $dead)
 
 set missing $workdir/missing
 make_fixture $missing
 rm $missing/state.sqlite
-check "missing database is idle" idle (probe $missing)
+check 'missing database is idle' idle (probe $missing)
 
 set empty $workdir/empty
 make_fixture $empty
 rm $empty/state.sqlite
-sqlite3 $empty/state.sqlite "CREATE TABLE unrelated (x INTEGER);"
-check "database without the projection tables is idle" idle (probe $empty)
+sqlite3 $empty/state.sqlite 'CREATE TABLE unrelated (x INTEGER);'
+check 'database without projection tables is idle' idle (probe $empty)
 
-# --- sentinel ----------------------------------------------------------
+# --- assertion lifecycle ----------------------------------------------
 
-set app $workdir/T3\ Busy\ Test.app
-set -g sentinel_env $log_env T3_AWAKE_APP=$app
-
-env $sentinel_env $bin sentinel build
-set -a sentinel_apps $app
-check "build produces a bundle" 0 (test -d $app; echo $status)
-check "build hides the dock icon" true (/usr/libexec/PlistBuddy -c 'Print :LSUIElement' $app/Contents/Info.plist)
-check "build sets the bundle identifier" dev.newedia.t3-busy (/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' $app/Contents/Info.plist)
-check "build leaves a valid signature" 0 (codesign --verify $app 2>/dev/null; echo $status)
-
-check "starts stopped" stopped (env $sentinel_env $bin sentinel state)
-
-env $sentinel_env $bin sentinel up
-check "up starts it" running (env $sentinel_env $bin sentinel state)
-
-env $sentinel_env $bin sentinel up
-check "up is idempotent" running (env $sentinel_env $bin sentinel state)
-
-env $sentinel_env $bin sentinel down
-check "down stops it" stopped (env $sentinel_env $bin sentinel state)
-
-env $sentinel_env $bin sentinel down
-check "down is idempotent" stopped (env $sentinel_env $bin sentinel state)
-
-set absent $workdir/Nothing.app
-check "up on a missing bundle fails" 1 (env $log_env T3_AWAKE_APP=$absent $bin sentinel up >/dev/null 2>&1; echo $status)
-
-# --- watch loop --------------------------------------------------------
-
-set wapp $workdir/T3\ Busy\ Watch.app
 set w $workdir/watch
+set wstate $w/awake.state
 make_fixture $w
-env $log_env T3_AWAKE_APP=$wapp $bin sentinel build
-set -a sentinel_apps $wapp
+start_watch $w $wstate 2
+set watch_pid $last_watch_pid
 
-function watch_env
-    echo T3_AWAKE_DB=$w/state.sqlite
-    echo T3_AWAKE_RUNTIME_JSON=$w/server-runtime.json
-    echo T3_AWAKE_APP=$wapp
-    echo T3_AWAKE_POLL=1
-    echo T3_AWAKE_IDLE_POLL=1
-    echo T3_AWAKE_LINGER=3
-    echo T3_AWAKE_LOG=$w/t3-awake.log
-end
-
-env (watch_env) $bin watch &
-set -g watch_pid $last_pid
-set -a watch_pids $watch_pid
-sleep 2
-check "idle at rest" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+check 'idle starts without an assertion' 0 (wait_until 20 0.05 state_is_inactive $wstate; echo $status)
 
 sqlite3 $w/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
-sleep 3
-check "running turn raises the sentinel" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+check 'running turn acquires an assertion' 0 (wait_until 40 0.05 state_is_active $wstate; echo $status)
+
+set child (state_child $wstate)
+set child_command (ps -ww -p $child -o command= | string trim)
+check 'child is parent-bound caffeinate' "/usr/bin/caffeinate -i -w $watch_pid" "$child_command"
+check 'busy creates exactly one caffeinate child' 1 (direct_caffeinate_child_count $watch_pid)
+check 'caffeinate owns an idle-system assertion' 0 (wait_until 20 0.05 child_has_idle_assertion $child; echo $status)
+check 'caffeinate does not own a display assertion' 1 (child_has_display_assertion $child; echo $status)
+
+kill $child
+check 'externally killed child is replaced' 0 (wait_until 40 0.05 state_has_new_child $wstate $child; echo $status)
+set replacement (state_child $wstate)
+check 'replacement also owns the assertion' 0 (wait_until 20 0.05 child_has_idle_assertion $replacement; echo $status)
+
+set st (env T3_AWAKE_DB=$w/state.sqlite T3_AWAKE_RUNTIME_JSON=$w/server-runtime.json T3_AWAKE_STATE=$wstate $bin status 2>/dev/null)
+check 'status exits cleanly while active' 0 $status
+check 'status reports a verified assertion' 1 (printf '%s\n' $st | grep -c '^wake assertion:  active (pid ')
 
 sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='completed';"
-# Observed one second into the linger, not two. `date +%s` is second-granular,
-# so `now - last_busy` reaches 3 while only ~2.3s of wall time has passed: a
-# 3-second linger really expires between 2 and 3 seconds in. Checking at two
-# seconds left roughly 300ms of margin and failed intermittently under load.
-# One second leaves ~1.3s, and the pair of sleeps still totals the same six
-# seconds so the release check below keeps its own margin unchanged.
-sleep 1
-check "sentinel held during linger" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+sleep 0.15
+check 'assertion is held during linger' 0 (state_is_active $wstate; echo $status)
+check 'assertion releases after linger' 0 (wait_until 70 0.05 state_is_inactive $wstate; echo $status)
 
-sleep 5
-check "sentinel released after linger" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
-
-# A dead server must release even while the database still says running.
 sqlite3 $w/state.sqlite "UPDATE projection_turns SET state='running';"
-sleep 3
-check "reacquired for the stale-guard case" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
+check 'assertion reacquires for dead-server case' 0 (wait_until 40 0.05 state_is_active $wstate; echo $status)
 printf '{"version":1,"pid":999999}\n' >$w/server-runtime.json
-sleep 6
-check "dead server releases despite running row" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
+check 'dead server releases despite running row' 0 (wait_until 70 0.05 state_is_inactive $wstate; echo $status)
 
-# SIGTERM must not strand a running sentinel.
 printf '{"version":1,"pid":%d}\n' $fish_pid >$w/server-runtime.json
-sleep 3
-check "reacquired before shutdown test" running (env T3_AWAKE_APP=$wapp $bin sentinel state)
-kill -TERM $watch_pid
-sleep 3
-check "SIGTERM lowers the sentinel" stopped (env T3_AWAKE_APP=$wapp $bin sentinel state)
-check "watch exited" 1 (kill -0 $watch_pid 2>/dev/null; echo $status)
+check 'assertion reacquires before SIGTERM' 0 (wait_until 40 0.05 state_is_active $wstate; echo $status)
+set term_child (state_child $wstate)
+stop_watch $watch_pid
+check 'SIGTERM exits the watch' 0 (pid_gone $watch_pid; echo $status)
+check 'SIGTERM exits caffeinate' 0 (wait_until 20 0.05 pid_gone $term_child; echo $status)
+check 'SIGTERM removes runtime state' 0 (wait_until 20 0.05 file_absent $wstate; echo $status)
 
-# --- watch loop against a WAL database ----------------------------------
-#
-# Every other fixture is journal_mode=delete, which is not what the daemon meets
-# in production. Drive the same raise/release transitions through a real WAL
-# database so the loop is proven against the mode it will actually run on.
+# --- WAL and query-failure fallback -----------------------------------
 
-set walapp $workdir/T3\ Busy\ Wal.app
 set wal $workdir/wal
+set walstate $wal/awake.state
 make_wal_fixture $wal
-env $log_env T3_AWAKE_APP=$walapp $bin sentinel build
-set -a sentinel_apps $walapp
-
-# Read-write connection on purpose: a read-only one cannot open a WAL database
-# that has no -shm yet, and this assertion is about the fixture, not the daemon.
-check "wal fixture really is wal mode" wal (sqlite3 $wal/state.sqlite "PRAGMA journal_mode;")
-
-function wal_env
-    echo T3_AWAKE_DB=$wal/state.sqlite
-    echo T3_AWAKE_RUNTIME_JSON=$wal/server-runtime.json
-    echo T3_AWAKE_APP=$walapp
-    echo T3_AWAKE_POLL=1
-    echo T3_AWAKE_IDLE_POLL=1
-    echo T3_AWAKE_LINGER=3
-    echo T3_AWAKE_LOG=$wal/t3-awake.log
-end
-
-env (wal_env) $bin watch &
-set -g wal_pid $last_pid
-set -a watch_pids $wal_pid
-
+check 'wal fixture really uses WAL' wal (sqlite3 $wal/state.sqlite 'PRAGMA journal_mode;')
 sqlite3 $wal/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
-sleep 3
-check "wal: running turn raises the sentinel" running (env T3_AWAKE_APP=$walapp $bin sentinel state)
+start_watch $wal $walstate 1
+set wal_pid $last_watch_pid
+check 'WAL running turn acquires assertion' 0 (wait_until 40 0.05 state_is_active $walstate; echo $status)
 
 sqlite3 $wal/state.sqlite "UPDATE projection_turns SET state='completed';"
-sleep 6
-check "wal: completed turn releases the sentinel" stopped (env T3_AWAKE_APP=$walapp $bin sentinel state)
-
-# --- unreadable database mid-turn ---------------------------------------
-#
-# db_busy returns 2 when the database cannot be read. The loop must keep
-# retrying, count five consecutive failures and fall back to idle. If anything
-# ever stops that retry from running again, the sentinel stays up for the life
-# of the server — the one failure direction the design forbids.
+check 'WAL completed turn releases assertion' 0 (wait_until 50 0.05 state_is_inactive $walstate; echo $status)
 
 sqlite3 $wal/state.sqlite "UPDATE projection_turns SET state='running';"
-sleep 3
-check "raised before the database is locked out" running (env T3_AWAKE_APP=$walapp $bin sentinel state)
-
+check 'WAL assertion reacquires before query failures' 0 (wait_until 40 0.05 state_is_active $walstate; echo $status)
 chmod 000 $wal/state.sqlite
-sleep 12
-check "unreadable database releases the sentinel" stopped (env T3_AWAKE_APP=$walapp $bin sentinel state)
+check 'five query failures fall back to idle' 0 (wait_until 60 0.05 state_is_inactive $walstate; echo $status)
 chmod 644 $wal/state.sqlite
+check 'query failure episode logs once' 1 (grep -c '^.*busy query failed for 5 consecutive polls' $wal/t3-awake.log)
+stop_watch $wal_pid
 
-kill -TERM $wal_pid
-sleep 2
+# --- parent SIGKILL and stale-state recovery --------------------------
 
-# --- interval validation ------------------------------------------------
-#
-# A non-numeric interval wedges the linger comparison open, so the watch loop
-# refuses to start on one. The validation belongs to the daemon alone: gating
-# every subcommand on it meant an exported bad value broke `uninstall`, which is
-# the one command that clears a stranded applet.
+set killed $workdir/killed
+set killedstate $killed/awake.state
+make_fixture $killed
+sqlite3 $killed/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
+start_watch $killed $killedstate 1
+set killed_pid $last_watch_pid
+check 'SIGKILL fixture acquires assertion' 0 (wait_until 40 0.05 state_is_active $killedstate; echo $status)
+set killed_child (state_child $killedstate)
+kill -KILL $killed_pid
+wait $killed_pid 2>/dev/null
+check 'parent SIGKILL still exits caffeinate' 0 (wait_until 20 0.05 pid_gone $killed_child; echo $status)
+check 'dead parent state is stale, not active' stale (wake_state_at $killedstate)
+
+start_watch $killed $killedstate 1
+set repaired_pid $last_watch_pid
+check 'new watch repairs stale state' 0 (wait_until 40 0.05 state_is_active $killedstate; echo $status)
+stop_watch $repaired_pid
+
+printf '999999 999998\n' >$workdir/manual-stale.state
+check 'arbitrary dead PID record is stale' stale (wake_state_at $workdir/manual-stale.state)
+
+check 'state repair failure terminates an existing assertion' 0 (env T3_AWAKE_LOG=$workdir/state-failure.log bash -c '
+source "$1"
+STATE_FILE="$2/initial.state"
+wake_up
+child="$WAKE_PID"
+STATE_FILE=/dev/null/t3-awake.state
+set +e
+wake_up 2>/dev/null
+rc=$?
+set -e
+[ "$rc" -eq 1 ]
+[ -z "$WAKE_PID" ]
+! kill -0 "$child" 2>/dev/null
+' _ $bin $workdir; echo $status)
+
+# --- interval validation and recovery commands ------------------------
 
 set vdir $workdir/validate
+set vstate $vdir/awake.state
 make_fixture $vdir
+set venv T3_AWAKE_DB=$vdir/state.sqlite T3_AWAKE_RUNTIME_JSON=$vdir/server-runtime.json T3_AWAKE_STATE=$vstate T3_AWAKE_LOG=$vdir/t3-awake.log
 
-function validate_env
-    echo $log_env
-    echo T3_AWAKE_DB=$vdir/state.sqlite
-    echo T3_AWAKE_RUNTIME_JSON=$vdir/server-runtime.json
-    echo T3_AWAKE_APP=$workdir/Unbuilt.app
-end
+check 'watch rejects non-numeric poll' 78 (env $venv T3_AWAKE_POLL=abc $bin watch >/dev/null 2>&1; echo $status)
+check 'watch rejects zero linger' 78 (env $venv T3_AWAKE_LINGER=0 $bin watch >/dev/null 2>&1; echo $status)
+check 'watch rejects fractional linger' 78 (env $venv T3_AWAKE_LINGER=1.5 $bin watch >/dev/null 2>&1; echo $status)
 
-check "watch rejects a non-numeric interval" 78 (env (validate_env) T3_AWAKE_POLL=abc $bin watch >/dev/null 2>&1; echo $status)
-check "watch rejects a zero interval" 78 (env (validate_env) T3_AWAKE_LINGER=0 $bin watch >/dev/null 2>&1; echo $status)
+env $venv T3_AWAKE_POLL=0.1 T3_AWAKE_IDLE_POLL=0.1 T3_AWAKE_LINGER=1 $bin watch >/dev/null 2>&1 &
+set decimal_pid $last_pid
+set -ga watch_pids $decimal_pid
+sleep 0.2
+check 'watch accepts fractional poll intervals' 0 (pid_alive $decimal_pid; echo $status)
+stop_watch $decimal_pid
 
-# Decimals are legal: these knobs feed `sleep`, which takes fractions. The
-# fixture has no running turn, so the loop stays idle and never touches the
-# unbuilt bundle; surviving two seconds is the assertion.
-env (validate_env) T3_AWAKE_POLL=0.5 T3_AWAKE_IDLE_POLL=0.5 T3_AWAKE_LINGER=1 $bin watch &
-set -g validate_pid $last_pid
-set -a watch_pids $validate_pid
-sleep 2
-check "watch accepts a decimal interval" 0 (kill -0 $validate_pid 2>/dev/null; echo $status)
-kill -TERM $validate_pid 2>/dev/null
-sleep 1
+check 'bad poll does not break probe' idle (env T3_AWAKE_POLL=abc T3_AWAKE_DB=$missing/state.sqlite T3_AWAKE_RUNTIME_JSON=$missing/server-runtime.json $bin probe)
+check 'bad linger does not break status' 0 (env $venv T3_AWAKE_LINGER=bad $bin status >/dev/null 2>&1; echo $status)
 
-# The recovery path must survive a bad value that is merely exported.
-check "a bad interval does not break probe" idle (env T3_AWAKE_POLL=abc T3_AWAKE_DB=$missing/state.sqlite T3_AWAKE_RUNTIME_JSON=$missing/server-runtime.json $bin probe)
+set uhome $workdir/uninstall-home
+mkdir -p $uhome/Library/LaunchAgents
+check 'bad interval does not break mocked uninstall' 0 (env HOME=$uhome T3_AWAKE_POLL=bad bash -c '
+source "$1"
+launchctl() { return 1; }
+cmd_uninstall >/dev/null
+' _ $bin; echo $status)
 
-# --- fractional linger --------------------------------------------------
-#
-# `watch accepts a decimal interval` only proves the loop survives a fractional
-# knob. This proves it still lets go. LINGER is the one knob compared
-# arithmetically, and `[ 5 -ge 2.5 ]` is a usage error rather than a
-# comparison — which the guarding `if` swallows as "false", so the release
-# branch never runs, the sentinel stays up for the life of the daemon and the
-# Mac is pinned awake. That busy-latch is the exact failure this floor exists
-# to prevent, and it had no regression coverage.
+# --- LaunchAgent rendering and reconciliation -------------------------
 
-set fapp $workdir/T3\ Busy\ Frac.app
-set frac $workdir/frac
-make_fixture $frac
-env $log_env T3_AWAKE_APP=$fapp $bin sentinel build
-set -a sentinel_apps $fapp
+check 'template is valid plist' 0 (plutil -lint $repo/launchd/dev.newedia.t3-awake.plist >/dev/null 2>&1; echo $status)
+check 'install rejects unknown argument' 64 ($bin install --dryrun >/dev/null 2>&1; echo $status)
 
-function frac_env
-    echo T3_AWAKE_DB=$frac/state.sqlite
-    echo T3_AWAKE_RUNTIME_JSON=$frac/server-runtime.json
-    echo T3_AWAKE_APP=$fapp
-    echo T3_AWAKE_POLL=1
-    echo T3_AWAKE_IDLE_POLL=1
-    echo T3_AWAKE_LINGER=2.5
-    echo T3_AWAKE_LOG=$frac/t3-awake.log
-end
+set install_output (env HOME=$workdir/install-base bash -c '
+set -euo pipefail
+source "$1"
+root="$2"
+new=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+old=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-sqlite3 $frac/state.sqlite "INSERT INTO projection_turns VALUES ('t1','turn1','running','2026-08-01T00:00:00Z',NULL);"
+run_case() (
+    name="$1"
+    mock_loaded="$2"
+    initial="$3"
+    mode="${4:-normal}"
+    HOME="$root/$name"
+    export HOME
+    LOG="$HOME/t3-awake.log"
+    ERRLOG="$HOME/t3-awake.err"
+    target="$(plist_target)"
+    calls="$HOME/calls"
+    expected="$HOME/expected.plist"
+    mkdir -p "${target%/*}"
+    : >"$calls"
 
-env (frac_env) $bin watch &
-set -g frac_pid $last_pid
-set -a watch_pids $frac_pid
+    case "$initial" in
+        exact) render_plist "$new" "$target" ;;
+        script) render_plist "$old" "$target" ;;
+        structural) printf "legacy plist\n" >"$target" ;;
+        missing) ;;
+    esac
 
-sleep 3
-check "fractional linger raises the sentinel" running (env T3_AWAKE_APP=$fapp $bin sentinel state)
-
-sqlite3 $frac/state.sqlite "UPDATE projection_turns SET state='completed';"
-sleep 6
-check "fractional linger still releases the sentinel" stopped (env T3_AWAKE_APP=$fapp $bin sentinel state)
-
-kill -TERM $frac_pid
-sleep 2
-
-# --- plist template and install planning -------------------------------
-
-check "template is valid plist" 0 (plutil -lint $repo/amphetamine/dev.newedia.t3-awake.plist >/dev/null 2>&1; echo $status)
-
-set dry (env T3_AWAKE_APP=$workdir/Dry.app $bin install --dry-run)
-check "dry run plans the applet build" 1 (printf '%s\n' $dry | grep -c '^would build applet')
-check "dry run plans the plist write" 1 (printf '%s\n' $dry | grep -c '^would write .*dev\.newedia\.t3-awake\.plist')
-check "dry run plans the bootstrap" 1 (printf '%s\n' $dry | grep -c '^would bootstrap gui/')
-check "dry run creates nothing" 1 (test -d $workdir/Dry.app; echo $status)
-
-# A mistyped flag used to fall through to a real install, which builds the
-# applet, writes ~/Library/LaunchAgents and boots it.
-check "install rejects an unknown argument" 64 (env $log_env T3_AWAKE_APP=$workdir/Typo.app $bin install --dryrun >/dev/null 2>&1; echo $status)
-check "a rejected install builds nothing" 1 (test -d $workdir/Typo.app; echo $status)
-
-# Asserting a field rather than the exit status: a `status` that printed nothing
-# at all would still exit 0.
-set st (env $log_env T3_AWAKE_APP=$workdir/None.app $bin status 2>/dev/null)
-set st_rc $status
-check "status exits cleanly" 0 $st_rc
-check "status reports the sentinel state" stopped (printf '%s\n' $st | sed -n 's/^sentinel: *//p')
-
-# --- bootout teardown wait ----------------------------------------------
-#
-# `launchctl bootout` returns when launchd accepts the request, not when the
-# job is gone. A `bootstrap` fired into that window fails with "Bootstrap
-# failed: 5: Input/output error" and leaves nothing loaded, so re-running
-# bin/bootstrap on an already-provisioned machine silently killed the daemon it
-# installs. wait_for_bootout is driven directly here — sourcing the script and
-# shadowing `launchctl` with a shell function — so the user's real launchd
-# domain is never mutated.
-
-# The one check that reaches real launchctl, and only through the read-only
-# `print`. A label that is not in the domain must cost no sleeps at all.
-set t0 (date +%s)
-check "wait returns for an absent label" 0 (bash -c 'source "'$bin'"; wait_for_bootout dev.newedia.t3-awake-absent-fixture'; echo $status)
-check "wait for an absent label does not sleep" 0 (test (math (date +%s) - $t0) -lt 2; echo $status)
-
-# Present, present, gone: the helper must keep polling across the teardown
-# window instead of giving up on the first sighting, and must stop on the first
-# miss instead of burning the whole timeout.
-set seen (bash -c 'source "'$bin'"
-calls=0
-launchctl() {
-    calls=$((calls + 1))
-    if [ "$calls" -lt 3 ]; then
-        return 0
+    script_sha() { printf "%s\n" "$new"; }
+    launchctl() {
+        case "$1" in
+            print) [ "$mock_loaded" -eq 1 ] ;;
+            kickstart)
+                printf "kickstart:%s\n" "$(installed_script_sha "$target")" >>"$calls"
+                ;;
+            bootout)
+                printf "bootout\n" >>"$calls"
+                if [ "$mode" != timeout ]; then mock_loaded=0; fi
+                ;;
+            bootstrap)
+                printf "bootstrap:%s\n" "$(installed_script_sha "$target")" >>"$calls"
+                if [ "$mode" = bootstrap-fail ]; then return 42; fi
+                ;;
+        esac
+    }
+    if [ "$mode" = timeout ]; then
+        wait_for_bootout() { return 1; }
     fi
-    return 1
-}
-wait_for_bootout fake.label 20
-printf "%s\n" "$calls"')
-set seen_rc $status
-check "wait polls until the label leaves the domain" 0 $seen_rc
-check "wait stops on the first miss" 3 $seen
 
-# A label that never leaves must fail rather than hang the install forever.
-check "wait gives up on a wedged label" 1 (bash -c 'source "'$bin'"
+    set +e
+    cmd_install >/dev/null 2>&1
+    rc=$?
+    set -e
+
+    render_plist "$new" "$expected"
+    same=no
+    [ -f "$target" ] && cmp -s "$target" "$expected" && same=yes
+    unchanged=no
+    [ "$initial" = structural ] && [ "$(cat "$target" 2>/dev/null)" = "legacy plist" ] && unchanged=yes
+    call_list="$(paste -sd, "$calls")"
+    [ -n "$call_list" ] || call_list=none
+    printf "%s|%s|%s|%s|%s\n" "$name" "$rc" "$call_list" "$same" "$unchanged"
+)
+
+run_case exact-loaded 1 exact
+run_case script-loaded 1 script
+run_case structural-loaded 1 structural
+run_case exact-unloaded 0 exact
+run_case structural-unloaded 0 structural
+run_case bootstrap-failure 0 structural bootstrap-fail
+run_case bootout-timeout 1 structural timeout
+
+HOME="$root/dry-run"
+export HOME
+LOG="$HOME/t3-awake.log"
+ERRLOG="$HOME/t3-awake.err"
+mkdir -p "$HOME"
+script_sha() { printf "%s\n" "$new"; }
+launchctl() { [ "$1" = print ] && return 1; printf "unexpected mutation: %s\n" "$*" >&2; return 1; }
+dry="$(cmd_install --dry-run)"
+target="$(plist_target)"
+[ ! -e "$target" ]
+grep -q "^would write " <<<"$dry"
+grep -q "^would bootstrap " <<<"$dry"
+printf "dry-run|0|none|absent|yes\n"
+' _ $bin $workdir/install-cases)
+set install_rc $status
+check 'install reconciliation harness exits cleanly' 0 $install_rc
+check 'identical loaded install is a no-op' 1 (count (string match -r '^exact-loaded\|0\|none\|yes\|' $install_output))
+check 'script-only change kickstarts before marker update' 1 (count (string match -r '^script-loaded\|0\|kickstart:a{64}\|yes\|' $install_output))
+check 'structural loaded change bootouts, writes, then bootstraps' 1 (count (string match -r '^structural-loaded\|0\|bootout,bootstrap:b{64}\|yes\|' $install_output))
+check 'identical unloaded install only bootstraps' 1 (count (string match -r '^exact-unloaded\|0\|bootstrap:b{64}\|yes\|' $install_output))
+check 'changed unloaded install writes before bootstrap' 1 (count (string match -r '^structural-unloaded\|0\|bootstrap:b{64}\|yes\|' $install_output))
+check 'failed bootstrap leaves desired plist for retry' 1 (count (string match -r '^bootstrap-failure\|1\|bootstrap:b{64}\|yes\|' $install_output))
+check 'failed bootout leaves old plist untouched' 1 (count (string match -r '^bootout-timeout\|1\|bootout\|no\|yes$' $install_output))
+check 'dry run creates no target and makes no calls' 1 (count (string match -r '^dry-run\|0\|none\|absent\|yes$' $install_output))
+
+check 'failed uninstall keeps plist and state' 0 (env HOME=$workdir/uninstall-fail T3_AWAKE_STATE=$workdir/uninstall-fail/awake.state bash -c '
+source "$1"
+target="$(plist_target)"
+mkdir -p "${target%/*}"
+printf "installed\n" >"$target"
+printf "999999 999998\n" >"$STATE_FILE"
+service_loaded() { return 0; }
+launchctl() { return 1; }
+wait_for_bootout() { return 1; }
+set +e
+cmd_uninstall >/dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" -eq 1 ] && [ -f "$target" ] && [ -f "$STATE_FILE" ]
+' _ $bin; echo $status)
+
+check 'successful uninstall removes files after stop confirmation' 0 (env HOME=$workdir/uninstall-ok T3_AWAKE_STATE=$workdir/uninstall-ok/awake.state bash -c '
+source "$1"
+target="$(plist_target)"
+mkdir -p "${target%/*}"
+printf "installed\n" >"$target"
+printf "999999 999998\n" >"$STATE_FILE"
+service_loaded() { return 0; }
+launchctl() { [ "$1" = bootout ]; }
+wait_for_bootout() { [ -f "$target" ] && [ -f "$STATE_FILE" ]; }
+cmd_uninstall >/dev/null
+[ ! -e "$target" ] && [ ! -e "$STATE_FILE" ]
+' _ $bin; echo $status)
+
+check 'wait_for_bootout polls until first miss' 0 (bash -c '
+source "$1"
+calls=0
+launchctl() { calls=$((calls + 1)); [ "$calls" -lt 3 ]; }
+sleep() { :; }
+wait_for_bootout fake.label 20
+[ "$calls" -eq 3 ]
+' _ $bin; echo $status)
+
+check 'wait_for_bootout gives up on wedged label' 1 (bash -c '
+source "$1"
 launchctl() { return 0; }
-wait_for_bootout fake.label 3'; echo $status)
+sleep() { :; }
+wait_for_bootout fake.label 3
+' _ $bin; echo $status)
 
 # --- summary -----------------------------------------------------------
 

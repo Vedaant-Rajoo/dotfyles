@@ -43,19 +43,6 @@
     "command": "bash ~/.config/claude/statusline-command.sh"
   },
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.config/claude/hooks/commit-msg-guard.py",
-            "timeout": 10,
-            "statusMessage": "Checking commit message style"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

@@ -4,16 +4,10 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+. "$REPO_ROOT/bin/lib/ui.sh"
 LIVE=0
 LIVE_SKILLS=0
 TIMEOUT_SECONDS="${AGENTS_CONFORM_TIMEOUT:-120}"
-
-# Pretty output through gum only when interactive; pipes and logs get the
-# plain deterministic format.
-USE_GUM=0
-if command -v gum >/dev/null 2>&1 && [[ -t 1 ]]; then
-	USE_GUM=1
-fi
 
 usage() {
 	cat <<'EOF'
@@ -47,21 +41,6 @@ if [[ "$LIVE_SKILLS" -eq 1 && "$LIVE" -eq 0 ]]; then
 	echo "agents_conform: --skills requires --live" >&2
 	exit 1
 fi
-
-say() {
-	local status="$1"
-	shift
-	if [[ "$USE_GUM" -eq 0 ]]; then
-		printf '%-8s%s\n' "$status" "$*"
-		return
-	fi
-	local color=7
-	case "$status" in
-	OK) color=2 ;;
-	BROKEN) color=1 ;;
-	esac
-	printf '%s%s\n' "$(CLICOLOR_FORCE=1 gum style --bold --foreground "$color" "$(printf '%-8s' "$status")")" "$*"
-}
 
 header() {
 	local title="$1"
@@ -97,18 +76,8 @@ check_repo_link() {
 	fi
 }
 
-check_json() {
-	local path="$1" label="$2"
-	if python3 -m json.tool "$path" >/dev/null 2>&1; then
-		say OK "$label parses"
-	else
-		say BROKEN "$label is invalid JSON"
-		static_failed=1
-	fi
-}
-
-# The manifest schema and the Claude hook wiring are checked by agents_render,
-# which reads the schema file rather than restating it here.
+# The manifest shape and the Claude hook wiring are checked by agents_render,
+# which owns the manifest contract rather than restating it here.
 check_render() {
 	local subcommand="$1" label="$2" output
 	if output="$("$REPO_ROOT/bin/agents_render" "$subcommand" 2>&1)"; then
@@ -140,13 +109,11 @@ check_skill_sources() {
 	done
 }
 
+# JSON validity is not restated here: the delegated agents_link --check covers
+# Claude settings (jq) and Cursor hooks (byte-compare against the rendered
+# form), and validate-manifest parses the manifest itself.
 check_repo_link
-check_json "$REPO_ROOT/agents/hooks/manifest.json" "portable hooks manifest"
-check_json "$REPO_ROOT/claude/settings.json" "Claude settings"
-if command -v cursor-agent >/dev/null 2>&1 || command -v agent >/dev/null 2>&1 || [[ -d "$HOME/.cursor" ]]; then
-	check_json "$HOME/.cursor/hooks.json" "Cursor hooks"
-fi
-check_render validate-manifest "portable hooks manifest matches its schema"
+check_render validate-manifest "portable hooks manifest is well-formed"
 check_render check-claude-hooks "Claude settings run every portable hook"
 check_skill_sources
 

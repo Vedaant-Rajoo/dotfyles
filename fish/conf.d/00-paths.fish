@@ -1,8 +1,13 @@
 # Shared PATH setup for interactive and non-interactive Fish sessions.
 #
 # Order matters: each `fish_add_path -gPm` prepends, so later entries win.
-# 1. Homebrew — formatters (stylua, ruff, prettier, shfmt, …) and other CLI tools
-# 2. Official Go (go.dev pkg at /usr/local/go) — preferred for `go` and `gofmt`
+# 1. Homebrew — `go` and `gofmt`, formatters (stylua, ruff, prettier, shfmt, …),
+#    and other CLI tools
+# 2. `go install` output ($GOPATH/bin, default ~/go/bin) — above Homebrew so a
+#    deliberately installed tool wins, below the hand-written scripts further down
+#
+# Directories that do not exist are skipped, so entries for optional toolchains
+# stay inert until the toolchain is actually installed.
 #
 # `-m` (--move) is required, not cosmetic: macOS `path_helper` seeds PATH from
 # /etc/paths (which lists /usr/bin) and only then appends /etc/paths.d/*, where
@@ -12,7 +17,7 @@
 # Dropping -m silently restores system Ruby/jq/openssl over the Homebrew ones.
 
 fish_add_path -gPm /opt/homebrew/bin
-fish_add_path -gPm /usr/local/go/bin
+fish_add_path -gPm $HOME/go/bin
 fish_add_path -gPm $HOME/.local/bin
 fish_add_path -gPm $HOME/.config/bin
 

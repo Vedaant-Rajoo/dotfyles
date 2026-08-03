@@ -21,7 +21,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const AGENTS_ROOT = join(REPO_ROOT, 'agents');
 const HOOKS_ROOT = join(AGENTS_ROOT, 'hooks');
 const MANIFEST = join(HOOKS_ROOT, 'manifest.json');
-const SCHEMA = join(HOOKS_ROOT, 'manifest.schema.json');
 
 function fail(msg) {
   console.error(`agents_render: ${msg}`);
@@ -287,72 +286,53 @@ function cmdCheckClaudeHooks() {
 
 // -------------------------------------------------------- manifest validation
 
-// A deliberately small interpreter for exactly the JSON Schema keywords
-// manifest.schema.json uses. The schema file stays the authority for what a
-// manifest may contain; this only teaches the repo how to read it without
-// pulling in a validator dependency.
-function validateAgainst(schema, value, path, errors) {
-  if (schema.const !== undefined && value !== schema.const) {
-    errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
-    return;
-  }
-  if (schema.enum && !schema.enum.includes(value)) {
-    errors.push(`${path}: expected one of ${schema.enum.join(', ')}`);
-    return;
-  }
-  if (schema.type && !matchesType(schema.type, value)) {
-    errors.push(`${path}: expected ${schema.type}`);
-    return;
-  }
-  if (schema.type === 'object' || schema.properties) {
-    for (const key of schema.required ?? []) {
-      if (!(key in value)) errors.push(`${path}: missing required key "${key}"`);
-    }
-    for (const [key, child] of Object.entries(value)) {
-      // `$schema` on the instance is an editor hint, not manifest data.
-      if (key === '$schema' && path === '$') continue;
-      const childSchema = schema.properties?.[key];
-      if (!childSchema) {
-        if (schema.additionalProperties === false) errors.push(`${path}: unexpected key "${key}"`);
-        continue;
-      }
-      validateAgainst(childSchema, value[key], `${path}.${key}`, errors);
-    }
-  }
-  if (schema.items && Array.isArray(value)) {
-    value.forEach((item, i) => validateAgainst(schema.items, item, `${path}[${i}]`, errors));
-  }
-}
+// The manifest is small enough to check directly; these assertions are the
+// whole contract. HOOK_EVENTS is the portable event vocabulary and must stay
+// in step with the CURSOR_EVENTS/CLAUDE_EVENTS tables above.
+const HOOK_EVENTS = ['session-start', 'pre-tool', 'post-tool', 'stop'];
+const HOOK_FIELDS = { id: 'string', event: 'string', command: 'string', portable: 'boolean', description: 'string' };
+const REQUIRED_HOOK_FIELDS = ['id', 'event', 'command', 'portable'];
 
-function matchesType(type, value) {
-  if (type === 'array') return Array.isArray(value);
-  if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (type === 'string') return typeof value === 'string';
-  if (type === 'boolean') return typeof value === 'boolean';
-  if (type === 'number' || type === 'integer') return typeof value === 'number';
-  fail(`manifest.schema.json uses unsupported type "${type}"`);
+function validateHook(hook, path, errors) {
+  if (hook === null || typeof hook !== 'object' || Array.isArray(hook)) {
+    errors.push(`${path}: expected object`);
+    return;
+  }
+  for (const key of REQUIRED_HOOK_FIELDS) {
+    if (!(key in hook)) errors.push(`${path}: missing required key "${key}"`);
+  }
+  for (const [key, value] of Object.entries(hook)) {
+    const type = HOOK_FIELDS[key];
+    if (!type) errors.push(`${path}: unexpected key "${key}"`);
+    else if (typeof value !== type) errors.push(`${path}.${key}: expected ${type}`);
+  }
+  if (typeof hook.event === 'string' && !HOOK_EVENTS.includes(hook.event)) {
+    errors.push(`${path}.event: expected one of ${HOOK_EVENTS.join(', ')}`);
+  }
+  if (typeof hook.command !== 'string') return;
+  if (hook.command.startsWith('/') || hook.command.includes('..')) {
+    errors.push(`${path}.command must be relative to agents/hooks/`);
+    return;
+  }
+  try {
+    accessSync(join(HOOKS_ROOT, hook.command), constants.X_OK);
+  } catch {
+    errors.push(`${path}.command is not an executable file: agents/hooks/${hook.command}`);
+  }
 }
 
 function cmdValidateManifest() {
-  const schema = readJson(SCHEMA, 'portable hooks schema');
   const manifest = readJson(MANIFEST, 'portable hooks manifest');
   const errors = [];
-  validateAgainst(schema, manifest, '$', errors);
-
-  for (const [i, hook] of (manifest.hooks ?? []).entries()) {
-    if (typeof hook?.command !== 'string') continue;
-    if (hook.command.startsWith('/') || hook.command.includes('..')) {
-      errors.push(`$.hooks[${i}].command must be relative to agents/hooks/`);
-      continue;
-    }
-    const script = join(HOOKS_ROOT, hook.command);
-    try {
-      accessSync(script, constants.X_OK);
-    } catch {
-      errors.push(`$.hooks[${i}].command is not an executable file: agents/hooks/${hook.command}`);
-    }
+  if (manifest.version !== 1) errors.push('$.version: expected 1');
+  for (const key of Object.keys(manifest)) {
+    if (key !== 'version' && key !== 'hooks') errors.push(`$: unexpected key "${key}"`);
   }
-
+  if (Array.isArray(manifest.hooks)) {
+    manifest.hooks.forEach((hook, i) => validateHook(hook, `$.hooks[${i}]`, errors));
+  } else {
+    errors.push('$.hooks: expected array');
+  }
   if (errors.length > 0) fail(`portable hooks manifest is invalid:\n  ${errors.join('\n  ')}`);
 }
 

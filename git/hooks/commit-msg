@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+# commit-msg — vet every commit message in this repository, whoever wrote it:
+# one lowercase conventional-commit subject line of <= 100 chars, and no prose
+# body. A commit should be readable at a glance in `git log --oneline`;
+# anything that needs a paragraph belongs in SYSTEM.md or README.md, where it
+# is actually discoverable later. Enabled per-clone by bootstrap through
+# `git config core.hooksPath git/hooks`.
+import re
+import sys
+
+TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+LIMIT = 100
+
+# Machine-meaningful trailers are not prose and stay allowed after a blank line:
+# git and forges parse these for attribution and sign-off.
+TRAILERS = (
+    "co-authored-by",
+    "signed-off-by",
+    "reviewed-by",
+    "acked-by",
+    "tested-by",
+    "reported-by",
+    "suggested-by",
+    "cc",
+)
+
+STYLE = (
+    "required style: a single line, <type>(<scope>)?: <description> — all "
+    f"lowercase, <= {LIMIT} chars, no body. types: {TYPES}. keep it simple but "
+    'informative, e.g. "feat(fish): add tmux sessionizer keybind". put rationale '
+    "and findings in SYSTEM.md or README.md, not in the commit. only trailers "
+    f"({', '.join(TRAILERS)}) may follow, after a blank line. "
+    "rewrite the commit message and retry."
+)
+
+CONVENTIONAL = re.compile(r"^(?:" + TYPES + r")(?:\([a-z0-9._/-]+\))?!?: \S")
+
+TRAILER_LINE = re.compile(
+    r"^(?:" + "|".join(TRAILERS) + r"):\s+\S",
+    re.IGNORECASE,
+)
+
+# Subjects git writes itself (merges, reverts, autosquash targets); denying
+# them would break the porcelain that generates them.
+GIT_GENERATED = ("Merge ", 'Revert "', 'Reapply "', "fixup! ", "squash! ", "amend! ")
+
+
+def strip_git_syntax(text):
+    """Drop comment lines, and everything from a scissors line down."""
+    lines = []
+    for line in text.splitlines():
+        if line.startswith("#"):
+            # Verbose-mode scissors: the diff below it is not commented.
+            if ">8" in line:
+                break
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def split_message(message):
+    """Return (subject, prose_body_lines). Blank lines and trailers are dropped."""
+    lines = message.splitlines()
+    subject = None
+    body = []
+    for line in lines:
+        stripped = line.strip()
+        if subject is None:
+            if stripped:
+                subject = stripped
+            continue
+        if not stripped or TRAILER_LINE.match(stripped):
+            continue
+        body.append(stripped)
+    return subject, body
+
+
+def validate(subject, body):
+    problems = []
+    if len(subject) > LIMIT:
+        problems.append(f"subject is {len(subject)} chars (limit {LIMIT})")
+    if re.search(r"[A-Z]", subject):
+        problems.append("subject contains uppercase letters")
+    if not CONVENTIONAL.match(subject):
+        problems.append("subject is not conventional commit format")
+    if body:
+        preview = body[0][:60] + ("…" if len(body[0]) > 60 else "")
+        problems.append(
+            f"message has a {len(body)}-line body, which is not allowed "
+            f'(first line: "{preview}")'
+        )
+    return problems
+
+
+def main():
+    with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
+        message = strip_git_syntax(fh.read())
+    subject, body = split_message(message)
+    if subject is None:
+        return 0  # empty message; git aborts those on its own
+    if subject.startswith(GIT_GENERATED):
+        return 0
+    problems = validate(subject, body)
+    if problems:
+        print(
+            f'commit message blocked ("{subject}"): '
+            + "; ".join(problems) + ". " + STYLE,
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
