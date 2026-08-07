@@ -18,11 +18,15 @@ are tracked. `bin/bootstrap` installs Fisher itself when it is missing and then
 runs `fisher update`, which reinstalls everything `fish_plugins` lists; run
 `fisher update` by hand to do the same later. The whitelist is by filename, so
 every new hand-written `conf.d/`, `functions/`, or `completions/` file must be
-added to `.gitignore` on purpose or it stays untracked. Beware that Pure owns
-`functions/fish_prompt.fish`, `fish_mode_prompt.fish`, and `fish_title.fish` —
-they look hand-written but are plugin output. Configure plugins from a
-numbered `conf.d/` module instead (`30-fzf.fish`, `60-pure.fish`), which sorts
-after the plugin's own `conf.d` file and survives updates.
+added to `.gitignore` on purpose or it stays untracked. Configure plugins from
+a numbered `conf.d/` module instead (`30-fzf.fish`), which sorts after the
+plugin's own `conf.d` file and survives updates.
+
+The prompt is provided by the Homebrew-managed Starship binary.
+`conf.d/60-starship.fish` initializes it; [`../starship.toml`](../starship.toml)
+is the tracked visual and module configuration. It mirrors Starship's Jetpack
+preset—compact geometric icons, mostly right-aligned conditional context, and a
+same-line input marker—using the same Rosé Pine palette as Ghostty.
 
 ## Tooling
 
@@ -30,7 +34,7 @@ This setup assumes Homebrew-managed tools when available:
 
 - `fzf`
 - `fzf.fish` via Fisher (`conf.d/30-fzf.fish` configures it)
-- `pure` via Fisher
+- `starship` via Homebrew (`conf.d/60-starship.fish` configures it)
 - `autopair.fish` via Fisher
 - `sponge` via Fisher
 - `zoxide`

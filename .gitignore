@@ -43,9 +43,8 @@ zed/prompts/
 #     meant 82 vendored third-party files plus a bootstrap hack to seed
 #     _fisher_plugins so `fisher update` would not treat them as conflicts.
 #     Ignore what Fisher writes and whitelist the hand-written config. New
-#     config files must be whitelisted here on purpose. Note that Pure owns
-#     fish_prompt.fish, fish_mode_prompt.fish, and fish_title.fish -- those
-#     look hand-written but are plugin output. ---
+#     config files must be whitelisted here on purpose. The prompt is provided
+#     by Homebrew Starship, not by a Fisher plugin. ---
 fish/themes/
 fish/functions/*
 !fish/functions/bin-chmod.fish
@@ -61,7 +60,7 @@ fish/conf.d/*
 !fish/conf.d/45-zig.fish
 !fish/conf.d/50-node.fish
 !fish/conf.d/55-python.fish
-!fish/conf.d/60-pure.fish
+!fish/conf.d/60-starship.fish
 !fish/conf.d/rustup.fish
 fish/completions/*
 !fish/completions/bun.fish
