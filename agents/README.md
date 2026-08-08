@@ -68,6 +68,31 @@ not applicable rather than guessed at. Model tiers are dropped on OpenCode (its
 model ids are machine-local) — the full translation contract and its lossy cases
 are documented in [subagents/README.md](subagents/README.md).
 
+## Installing a skill from GitHub
+
+Install GitHub-hosted skills directly into the canonical directory instead of
+letting `gh skill install` choose a single harness's default directory. From the
+repository root:
+
+```bash
+gh skill install github/gh-stack gh-stack --dir agents/skills
+bin/agents_link all
+```
+
+The explicit skill name keeps the command non-interactive. Replace the repository
+and skill arguments to add any other GitHub-hosted skill. The GitHub CLI records
+the source repository, ref, and tree SHA in `SKILL.md`; keep that metadata so the
+canonical copies can be checked and updated together:
+
+```bash
+gh skill update --dir agents/skills --dry-run
+gh skill update --dir agents/skills --all
+bin/agents_link all
+```
+
+Review an external skill before committing it. Once linked, every configured
+harness reads the one tracked copy under `agents/skills/`.
+
 ## Adopting a skill installed from outside
 
 `npx skills add --global` writes a real directory into `~/.agents/skills/<name>`.
