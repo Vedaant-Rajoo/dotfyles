@@ -208,6 +208,44 @@ else
 	die "pyenv was not installed by the Brewfile"
 fi
 
+printf '\n==> Rust via rustup\n'
+export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+# The proxies go on PATH before the probe below, not after it. Nothing else in
+# this run knows about them -- the installer is asked not to write shell startup
+# files, and bootstrap can be invoked from a shell that never loaded
+# fish/conf.d/rustup.fish -- so probing first would miss an existing install and
+# reinstall Rust on every re-run.
+PATH="$CARGO_HOME/bin:$PATH"
+
+# --no-modify-path is mandatory here: rustup-init writes its PATH snippet to
+# $XDG_CONFIG_HOME/fish/conf.d/rustup.fish, which on this machine resolves into
+# this repository, so a default install would silently overwrite the tracked
+# fish/conf.d/rustup.fish. That file already puts $CARGO_HOME/bin on PATH.
+if dry_run || ! command -v rustup >/dev/null 2>&1; then
+	run /bin/bash -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable"
+fi
+
+if have rustup; then
+	# Not redundant with --default-toolchain: the installer leaves an existing
+	# $RUSTUP_HOME alone, so a ~/.rustup carrying toolchains but no default in
+	# settings.toml -- the state Homebrew's rustup left behind -- stays broken
+	# until the default is recorded here.
+	if dry_run || ! rustup show active-toolchain >/dev/null 2>&1; then
+		run rustup default stable
+	fi
+
+	# A surviving keg puts a second compiler and its own proxies on PATH, so
+	# which toolchain answers `cargo` would come down to PATH ordering.
+	if ! dry_run && brew list --formula 2>/dev/null | grep -Eqx 'rust|rustup'; then
+		warn "Homebrew still provides rust/rustup; brew uninstall it so its keg cannot conflict with the $CARGO_HOME/bin proxies"
+	fi
+else
+	# Nothing later in bootstrap consumes Rust, unlike the Node and Python
+	# toolchains, so a missed install is a warning rather than a dead run.
+	warn "rustup is unavailable; install it from https://rustup.rs and re-run bootstrap"
+fi
+
 printf '\n==> npm global tools\n'
 export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(

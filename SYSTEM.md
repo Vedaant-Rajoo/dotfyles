@@ -25,14 +25,14 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `.node-version`; `bin/bootstrap` installs and selects it, and `fnm env --use-on-cd` reads the same file |
 | Python | 3.14.4, pyenv global | Pinned in `.python-version`; `bin/bootstrap` installs and selects it, and `pyenv init -` reads the same file |
 | Go | Homebrew Go 1.26.5; the official `/usr/local/go` install has been removed | Brewfile Go is the only source; `fish/conf.d/00-paths.fish` puts `$GOPATH/bin` above it for `go install` output |
-| Rust | Homebrew Rust 1.97.1 wins on PATH; rustup stable ARM64 1.96.0 also exists | Brewfile reproduces Homebrew Rust; rustup remains documented local state |
+| Rust | rustup stable `aarch64-apple-darwin`, rustc 1.97.1, proxies in `~/.cargo/bin`; the snapshot's Homebrew Rust and the keg-only Homebrew `rustup` that briefly replaced it are both removed | `bin/bootstrap` installs rustup from `sh.rustup.rs` with `--no-modify-path`; `fish/conf.d/rustup.fish` owns the PATH entry |
 | Bun | 1.3.14, Homebrew | Declared in Brewfile; the former `~/.bun` native install is no longer present |
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
 | Claude Code | 2.1.220 native install under `~/.local/share/claude`, launcher in `~/.local/bin` | `bin/bootstrap` uses the official native self-updating installer |
 | Cursor Agent | CLI `2026.07.23-e383d2b` under `~/.local/share/cursor-agent`; Cursor.app is `2026.07.09-a3815c0` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
 | Proton Pass CLI | 2.2.3 under `~/.local/bin` | `proton-pass-cli` is now declared as a fresh-machine fallback |
 
-The duplicated Go and Rust providers are intentional snapshot facts, not a desired cleanup performed by this change.
+The duplicated Go providers remain an intentional snapshot fact. Rust no longer has any Homebrew provider at all: rustup is the single source, so `bin/bootstrap` rather than the Brewfile is what reproduces it.
 
 ## Shared agent configuration
 

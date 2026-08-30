@@ -37,7 +37,8 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
 3. **Shell** — Homebrew Fish into `/etc/shells` and as the login shell, then Fisher and the
    [`fish/fish_plugins`](fish/fish_plugins) manifest.
 4. **Runtimes** — Node via fnm and Python via pyenv at the pinned [`.node-version`](.node-version) /
-   [`.python-version`](.python-version), plus the npm tools this config needs, incl. `postplan`.
+   [`.python-version`](.python-version), Rust via the official rustup installer, plus the npm tools
+   this config needs, incl. `postplan`.
 5. **Wiring** — AI harness config, Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
    LaunchAgent, repo hooks, and the optional `--with-defaults` / `--with-herdr-service` steps.
 
@@ -86,6 +87,7 @@ and `bin/agents_conform`, [claude/README.md](claude/README.md) covers `bin/agent
 cd ~/.config
 git pull
 bin/u                              # the interactive machine update: nvim, brew, casks
+rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
 ```

@@ -36,4 +36,5 @@ end
 if command -q nvim
     alias vim nvim
     alias vi nvim
+    alias nv nvim
 end

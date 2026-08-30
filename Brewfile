@@ -22,6 +22,7 @@ brew "bat"
 brew "eza"
 brew "fd"
 brew "fzf"
+brew "gnu-tar"
 brew "gum"
 # Required by bin/herdr-sessionizer.
 brew "jq"
@@ -47,9 +48,14 @@ brew "go"
 # .python-version, which pyenv also resolves directly through `pyenv init -`.
 brew "pyenv"
 brew "pyenv-virtualenv"
-# rustup coexists on the snapshot machine; Homebrew Rust currently wins on PATH.
-# See SYSTEM.md for provenance rather than changing either installation here.
-brew "rust"
+# Rust is deliberately absent: bin/bootstrap installs the official rustup from
+# https://sh.rustup.rs, which owns ~/.rustup and keeps its proxies in
+# ~/.cargo/bin. Homebrew's `rust` formula shadows those proxies, and its keg-only
+# `rustup` formula relocates `default_toolchain` into
+# /opt/homebrew/etc/rustup/settings.toml, where upstream tooling does not look.
+#
+# sccache is a standalone binary that needs neither.
+brew "sccache"
 brew "bun"
 brew "cocoapods"
 brew "luarocks"

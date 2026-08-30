@@ -1,351 +1,335 @@
-# version: 1.0.0
-"$schema" = "https://starship.rs/config-schema.json"
+"$schema" = 'https://starship.rs/config-schema.json'
 
-# Starship's Jetpack preset, with only its colors translated to Rosé Pine.
-palette = "rose_pine"
-
-add_newline = true
-continuation_prompt = "[▸▹ ](dimmed text)"
-
-format = """($nix_shell$container$fill$git_metrics\n)$cmd_duration\
-$hostname\
-$localip\
-$shlvl\
-$shell\
-$env_var\
-$jobs\
-$sudo\
-$username\
-$character"""
-
-right_format = """
-$singularity\
-$kubernetes\
-$directory\
-$vcsh\
-$fossil_branch\
-$git_branch\
-$git_commit\
-$git_state\
-$git_status\
-$hg_branch\
-$pijul_channel\
-$docker_context\
-$package\
-$c\
-$cpp\
-$cmake\
-$cobol\
-$daml\
-$dart\
-$deno\
-$dotnet\
-$elixir\
-$elm\
-$erlang\
-$fennel\
-$fortran\
-$golang\
-$guix_shell\
-$haskell\
-$haxe\
-$helm\
-$java\
-$julia\
-$kotlin\
-$gradle\
-$lua\
-$maven\
-$nim\
-$nodejs\
-$bun\
-$ocaml\
-$opa\
-$perl\
-$php\
-$pulumi\
-$purescript\
-$python\
-$raku\
-$rlang\
-$red\
-$ruby\
-$rust\
-$scala\
-$solidity\
-$swift\
-$terraform\
-$vlang\
-$vagrant\
-$xmake\
-$zig\
-$buf\
-$conda\
-$pixi\
-$meson\
-$spack\
-$memory_usage\
-$aws\
-$gcloud\
-$openstack\
-$azure\
-$crystal\
-$custom\
-$status\
-$os\
-$battery\
-$time"""
-
-[fill]
-symbol = " "
+continuation_prompt = "[.](bright-black) "
 
 [character]
-format = "$symbol "
-success_symbol = "[◎](bold italic gold)"
-error_symbol = "[○](italic iris)"
-vimcmd_symbol = "[■](italic dimmed pine)"
-# not supported in zsh
-vimcmd_replace_one_symbol = "◌"
-vimcmd_replace_symbol = "□"
-vimcmd_visual_symbol = "▼"
+success_symbol = "[>](bold green)"
+error_symbol = "[x](bold red)"
+vimcmd_symbol = "[<](bold green)"
+vimcmd_visual_symbol = "[<](bold yellow)"
+vimcmd_replace_symbol = "[<](bold purple)"
+vimcmd_replace_one_symbol = "[<](bold purple)"
 
-[env_var.VIMSHELL]
-format = "[$env_value]($style)"
-style = "pine italic"
-
-[sudo]
-format = "[$symbol]($style)"
-style = "bold italic iris"
-symbol = "⋈┈"
-disabled = false
-
-[username]
-style_user = "gold bold italic"
-style_root = "iris bold italic"
-format = "[⭘ $user]($style) "
-disabled = false
-show_always = false
-
-[directory]
-home_symbol = "⌂"
-truncation_length = 2
-truncation_symbol = "□ "
-read_only = " ◈"
-use_os_path_sep = true
-style = "italic foam"
-format = "[$path]($style)[$read_only]($read_only_style)"
-repo_root_style = "bold foam"
-repo_root_format = "[$before_root_path]($before_repo_root_style)[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) [△](bold foam)"
-
-[cmd_duration]
-format = "[◄ $duration ](italic text)"
-
-[jobs]
-format = "[$symbol$number]($style) "
-style = "text"
-symbol = "[▶](foam italic)"
-
-[localip]
-ssh_only = true
-format = " ◯[$localipv4](bold iris)"
-disabled = false
-
-[time]
-disabled = false
-format = "[ $time]($style)"
-time_format = "%R"
-utc_time_offset = "local"
-style = "italic dimmed text"
-
-[battery]
-format = "[ $percentage $symbol]($style)"
-full_symbol = "█"
-charging_symbol = "[↑](italic bold pine)"
-discharging_symbol = "↓"
-unknown_symbol = "░"
-empty_symbol = "▃"
-
-[[battery.display]]
-threshold = 20
-style = "italic bold love"
-
-[[battery.display]]
-threshold = 60
-style = "italic dimmed iris"
-
-[[battery.display]]
-threshold = 70
-style = "italic dimmed gold"
-
-[git_branch]
-format = " [$branch(:$remote_branch)]($style)"
-symbol = "[△](bold italic foam)"
-style = "italic foam"
-truncation_symbol = "⋯"
-truncation_length = 11
-ignore_branches = ["main", "master"]
-only_attached = true
-
-[git_metrics]
-format = "([▴$added]($added_style))([▿$deleted]($deleted_style))"
-added_style = "italic dimmed pine"
-deleted_style = "italic dimmed love"
-ignore_submodules = true
-disabled = false
+[git_commit]
+tag_symbol = " tag "
 
 [git_status]
-style = "bold italic foam"
-format = "([⎪$ahead_behind$staged$modified$untracked$renamed$deleted$conflicted$stashed⎥]($style))"
-conflicted = "[◪◦](italic rose)"
-ahead = "[▴│[${count}](bold text)│](italic pine)"
-behind = "[▿│[${count}](bold text)│](italic love)"
-diverged = "[◇ ▴┤[${ahead_count}](regular text)│▿┤[${behind_count}](regular text)│](italic rose)"
-untracked = "[◌◦](italic gold)"
-stashed = "[◃◈](italic text)"
-modified = "[●◦](italic gold)"
-staged = "[▪┤[$count](bold text)│](italic foam)"
-renamed = "[◎◦](italic foam)"
-deleted = "[✕](italic love)"
-
-[deno]
-format = " [deno](italic) [∫ $version](pine bold)"
-version_format = "${raw}"
-
-[lua]
-format = " [lua](italic) [${symbol}${version}]($style)"
-version_format = "${raw}"
-symbol = "⨀ "
-style = "bold gold"
-
-[nodejs]
-format = " [node](italic) [◫ ($version)](bold pine)"
-version_format = "${raw}"
-detect_files = ["package-lock.json", "yarn.lock"]
-detect_folders = ["node_modules"]
-detect_extensions = []
-
-[bun]
-format = " [bun](italic) [◫ ($version)](bold pine)"
-version_format = "${raw}"
-
-[python]
-format = " [py](italic) [${symbol}${version}]($style)"
-symbol = "[⌉](bold foam)⌊ "
-version_format = "${raw}"
-style = "bold gold"
-
-[ruby]
-format = " [rb](italic) [${symbol}${version}]($style)"
-symbol = "◆ "
-version_format = "${raw}"
-style = "bold love"
-
-[rust]
-format = " [rs](italic) [$symbol$version]($style)"
-symbol = "⊃ "
-version_format = "${raw}"
-style = "bold love"
-
-[package]
-format = " [pkg](italic dimmed) [$symbol$version]($style)"
-version_format = "${raw}"
-symbol = "◨ "
-style = "dimmed gold italic bold"
-
-[swift]
-format = " [sw](italic) [${symbol}${version}]($style)"
-symbol = "◁ "
-style = "bold love"
-version_format = "${raw}"
+ahead = ">"
+behind = "<"
+diverged = "<>"
+renamed = "r"
+deleted = "x"
 
 [aws]
-disabled = true
-format = " [aws](italic) [$symbol $profile $region]($style)"
-style = "bold foam"
-symbol = "▲ "
+symbol = "aws "
+
+[azure]
+symbol = "az "
+
+[battery]
+full_symbol = "full "
+charging_symbol = "charging "
+discharging_symbol = "discharging "
+unknown_symbol = "unknown "
+empty_symbol = "empty "
 
 [buf]
-symbol = "■ "
-format = " [buf](italic) [$symbol $version $buf_version]($style)"
+symbol = "buf "
+
+[bun]
+symbol = "bun "
 
 [c]
-symbol = "ℂ "
-format = " [$symbol($version(-$name))]($style)"
+symbol = "C "
 
 [cpp]
-symbol = "ℂ "
-format = " [$symbol($version(-$name))]($style)"
+symbol = "C++ "
+
+[cobol]
+symbol = "cobol "
 
 [conda]
-symbol = "◯ "
-format = " conda [$symbol$environment]($style)"
+symbol = "conda "
 
-[pixi]
-symbol = "■ "
-format = " pixi [$symbol$version ($environment )]($style)"
+[container]
+symbol = "container "
+
+[crystal]
+symbol = "cr "
+
+[cmake]
+symbol = "cmake "
+
+[daml]
+symbol = "daml "
 
 [dart]
-symbol = "◁◅ "
-format = " dart [$symbol($version )]($style)"
+symbol = "dart "
+
+[deno]
+symbol = "deno "
+
+[dotnet]
+format = "via [$symbol($version )(target $tfm )]($style)"
+symbol = ".NET "
+
+[directory]
+read_only = " ro"
 
 [docker_context]
-symbol = "◧ "
-format = " docker [$symbol$context]($style)"
+symbol = "docker "
 
 [elixir]
-symbol = "△ "
-format = " exs [$symbol $version OTP $otp_version ]($style)"
+symbol = "exs "
 
 [elm]
-symbol = "◩ "
-format = " elm [$symbol($version )]($style)"
+symbol = "elm "
+
+[erlang]
+symbol = "erl "
+
+[fennel]
+symbol = "fnl "
+
+[fortran]
+symbol = "fortran "
+
+[fossil_branch]
+symbol = "fossil "
+truncation_symbol = "..."
+
+[gcloud]
+symbol = "gcp "
+
+[git_branch]
+symbol = "git "
+truncation_symbol = "..."
+
+[gleam]
+symbol = "gleam "
 
 [golang]
-symbol = "∩ "
-format = " go [$symbol($version )]($style)"
+symbol = "go "
+
+[gradle]
+symbol = "gradle "
+
+[guix_shell]
+symbol = "guix "
 
 [haskell]
-symbol = "❯λ "
-format = " hs [$symbol($version )]($style)"
+symbol = "haskell "
+
+[haxe]
+symbol = "hx "
+
+[helm]
+symbol = "helm "
+
+[hg_branch]
+symbol = "hg "
+truncation_symbol = "..."
+
+[hostname]
+ssh_symbol = "ssh "
 
 [java]
-symbol = "∪ "
-format = " java [${symbol}(${version} )]($style)"
+symbol = "java "
+
+[jobs]
+symbol = "*"
 
 [julia]
-symbol = "◎ "
-format = " jl [$symbol($version )]($style)"
+symbol = "jl "
+
+[kotlin]
+symbol = "kt "
+
+[kubernetes]
+symbol = "kubernetes "
+
+[lua]
+symbol = "lua "
+
+[maven]
+symbol = "maven "
+
+[nodejs]
+symbol = "nodejs "
 
 [memory_usage]
-symbol = "▪▫▪ "
-format = " mem [${ram}( ${swap})]($style)"
+symbol = "memory "
+
+[meson]
+symbol = "meson "
+truncation_symbol = "..."
+
+[mojo]
+symbol = "mojo "
+
+[nats]
+symbol = "nats "
+
+[netns]
+symbol = "netns "
 
 [nim]
-symbol = "▴▲▴ "
-format = " nim [$symbol($version )]($style)"
+symbol = "nim "
 
 [nix_shell]
-style = "bold italic dimmed foam"
-symbol = "✶"
-format = "[$symbol nix⎪$state⎪]($style) [$name](italic dimmed text)"
-impure_msg = "[⌽](bold dimmed love)"
-pure_msg = "[⌾](bold dimmed pine)"
-unknown_msg = "[◌](bold dimmed gold)"
+symbol = "nix "
+
+[ocaml]
+symbol = "ml "
+
+[odin]
+symbol = "odin "
+
+[opa]
+symbol = "opa "
+
+[openstack]
+symbol = "openstack "
+
+[os.symbols]
+AIX = "aix "
+Alpaquita = "alq "
+AlmaLinux = "alma "
+Alpine = "alp "
+ALTLinux = "alt "
+Amazon = "amz "
+Android = "andr "
+AOSC = "aosc "
+Arch = "rch "
+Artix = "atx "
+Bluefin = "blfn "
+CachyOS = "cach "
+CentOS = "cent "
+Debian = "deb "
+DragonFly = "dfbsd "
+Elementary = "elem "
+Emscripten = "emsc "
+EndeavourOS = "ndev "
+Fedora = "fed "
+FreeBSD = "fbsd "
+Garuda = "garu "
+Gentoo = "gent "
+HardenedBSD = "hbsd "
+Illumos = "lum "
+Ios = "ios "
+InstantOS = "inst "
+Kali = "kali "
+Linux = "lnx "
+Mabox = "mbox "
+Macos = "mac "
+Manjaro = "mjo "
+Mariner = "mrn "
+MidnightBSD = "mid "
+Mint = "mint "
+NetBSD = "nbsd "
+NixOS = "nix "
+Nobara = "nbra "
+OpenBSD = "obsd "
+OpenCloudOS = "ocos "
+openEuler = "oeul "
+openSUSE = "osuse "
+OracleLinux = "orac "
+PikaOS = "pika "
+Pop = "pop "
+Raspbian = "rasp "
+Redhat = "rhl "
+RedHatEnterprise = "rhel "
+RockyLinux = "rky "
+Redox = "redox "
+Solus = "sol "
+SUSE = "suse "
+Ubuntu = "ubnt "
+Ultramarine = "ultm "
+Unknown = "unk "
+Uos = "uos "
+Void = "void "
+Windows = "win "
+Zorin = "zorn "
+
+[package]
+symbol = "pkg "
+
+[perl]
+symbol = "pl "
+
+[php]
+symbol = "php "
+
+[pijul_channel]
+symbol = "pijul "
+truncation_symbol = "..."
+
+[pixi]
+symbol = "pixi "
+
+[pulumi]
+symbol = "pulumi "
+
+[purescript]
+symbol = "purs "
+
+[python]
+symbol = "py "
+
+[quarto]
+symbol = "quarto "
+
+[raku]
+symbol = "raku "
+
+[red]
+symbol = "red "
+
+[rlang]
+symbol = "r "
+
+[ruby]
+symbol = "rb "
+
+[rust]
+symbol = "rs "
+
+[scala]
+symbol = "scala "
+
+[shlvl]
+symbol = "shlvl "
 
 [spack]
-symbol = "◇ "
-format = " spack [$symbol$environment]($style)"
+symbol = "spack "
 
-[palettes.rose_pine]
-base = "#191724"
-surface = "#1f1d2e"
-overlay = "#26233a"
-muted = "#6e6a86"
-subtle = "#908caa"
-text = "#e0def4"
-love = "#eb6f92"
-gold = "#f6c177"
-rose = "#ebbcba"
-pine = "#31748f"
-foam = "#9ccfd8"
-iris = "#c4a7e7"
+[solidity]
+symbol = "solidity "
+
+[status]
+symbol = "[x](bold red) "
+not_executable_symbol = "noexec"
+not_found_symbol = "notfound"
+sigint_symbol = "sigint"
+signal_symbol = "sig"
+
+[sudo]
+symbol = "sudo "
+
+[swift]
+symbol = "swift "
+
+[typst]
+symbol = "typst "
+
+[vagrant]
+symbol = "vagrant "
+
+[terraform]
+symbol = "terraform "
+
+[xmake]
+symbol = "xmake "
+
+[zig]
+symbol = "zig "

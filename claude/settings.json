@@ -1,14 +1,49 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "apiKeyHelper": "~/.config/claude/api-key-helper.sh",
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.6-sol",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-opus-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.6-terra"
+  "$schema" : "https://json.schemastore.org/claude-code-settings.json",
+  "apiKeyHelper" : "~/.config/claude/api-key-helper.sh",
+  "effortLevel" : "medium",
+  "enabledPlugins" : {
+    "code-review@claude-plugins-official" : true,
+    "codex@openai-codex" : true,
+    "context7@claude-plugins-official" : true,
+    "frontend-design@claude-plugins-official" : true,
+    "hookify@claude-plugins-official" : true,
+    "playwright@claude-plugins-official" : true,
+    "remember@claude-plugins-official" : true,
+    "security-guidance@claude-plugins-official" : true,
+    "superpowers@claude-plugins-official" : true
   },
-  "permissions": {
-    "allow": [
+  "env" : {
+    "ANTHROPIC_AUTH_TOKEN" : "quotio-local-CF9193C1-8033-4445-8840-841567675F7C",
+    "ANTHROPIC_BASE_URL" : "http://127.0.0.1:8317",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL" : "gpt-5.6-terra",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL" : "gpt-5.6-sol",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL" : "stealth/ox-alpha"
+  },
+  "extraKnownMarketplaces" : {
+    "openai-codex" : {
+      "source" : {
+        "repo" : "openai/codex-plugin-cc",
+        "source" : "github"
+      }
+    }
+  },
+  "hooks" : {
+    "Stop" : [
+      {
+        "hooks" : [
+          {
+            "command" : "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
+            "timeout" : 5,
+            "type" : "command"
+          }
+        ]
+      }
+    ]
+  },
+  "model" : "gpt-5.6-sol",
+  "permissions" : {
+    "allow" : [
       "Bash(gh api *)",
       "Bash(curl *)",
       "WebFetch(domain:github.com)",
@@ -18,45 +53,11 @@
       "WebFetch(domain:htmlbin.dev)"
     ]
   },
-  "model": "gpt-5.6-sol",
-  "enabledPlugins": {
-    "codex@openai-codex": true,
-    "code-review@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "remember@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true
+  "skipDangerousModePermissionPrompt" : true,
+  "statusLine" : {
+    "command" : "bash ~/.config/claude/statusline-command.sh",
+    "type" : "command"
   },
-  "extraKnownMarketplaces": {
-    "openai-codex": {
-      "source": {
-        "source": "github",
-        "repo": "openai/codex-plugin-cc"
-      }
-    }
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash ~/.config/claude/statusline-command.sh"
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  },
-  "effortLevel": "medium",
-  "skipDangerousModePermissionPrompt": true,
-  "theme": "dark-ansi",
-  "tui": "fullscreen"
+  "theme" : "dark-ansi",
+  "tui" : "fullscreen"
 }
