@@ -14,8 +14,6 @@ tap "xykong/tap"
 # bin/bootstrap adds the Homebrew binary to /etc/shells and selects it with chsh.
 # This snapshot machine still uses the official Fish pkg at /usr/local/bin/fish.
 brew "fish"
-# Prompt engine initialized by fish/conf.d/60-starship.fish.
-brew "starship"
 
 # Core CLI tools
 brew "bat"

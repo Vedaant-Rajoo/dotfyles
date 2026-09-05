@@ -22,11 +22,10 @@ added to `.gitignore` on purpose or it stays untracked. Configure plugins from
 a numbered `conf.d/` module instead (`30-fzf.fish`), which sorts after the
 plugin's own `conf.d` file and survives updates.
 
-The prompt is provided by the Homebrew-managed Starship binary.
-`conf.d/60-starship.fish` initializes it; [`../starship.toml`](../starship.toml)
-is the tracked visual and module configuration. It mirrors Starship's Jetpack
-preset—compact geometric icons, mostly right-aligned conditional context, and a
-same-line input marker—using the same Rosé Pine palette as Ghostty.
+The prompt is provided by [Hydro](https://github.com/jorgebucaran/hydro), installed
+through Fisher with its default configuration. It shows the working directory,
+asynchronous Git status, and command duration without a separate prompt binary.
+Background Git fetching is disabled by default.
 
 ## Tooling
 
@@ -34,7 +33,7 @@ This setup assumes Homebrew-managed tools when available:
 
 - `fzf`
 - `fzf.fish` via Fisher (`conf.d/30-fzf.fish` configures it)
-- `starship` via Homebrew (`conf.d/60-starship.fish` configures it)
+- `hydro` via Fisher (default prompt configuration)
 - `autopair.fish` via Fisher
 - `sponge` via Fisher
 - `zoxide`

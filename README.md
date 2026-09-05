@@ -56,7 +56,6 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
-| [`starship.toml`](starship.toml) | Rosé Pine adaptation of Starship's Jetpack preset |
 | [`agents/`](agents/README.md) | Canonical cross-harness rules, skills, subagents, hooks |
 | [`claude/`](claude/README.md) | Claude-native settings, hooks, statusline, adapters into `agents/` |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
