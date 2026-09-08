@@ -1,18 +1,11 @@
-# Full macOS machine manifest.
-#
-# On an already-configured machine, use `brew bundle check --file=Brewfile`.
-# Do not use `brew bundle install` only to verify this file: it may adopt existing
-# applications or run privileged package installers with system-level effects.
+# Verify with: brew bundle check --file=Brewfile
+# bin/bootstrap manages Node, Python, Rust, npm globals, and native CLI installers.
 
 # Taps
+tap "abue-ammar/tinycast"
 tap "anomalyco/tap"
-tap "nguyenphutrong/tap"
-tap "supabase/tap"
-tap "xykong/tap"
 
 # Shell
-# bin/bootstrap adds the Homebrew binary to /etc/shells and selects it with chsh.
-# This snapshot machine still uses the official Fish pkg at /usr/local/bin/fish.
 brew "fish"
 
 # Core CLI tools
@@ -22,7 +15,6 @@ brew "fd"
 brew "fzf"
 brew "gnu-tar"
 brew "gum"
-# Required by bin/herdr-sessionizer.
 brew "jq"
 brew "ripgrep"
 brew "tlrc"
@@ -36,23 +28,10 @@ brew "gitleaks"
 brew "lazygit"
 
 # Toolchains and package managers
-# Node is installed and selected by bin/bootstrap; the version is pinned in
-# .node-version, which fnm also reads directly through `fnm env --use-on-cd`.
 brew "fnm"
-# The only Go on PATH: the official /usr/local/go install is gone, so this
-# supplies `go` and `gofmt` everywhere. See fish/conf.d/00-paths.fish.
 brew "go"
-# Python is installed and selected by bin/bootstrap; the version is pinned in
-# .python-version, which pyenv also resolves directly through `pyenv init -`.
 brew "pyenv"
 brew "pyenv-virtualenv"
-# Rust is deliberately absent: bin/bootstrap installs the official rustup from
-# https://sh.rustup.rs, which owns ~/.rustup and keeps its proxies in
-# ~/.cargo/bin. Homebrew's `rust` formula shadows those proxies, and its keg-only
-# `rustup` formula relocates `default_toolchain` into
-# /opt/homebrew/etc/rustup/settings.toml, where upstream tooling does not look.
-#
-# sccache is a standalone binary that needs neither.
 brew "sccache"
 brew "bun"
 brew "cocoapods"
@@ -75,26 +54,18 @@ brew "stylua"
 # Editors and terminal workflow
 brew "herdr"
 brew "neovim"
-# Required at runtime by nvim-treesitter on its main branch.
 brew "tree-sitter-cli"
-
-# tmux is intentionally not declared. It was retired in favor of Herdr and is
-# only installed locally as legacy state; bin/tmux-sessionizer is a Herdr shim.
 
 # Product CLIs
 brew "anomalyco/tap/opencode", trusted: true
-brew "supabase/tap/supabase", trusted: true
 
 # Developer apps and terminal tools
-# Claude Code and cursor-agent use their native self-updating installers instead
-# of the available claude-code and cursor-cli casks; bin/bootstrap handles Claude.
 cask "codex"
 cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
 cask "ghostty"
 cask "orbstack"
 cask "t3-code@nightly"
-cask "xykong/tap/flux-markdown", trusted: true
 
 # Productivity and desktop UI
 cask "alcove"
@@ -102,18 +73,14 @@ cask "bartender"
 cask "dockdoor"
 cask "hyperkey"
 cask "linearmouse"
-cask "nguyenphutrong/tap/quotio", trusted: true
-# The installed Raycast uses the Beta channel selected inside the app; Homebrew
-# exposes only the stable cask token.
-cask "raycast"
 cask "rectangle-pro"
 cask "shottr"
+cask "abue-ammar/tinycast/tinycast", trusted: true
 cask "wallspace"
 cask "wispr-flow"
 
 # Browsers, communication, and networking
 cask "google-chrome"
-# Alternate Discord client; bin/legcord_link connects its tracked settings.
 cask "legcord"
 cask "proton-pass"
 cask "tailscale-app"
@@ -126,18 +93,13 @@ cask "music-presence"
 cask "wakatime"
 
 # Games
-# This also installs the Riot Client.
 cask "league-of-legends"
 
-# Mac App Store applications. Sign in to the App Store before running bootstrap.
+# Mac App Store apps (requires App Store sign-in)
 mas "Amphetamine", id: 937984704
 mas "Hush", id: 1544743900
-mas "NepTunes", id: 1006739057
 mas "Proton Pass for Safari", id: 6502835663
 mas "Tampermonkey", id: 6738342400
 mas "TrashMe 3", id: 1490879410
 mas "Wipr", id: 1662217862
 mas "Xcode", id: 497799835
-
-# npm globals are installed after fnm by bin/bootstrap. Brew Bundle's npm
-# directive cannot pin versions and installs Homebrew Node when npm is absent.

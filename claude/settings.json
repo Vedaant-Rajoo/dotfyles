@@ -1,49 +1,41 @@
 {
-  "$schema" : "https://json.schemastore.org/claude-code-settings.json",
-  "apiKeyHelper" : "~/.config/claude/api-key-helper.sh",
-  "effortLevel" : "medium",
-  "enabledPlugins" : {
-    "code-review@claude-plugins-official" : true,
-    "codex@openai-codex" : true,
-    "context7@claude-plugins-official" : true,
-    "frontend-design@claude-plugins-official" : true,
-    "hookify@claude-plugins-official" : true,
-    "playwright@claude-plugins-official" : true,
-    "remember@claude-plugins-official" : true,
-    "security-guidance@claude-plugins-official" : true,
-    "superpowers@claude-plugins-official" : true
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "apiKeyHelper": "~/.config/claude/api-key-helper.sh",
+  "effortLevel": "medium",
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": true,
+    "codex@openai-codex": true,
+    "context7@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "remember@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
   },
-  "env" : {
-    "ANTHROPIC_AUTH_TOKEN" : "quotio-local-CF9193C1-8033-4445-8840-841567675F7C",
-    "ANTHROPIC_BASE_URL" : "http://127.0.0.1:8317",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL" : "gpt-5.6-terra",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL" : "gpt-5.6-sol",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL" : "stealth/ox-alpha"
-  },
-  "extraKnownMarketplaces" : {
-    "openai-codex" : {
-      "source" : {
-        "repo" : "openai/codex-plugin-cc",
-        "source" : "github"
+  "extraKnownMarketplaces": {
+    "openai-codex": {
+      "source": {
+        "repo": "openai/codex-plugin-cc",
+        "source": "github"
       }
     }
   },
-  "hooks" : {
-    "Stop" : [
+  "hooks": {
+    "Stop": [
       {
-        "hooks" : [
+        "hooks": [
           {
-            "command" : "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
-            "timeout" : 5,
-            "type" : "command"
+            "command": "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
     ]
   },
-  "model" : "gpt-5.6-sol",
-  "permissions" : {
-    "allow" : [
+  "permissions": {
+    "allow": [
       "Bash(gh api *)",
       "Bash(curl *)",
       "WebFetch(domain:github.com)",
@@ -53,11 +45,20 @@
       "WebFetch(domain:htmlbin.dev)"
     ]
   },
-  "skipDangerousModePermissionPrompt" : true,
-  "statusLine" : {
-    "command" : "bash ~/.config/claude/statusline-command.sh",
-    "type" : "command"
+  "skipDangerousModePermissionPrompt": true,
+  "statusLine": {
+    "command": "bash ~/.config/claude/statusline-command.sh",
+    "type": "command"
   },
-  "theme" : "dark-ansi",
-  "tui" : "fullscreen"
+  "theme": "dark-ansi",
+  "tui": "fullscreen",
+  "hasCompletedOnboarding": true,
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:20128/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-dba4db41d488854e-b8onbh-fed6af5c",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "cx/gpt-6-astra",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "cx/gpt-6-astra",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "cu/default",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "openrouter/qwen/qwen3.8-max-0902"
+  }
 }

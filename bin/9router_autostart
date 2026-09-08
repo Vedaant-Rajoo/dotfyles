@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Configure 9Router for the next macOS login without restarting a live router."""
+
+import os
+from pathlib import Path
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def install():
+    if sys.platform != "darwin":
+        raise RuntimeError("login startup currently supports macOS only")
+
+    user_home = Path.home()
+    router = user_home / ".node_modules/lib/node_modules/9router/cli.js"
+    node = shutil.which("node")
+    if not node or not router.is_file():
+        raise RuntimeError("install Node and the bootstrap's global 9router package first")
+
+    # Resolve fnm shims/symlinks to the runtime itself; launchd has no shell init.
+    node = subprocess.check_output(
+        [node, "-p", "process.execPath"], text=True
+    ).strip()
+    label = "com.9router.autostart"
+    target = user_home / "Library/LaunchAgents" / f"{label}.plist"
+    content = plistlib.dumps({
+        "Label": label,
+        "ProgramArguments": [
+            node, str(router), "--tray", "--skip-update", "--no-browser",
+            "--host", "127.0.0.1", "--port", "20128",
+        ],
+        "EnvironmentVariables": {
+            "PATH": f"{Path(node).parent}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+        },
+        "RunAtLoad": True,
+        # Allow Quit from the tray to stay quit until the next login.
+        "KeepAlive": False,
+        "StandardOutPath": "/tmp/9router.log",
+        "StandardErrorPath": "/tmp/9router.error.log",
+    }, sort_keys=False)
+    if target.is_file() and target.read_bytes() == content:
+        print("9Router login startup is already configured.")
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Atomic replacement also avoids writing through an existing plist symlink.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
+            temporary = Path(output.name)
+            output.write(content)
+        temporary.chmod(0o644)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print(f"Configured {target}; takes effect at next login. Running router unchanged.")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 1:
+        sys.exit("usage: 9router_autostart")
+    try:
+        install()
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        sys.exit(f"9router_autostart: {error}")

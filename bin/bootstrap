@@ -4,6 +4,7 @@
 set -euo pipefail
 
 POSTPLAN_VERSION="0.0.4"
+NINE_ROUTER_VERSION="0.5.69"
 
 DRY_RUN=0
 WITH_DEFAULTS=0
@@ -250,6 +251,7 @@ printf '\n==> npm global tools\n'
 export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
+	"9router@$NINE_ROUTER_VERSION"
 	"@augmentcode/auggie"
 	"localtunnel"
 )
@@ -303,6 +305,11 @@ if have npm; then
 	fi
 else
 	warn "npm is unavailable; re-run bootstrap after fnm activates Node $NODE_VERSION"
+fi
+
+printf '\n==> 9Router login startup\n'
+if ! run "$REPO_ROOT/bin/9router_autostart"; then
+	warn "9Router startup setup failed; run bin/9router_autostart after Node and 9router are installed"
 fi
 
 printf '\n==> AI harness configuration\n'
@@ -362,6 +369,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
   - Write your CLIProxyAPI token into claude/auth-token, then run bin/agents_link all.
   - Run `postplan login` and open Neovim once to install plugins.
+  - At next login, open http://127.0.0.1:20128/dashboard to connect 9Router providers and configure CLI Tools.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
 EOF

@@ -38,9 +38,10 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
    [`fish/fish_plugins`](fish/fish_plugins) manifest.
 4. **Runtimes** — Node via fnm and Python via pyenv at the pinned [`.node-version`](.node-version) /
    [`.python-version`](.python-version), Rust via the official rustup installer, plus the npm tools
-   this config needs, incl. `postplan`.
+   this config needs, including pinned `postplan` and `9router`.
 5. **Wiring** — AI harness config, Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
-   LaunchAgent, repo hooks, and the optional `--with-defaults` / `--with-herdr-service` steps.
+   LaunchAgent, 9Router startup at next login, repo hooks, and the optional
+   `--with-defaults` / `--with-herdr-service` steps.
 
 The App Store must be signed in before `mas` installs entries; after a reported failure, sign in and re-run bootstrap.
 
@@ -73,6 +74,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [Git identity](docs/setup.md#git-identity-migration) — retire a shadowing `~/.gitconfig`.
 - [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — first `nvim` run, `~/.wakatime.cfg`.
 - [Postplan](docs/setup.md#html-planning--postplan) — `postplan login`.
+- [9Router](docs/setup.md#9router) — provider connections and harness routing in the local dashboard.
 - Native app auth — [OpenCode](docs/setup.md#opencode), [Zed](docs/setup.md#zed),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).

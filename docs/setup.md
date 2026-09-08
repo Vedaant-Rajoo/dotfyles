@@ -61,6 +61,36 @@ postplan whoami
 
 Postplan credentials and local draft mappings stay outside the repository.
 
+## 9Router
+
+Bootstrap installs `9router@0.5.69` and runs `bin/9router_autostart` to configure
+startup at the next macOS login. It reuses 9Router's own
+`~/Library/LaunchAgents/com.9router.autostart.plist`, with tray mode, update checks
+and browser opening disabled, and an explicit `127.0.0.1:20128` binding.
+It does not load or restart the service during setup. Quitting from the tray
+keeps it stopped until the next login.
+
+For an existing installation, apply just the startup configuration with:
+
+```sh
+bin/9router_autostart
+```
+
+After logging out and back in, open <http://127.0.0.1:20128/dashboard> without
+launching 9Router manually. Connect providers under **Providers**, then configure
+each harness under **CLI Tools**. Credentials and the database in `~/.9router`
+remain machine-local. Claude's Apply action can write a token into the tracked
+`claude/settings.json`; move that credential into the existing ignored
+`claude/auth-token` / `apiKeyHelper` arrangement before committing settings.
+
+Use this helper to restore startup settings if 9Router's Auto-start toggle
+rewrites the plist: the built-in toggle omits the localhost binding. Re-run the
+helper after replacing the Node runtime, because launchd uses its absolute path.
+Change `NINE_ROUTER_VERSION` in `bin/bootstrap` when intentionally upgrading.
+
+Verify the startup helper in an isolated temporary directory with
+`python3 tests/bin/9router_autostart_test.py`.
+
 ## OpenCode
 
 `opencode/opencode.jsonc` is the sanitized tracked base and points at the shared
