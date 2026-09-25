@@ -54,11 +54,11 @@
   "tui": "fullscreen",
   "hasCompletedOnboarding": true,
   "env": {
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5-1",
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:20128/v1",
     "ANTHROPIC_AUTH_TOKEN": "sk-dba4db41d488854e-b8onbh-fed6af5c",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "cx/gpt-6-astra",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "cx/gpt-6-astra",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "cu/default",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "openrouter/qwen/qwen3.8-max-0902"
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "openrouter/deepseek/deepseek-v4-flash-0731"
   }
 }

@@ -2,7 +2,6 @@
 # bin/bootstrap manages Node, Python, Rust, npm globals, and native CLI installers.
 
 # Taps
-tap "abue-ammar/tinycast"
 tap "anomalyco/tap"
 
 # Shell
@@ -71,11 +70,10 @@ cask "t3-code@nightly"
 cask "alcove"
 cask "bartender"
 cask "dockdoor"
-cask "hyperkey"
 cask "linearmouse"
+cask "raycast"
 cask "rectangle-pro"
 cask "shottr"
-cask "abue-ammar/tinycast/tinycast", trusted: true
 cask "wallspace"
 cask "wispr-flow"
 

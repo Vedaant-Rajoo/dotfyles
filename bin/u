@@ -407,6 +407,9 @@ function u_upgrade_cask --argument-names log_file token
 end
 
 function u_main
+    # Include Raycast even though its cask advertises in-app updates.
+    set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast)
+
     set -g U_APPS
     set -g U_CLOSED
     set -g U_SKIPS
