@@ -25,10 +25,7 @@ claude/auth-token
 # --- Nested upstream repo ---
 init.lua/
 
-# --- Generated harness projections. ~/.config/opencode IS this repo's
-#     opencode/, and ~/.claude is a symlink to this repo's claude/, so
-#     bin/agents_link writes translated subagents into the working tree;
-#     agents/subagents/ is the tracked source. ---
+# --- Optional native harness agent definitions remain machine-local. ---
 opencode/agents/
 claude/agents/
 

@@ -1,64 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "apiKeyHelper": "~/.config/claude/api-key-helper.sh",
-  "effortLevel": "medium",
-  "enabledPlugins": {
-    "code-review@claude-plugins-official": true,
-    "codex@openai-codex": true,
-    "context7@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "remember@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "openai-codex": {
-      "source": {
-        "repo": "openai/codex-plugin-cc",
-        "source": "github"
-      }
-    }
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "~/.config/agents/hooks/scripts/conformance-stop-marker.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ]
-      }
-    ]
-  },
-  "permissions": {
-    "allow": [
-      "Bash(gh api *)",
-      "Bash(curl *)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:registry.npmjs.org)",
-      "WebFetch(domain:htmlbin.dev)"
-    ]
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "statusLine": {
-    "command": "bash ~/.config/claude/statusline-command.sh",
-    "type": "command"
-  },
   "theme": "dark-ansi",
   "tui": "fullscreen",
   "hasCompletedOnboarding": true,
-  "env": {
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5-1",
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:20128/v1",
-    "ANTHROPIC_AUTH_TOKEN": "sk-dba4db41d488854e-b8onbh-fed6af5c",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "openrouter/deepseek/deepseek-v4-flash-0731"
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": false,
+    "codex@openai-codex": false,
+    "context7@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "hookify@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "remember@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false
   }
 }

@@ -34,40 +34,28 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 
 The duplicated Go providers remain an intentional snapshot fact. Rust no longer has any Homebrew provider at all: rustup is the single source, so `bin/bootstrap` rather than the Brewfile is what reproduces it.
 
-## Shared agent configuration
+## AI harness configuration
 
-`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries. The evergreen guide to that layer is [agents/README.md](agents/README.md).
+Updated 2026-09-28: the previous shared behavior layer and 9router integration
+were archived. Bootstrap no longer installs a router or projects shared rules,
+skills, subagents, and hooks. Harnesses use native authentication and provider
+settings. Optional middleware will be configured separately.
 
-| Harness | Rules | Skills | Subagents | Portable hook coverage |
-|---------|-------|--------|-----------|------------------------|
-| Claude Code | `~/.claude` **is** `claude/`; `claude/CLAUDE.md` → `agents/AGENTS.md` | `claude/skills` → `agents/skills` | Generated into `claude/agents` | Native `Stop` command hook, from tracked settings |
-| Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | N/A: no stable subagent file format | Unmanaged until the native TOML hook schema stabilizes |
-| OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Generated into `~/.config/opencode/agents` | Not portable: lifecycle extension surface is the plugin API |
-| Cursor Agent | Generated `~/.cursor/rules/agents.mdc` (`alwaysApply`), found by ancestor walk | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: the CLI reads subagents only from a workspace `.cursor/agents` | Generated `~/.cursor/hooks.json` stop hook |
-| Shared standard | `~/.agents/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.agents/skills` | — | — |
+`~/.claude` remains a symlink to `claude/` so existing conversations and account
+state stay intact. Its settings have no proxy endpoint, API-key helper, custom
+permissions, hooks, or status line. Previously installed plugins are explicitly
+disabled. Authentication remains native; `~/.claude.json` stays at the home root.
+See [claude/README.md](claude/README.md).
 
-Cursor is the awkward one, and the table above understates it. It has no global rules *file*: `LocalCursorRulesService` walks up from the workspace directory reading `<dir>/.cursor/rules/**/*.mdc` and `<dir>/AGENTS.md` at every ancestor until it hits `/`. `~/.cursor/rules` is therefore reached only because `$HOME` is an ancestor — the shared rule applies to every project under the home directory and to nothing outside it. There is no `~/.cursor/AGENTS.md` and no `CURSOR.md` anywhere in the shipped bundle. `CURSOR_CONFIG_DIR` exists but relocates only `cli-config.json` and `permissions.json`, so it cannot move rules, skills, agents, or hooks.
-
-Three Cursor findings worth not rediscovering:
-
-- **Subagents are workspace-only.** `computeAgentsDirs()` resolves from `workspacePath` alone; no `homedir()`-joined agents directory exists in the bundle. Projecting into `~/.cursor/agents` would fail silently, which is why this repo does not.
-- **Cursor's headless `stop` hook never fires.** Measured against the installed CLI with a ten-event probe: a `cursor-agent -p` run fires only `workspaceOpen`, `sessionStart`, and `sessionEnd`, in both `--mode ask` and default agent mode. The portable `stop` hook is therefore projected to **both** `stop` and `sessionEnd`, the latter being the only carrier that actually runs outside the editor.
-- **Cursor imports Claude's hooks** from `~/.claude/settings.json`, mapping `Stop`→`stop` and seven more. That raises an obvious double-fire concern, but it was measured and does **not** occur headless — because `stop` fires from neither channel. Whether it duplicates inside the editor is untested.
-- **`XDG_CONFIG_HOME` is a latent trap for this machine.** It is unset today. Exporting it as `~/.config` — tempting, given this repo lives there — silently moves Cursor's config dir to `~/.config/cursor` and orphans `cli-config.json` and `permissions.json`.
-
-Rules and skills are symlinks elsewhere, so all other harnesses read the same bytes. Subagent frontmatter is harness-specific, so `bin/agents_render` translates each `agents/subagents/<name>.md` and `agents_link` writes the result; those generated files are untracked and carry a generation header that marks them safe to rewrite or prune. The lossy edges — model tier dropped on OpenCode, permission tiers `safe`/`full` dropped on Claude — are recorded in `agents/subagents/README.md`.
-
-Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
-
-Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`; [claude/README.md](claude/README.md) documents that arrangement and what is tracked inside it. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
-
-About 340 MB of Claude runtime state — `security/` alone is a 297 MB agent SDK venv — now sits inside the working tree and is gitignored wholesale. `~/.claude.json` is deliberately left at the home root: it is OAuth and per-project state, not configuration.
+Codex's built-in skills remain installed. Custom rules, skill links, generated
+subagents, and Cursor hook registrations were archived outside the repository.
+T3 stores provider preferences separately and must be reset while fully closed.
 
 ## npm global tools
 
 The user-owned npm prefix is `~/.node_modules`. Bootstrap restores:
 
-- `postplan@0.0.4` — required by `agents/skills/html-planning`;
+- `postplan@0.0.4` — standalone optional publishing CLI;
 - `@augmentcode/auggie`;
 - `localtunnel`.
 
@@ -130,12 +118,12 @@ These items influence the daily machine but are intentionally excluded from vers
 
 | State | Reason / recovery path |
 |-------|------------------------|
-| Cursor settings, keybindings, extensions, MCP, account-backed user rules and agent state | Native/account state remains local; shared skills and portable hooks are projected from `agents/` |
-| Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; shared rules and skills are projected from `agents/` |
+| Cursor settings, keybindings, extensions, MCP, account-backed user rules and agent state | Native/account state remains local; no shared behavior is projected |
+| Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; built-in skills remain available |
 | DockDoor plist preferences | User explicitly chose not to export GUI defaults |
 | Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
 | Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; it now lives under `claude/` because `~/.claude` links there, and is gitignored wholesale |
-| `claude/auth-token` and `~/.claude.json` | The CLIProxyAPI credential and Claude's OAuth/project state; neither is ever tracked |
+| `claude/auth-token` and `~/.claude.json` | Legacy proxy credential path and Claude OAuth/project state; neither is ever tracked |
 | GitHub Copilot OAuth state | Credential-bearing runtime data |
 | SSH private keys, known hosts, and the `trixie` host alias | Security boundary; recreate manually |
 | WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |
@@ -160,6 +148,6 @@ The repository intentionally omits tokens, API keys, browser/account sessions, p
 At snapshot time:
 
 - the working tree was clean before implementation;
-- `bin/agents_link --check claude` passed;
+- the since-retired Claude conformance check passed;
 - there were no ordinary untracked files under `~/.config`;
 - ignored files matched the documented secret/runtime policy.
