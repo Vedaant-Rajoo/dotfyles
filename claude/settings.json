@@ -13,5 +13,9 @@
     "remember@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": false,
     "superpowers@claude-plugins-official": false
+  },
+  "apiKeyHelper": "/Users/newedia/.config/bin/quotio-client-key",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317"
   }
 }

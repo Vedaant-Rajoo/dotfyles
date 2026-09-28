@@ -1,0 +1,136 @@
+{
+  "tested_on": "2026-09-29",
+  "deployed": false,
+  "runtime_release": "bin-v1.1.7",
+  "tests": [
+    {
+      "test": "record-mcp-False-responses",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 0,
+      "request_bytes_before": 93030,
+      "request_bytes_after": 93030,
+      "unchanged_without_compression_or_recovery": true
+    },
+    {
+      "test": "record-mcp-False-messages",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 0,
+      "request_bytes_before": 93084,
+      "request_bytes_after": 93084,
+      "unchanged_without_compression_or_recovery": true
+    },
+    {
+      "test": "compress-mcp-False-responses",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 0,
+      "request_bytes_before": 93030,
+      "request_bytes_after": 93030,
+      "unchanged_without_compression_or_recovery": true
+    },
+    {
+      "test": "compress-mcp-False-messages",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 0,
+      "request_bytes_before": 93084,
+      "request_bytes_after": 93084,
+      "unchanged_without_compression_or_recovery": true
+    },
+    {
+      "test": "compress-mcp-True-responses",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 1,
+      "request_bytes_before": 93030,
+      "request_bytes_after": 3867,
+      "byte_exact_mcp_recovery": true
+    },
+    {
+      "test": "compress-mcp-True-messages",
+      "status": 200,
+      "native_model_id": true,
+      "auth_forwarded": true,
+      "tools_preserved": true,
+      "instructions_preserved": true,
+      "sse_preserved": true,
+      "recovery_handles": 1,
+      "request_bytes_before": 93084,
+      "request_bytes_after": 3921,
+      "byte_exact_mcp_recovery": true
+    },
+    {
+      "test": "mcp-tool-detection-and-replay-responses",
+      "compression_without_global_recovery_flag": true,
+      "bearer_auth_forwarded": true,
+      "recovery_schema_preserved": true,
+      "byte_exact_mcp_recovery": true,
+      "previous_replacement_byte_stable_next_turn": true
+    },
+    {
+      "test": "mcp-tool-detection-and-replay-messages",
+      "compression_without_global_recovery_flag": true,
+      "bearer_auth_forwarded": true,
+      "recovery_schema_preserved": true,
+      "byte_exact_mcp_recovery": true,
+      "previous_replacement_byte_stable_next_turn": true
+    },
+    {
+      "test": "live-responses",
+      "status": 200,
+      "stream_completed": true,
+      "model": "gpt-6-luna",
+      "compression_applied": true,
+      "byte_exact_mcp_recovery": true,
+      "error_canary_reported": true,
+      "exit_code_reported": true,
+      "ponytail_marker_reported": true,
+      "caveman_marker_reported": true,
+      "stream_error_types": [],
+      "output_characters": 136
+    },
+    {
+      "test": "live-messages",
+      "status": 200,
+      "stream_completed": true,
+      "model": "claude-haiku-4-5-20251001",
+      "compression_applied": true,
+      "byte_exact_mcp_recovery": true,
+      "error_canary_reported": true,
+      "exit_code_reported": true,
+      "ponytail_marker_reported": true,
+      "caveman_marker_reported": true,
+      "stream_error_types": [],
+      "output_characters": 143
+    },
+    {
+      "test": "production-configs-unchanged",
+      "passed": true,
+      "files": 4
+    }
+  ],
+  "remaining_test_processes": 0,
+  "fresh_t3_thread_tested": false
+}
