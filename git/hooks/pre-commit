@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # pre-commit — block commits that introduce secrets, via gitleaks.
 #
-# Opt-in: this repo does not set core.hooksPath itself. Enable with:
-#   git config core.hooksPath git/hooks
+# Enabled per-clone by bootstrap through `git config core.hooksPath git/hooks`.
 set -euo pipefail
 
 if ! command -v gitleaks >/dev/null 2>&1; then

@@ -100,7 +100,7 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Five Fish suites share [`tests/lib/harness.fish`](tests/lib/harness.fish), emit TAP-style lines, and have no aggregate runner; run one with `fish tests/<path>_test.fish`:
+Five Fish suites emit TAP-style lines and have no aggregate runner; the three under `tests/bin/` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
 
 ```
 tests/bin/u_test.fish
