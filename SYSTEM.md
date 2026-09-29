@@ -130,7 +130,7 @@ These items influence the daily machine but are intentionally excluded from vers
 | DockDoor plist preferences | User explicitly chose not to export GUI defaults |
 | Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
 | Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; it now lives under `claude/` because `~/.claude` links there, and is gitignored wholesale |
-| `claude/auth-token` and `~/.claude.json` | Legacy proxy credential path and Claude OAuth/project state; neither is ever tracked |
+| `~/.claude.json` | Claude OAuth and project state; never tracked |
 | GitHub Copilot OAuth state | Credential-bearing runtime data |
 | SSH private keys, known hosts, and the `trixie` host alias | Security boundary; recreate manually |
 | WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |

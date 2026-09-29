@@ -158,15 +158,14 @@ gitleaks detect --source . -v
 | `fish/local/` | Shell secrets and machine-specific exports |
 | `fish/fish_variables` | Fish runtime/universal variables |
 | Fisher-installed plugin files under `fish/{functions,conf.d,completions,themes}/` | Fisher installs into this repo; `fish/fish_plugins` is the tracked source, and `fisher update` reinstalls them |
-| `opencode/agents/`, `claude/agents/` | Optional machine-local agent definitions; none are installed by bootstrap |
-| `claude/auth-token` | Legacy proxy credential path remains ignored; native Claude settings do not use it |
+| `opencode/agents/` | Optional machine-local agent definitions; none are installed by bootstrap |
 | `claude/` runtime state (`sessions/`, `projects/`, `plugins/`, `security/`, `history.jsonl`, caches) | Claude Code writes it into the working tree because `~/.claude` links here; only config is tracked — see [claude/README.md](../claude/README.md) |
 | `~/.claude.json` | Stays at the home root: OAuth, per-project state, and user MCP configuration — see [claude/README.md](../claude/README.md) |
 | Harness-native auth/config (`~/.codex`, `~/.cursor`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |
 | `opencode/opencode.json` | Provider configuration and API credentials |
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |
-| `raycast/`, `raycast-x/` | Downloaded extensions and app data |
+| `raycast/` | Downloaded extensions and app data |
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, caches and logs | Generated state |
