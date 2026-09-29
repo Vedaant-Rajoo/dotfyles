@@ -16,6 +16,6 @@
   },
   "apiKeyHelper": "/Users/newedia/.config/bin/quotio-client-key",
   "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317"
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/compat/quotio"
   }
 }

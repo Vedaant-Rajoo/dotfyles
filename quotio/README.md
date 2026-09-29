@@ -1,6 +1,9 @@
 # Quotio harness routing
 
 Quotio owns CLIProxyAPI at `http://127.0.0.1:8317` and the connected accounts.
+Inference now passes through the separately deployed Caveman service on port
+8787. See [Caveman deployment](../caveman/README.md) for routing, recovery,
+verification, service controls and current upstream limitations.
 Codex and Claude Code obtain its client credential through
 `../bin/quotio-client-key`. That helper only supplies authentication; it does not
 inject prompts. OpenCode uses a private copy at `~/.local/state/quotio/client-key`;
@@ -75,17 +78,17 @@ language take precedence. Conversational overrides depend on visible history;
 the router does not track durable per-session mode state. Use the UI checkboxes
 for persistent changes, and edit both Caveman rules for shared wording changes.
 
-This setup uses Caveman's prompt behavior through the existing native Prompt
-Rules plugin. It does not install Caveman's separate compression proxy, CLI,
-hooks, slash commands, status line, or tool-output recovery store. Harness URLs,
-credentials, skills, and project instruction files were not changed for Caveman.
-No token or cost savings are claimed; the prompt itself adds input tokens.
+The response-style rules use the existing native Prompt Rules plugin.
+The separate compression proxy and MCP recovery server were subsequently
+deployed; their configuration is documented in `../caveman/README.md`.
+No Caveman hooks, slash commands or status line were installed. Credentials,
+skills and project instruction files remain unchanged. No token or cost savings
+are claimed for the prompt rules; the prompt itself adds input tokens.
 
 A separate compression-proxy feasibility check passed for both Responses and
 Claude Messages through the connected CLIProxyAPI accounts, including byte-exact
-MCP recovery. It is not installed or enabled for the harnesses. See
-[the feasibility report](caveman-proxy-feasibility.md) for results and the remaining
-deployment requirements.
+MCP recovery. See [the historical feasibility report](caveman-proxy-feasibility.md)
+for those results and `../caveman/README.md` for the deployed configuration.
 
 Source: [Caveman skill at the pinned commit](https://github.com/JuliusBrussee/caveman/blob/2fd153c67988e980fb0b2455c90832159a6a5a25/skills/caveman/SKILL.md).
 The upstream MIT notice is retained in `licenses/caveman-MIT.txt`.
@@ -103,9 +106,9 @@ outgoing requests, preservation of original instructions/messages/tools, and UI
 saves. Chat Completions, Gemini, and Interactions are configured but were not
 live-tested. No token or cost savings were benchmarked.
 
-The user previously confirmed a fresh T3 thread with the old payload rules.
-Native CLI checks passed after this migration; a fresh T3 thread has not been
-separately checked again.
+The user confirmed a fresh T3 Codex thread after Caveman deployment: MCP
+recovery returned the synthetic error and both active router preference markers.
+The earlier migration results remain in the historical verification files.
 
 A private pre-migration backup is at
 `~/.local/state/quotio-setup/20260929-002836-plugin-migration`.
