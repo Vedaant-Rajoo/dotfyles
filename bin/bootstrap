@@ -342,6 +342,10 @@ run "$FISH_BIN" -c '
 	fisher update
 '
 
+printf '\n==> bat theme cache\n'
+# bat only loads bat/themes/ from its cache, so the configured theme needs a build.
+run bat cache --build
+
 if [[ "$WITH_DEFAULTS" -eq 1 ]]; then
 	printf '\n==> macOS defaults\n'
 	run "$FISH_BIN" "$REPO_ROOT/bin/macdefaults"
