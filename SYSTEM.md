@@ -86,7 +86,7 @@ NepTunes (App Store ID 1006739057) runs as a TestFlight beta. `mas` reports beta
 
 The Brewfile now covers the active package-manageable application set, including:
 
-- development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, Quotio, ClaudeBar;
+- development: Cursor, T3 Code Nightly, Zed, OrbStack, Codex, Ghostty, Quotio, ClaudeBar;
 - productivity/UI: Raycast, Rectangle Pro, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse;
 - browsers/networking: Google Chrome, Firefox, Helium, Search, Zen, Legcord, Proton Pass, Tailscale;
 - security: Yubico Authenticator and `ykman`;

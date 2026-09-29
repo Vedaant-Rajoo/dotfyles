@@ -74,6 +74,7 @@ cask "ghostty"
 cask "orbstack"
 cask "nguyenphutrong/tap/quotio"
 cask "t3-code@nightly"
+cask "zed"
 
 # Productivity and desktop UI
 cask "alcove"
