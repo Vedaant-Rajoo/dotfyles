@@ -9,7 +9,7 @@ return {
 			{ "<leader>9v", group = "99 visual", mode = "v" },
 			{ "<leader>9m", desc = "99 select model" },
 			{ "<leader>9P", desc = "99 select provider" },
-			{ "<leader>f", group = "find (fzf)" },
+			{ "<leader>f", group = "find" },
 			{ "<leader>z", group = "zen mode" },
 			{ "<leader>g", group = "git" },
 			{ "<leader>t", group = "trouble" },
@@ -21,14 +21,12 @@ return {
 			{ "<leader>E", desc = "Floating file explorer" },
 			{ "-", desc = "Open parent directory" },
 
-			-- fzf-lua (fzf-lua.lua)
+			-- Telescope (telescope.lua)
 			{ "<leader>ff", desc = "Find files" },
 			{ "<leader>fg", desc = "Live grep" },
 			{ "<leader>fb", desc = "Find buffers" },
 			{ "<leader>fr", desc = "Recent files" },
 			{ "<leader>fc", desc = "Find config files" },
-
-			-- Telescope (telescope.lua, kept for 99 and help)
 			{ "<leader>vh", desc = "Help tags" },
 
 			-- Harpoon (harpoon.lua)

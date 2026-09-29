@@ -23,7 +23,6 @@ local parsers = {
 	"typescript",
 	"vim",
 	"vimdoc",
-	"zig",
 }
 
 return {
