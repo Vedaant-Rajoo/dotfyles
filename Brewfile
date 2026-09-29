@@ -105,7 +105,8 @@ cask "wakatime"
 
 # Games
 cask "league-of-legends"
-cask "steam"
+# Steam is not a cask: the cask ships Valve's Intel-only stub and needs Rosetta.
+# bin/bootstrap installs the universal bootstrapper via i1rr/steam-arm64-mac.
 
 # Mac App Store apps (requires App Store sign-in)
 mas "Amphetamine", id: 937984704

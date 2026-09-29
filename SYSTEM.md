@@ -91,7 +91,7 @@ The Brewfile now covers the active package-manageable application set, including
 - browsers/networking: Google Chrome, Firefox, Helium, Search, Zen, Legcord, Proton Pass, Tailscale;
 - security: Yubico Authenticator and `ykman`;
 - hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
-- games: League of Legends (which installs Riot Client) and Steam;
+- games: League of Legends (which installs Riot Client); Steam comes from `bin/bootstrap` via i1rr/steam-arm64-mac, not the Intel-only cask;
 - font: JetBrains Mono Nerd Font.
 
 Raycast runs its Beta channel selected inside the application; Homebrew exposes the `raycast` cask rather than a beta-specific token.
