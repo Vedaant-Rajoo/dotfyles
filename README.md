@@ -86,7 +86,7 @@ rules, skills, subagents, or hooks. See [claude/README.md](claude/README.md) for
 ```bash
 cd ~/.config
 git pull
-bin/u                              # the interactive machine update: nvim, brew, casks
+bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, fisher
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest

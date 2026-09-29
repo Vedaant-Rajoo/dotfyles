@@ -377,6 +377,7 @@ set -g u_mock_bin "$u_mock_root/bin"
 # Executable Fish mocks must not load the user's configuration and reorder PATH
 # back to the real maintenance tools.
 set -gx XDG_CONFIG_HOME "$u_mock_root/config"
+set -gx XDG_STATE_HOME "$u_mock_root/state"
 mkdir -p "$U_MOCK_DIR" "$u_mock_bin" "$XDG_CONFIG_HOME"
 touch "$U_MOCK_LOG"
 
@@ -497,6 +498,17 @@ exit 0'
 u_test_mock nvim 'exit 0'
 u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
+u_test_mock mas 'exit 0'
+u_test_mock rustup 'exit 0'
+u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
+u_test_mock npm 'if test "$argv[1]" = outdated
+    if test -e "$U_MOCK_DIR/npm-outdated.json"
+        cat "$U_MOCK_DIR/npm-outdated.json"
+        exit 1
+    end
+    echo "{}"
+end
+exit 0'
 
 u_test_mock tee '/usr/bin/tee $argv
 set -l tee_status $status
@@ -614,6 +626,28 @@ assert_equal 0 (u_test_calls '^brew cleanup ') \
     'main preserves the no-outdated path without cleanup'
 assert_equal 1 (u_test_calls '^brew doctor$') \
     'main still doctors Homebrew when nothing is outdated'
+assert_equal 1 (u_test_calls '^mas upgrade$') 'main upgrades App Store apps'
+assert_equal 1 (u_test_calls '^rustup update$') 'main updates the Rust toolchain'
+assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
+assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
+assert_equal 1 (count $XDG_STATE_HOME/u/u-*.txt) 'main logs under XDG_STATE_HOME'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+printf '%s\n' '{"postplan":{},"localtunnel":{}}' >"$U_MOCK_DIR/npm-outdated.json"
+u_test_run_main npm-outdated
+rm -f "$U_MOCK_DIR/npm-outdated.json"
+assert_equal 0 $u_test_main_status 'main succeeds when npm globals are outdated'
+assert_equal 1 (u_test_calls '^npm install -g localtunnel@latest$') \
+    'main upgrades outdated npm globals except the pinned postplan'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/exit-fisher"
+u_test_run_main fisher-failure
+assert_equal 1 $u_test_main_status 'a failed updater produces an aggregate failure'
+assert_equal 1 (u_test_output_contains 'fisher update failed') \
+    'main reports the failed updater in the final details'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
