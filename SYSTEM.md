@@ -144,7 +144,7 @@ These items influence the daily machine but are intentionally excluded from vers
 ## Runtime and service state
 
 - Herdr is installed and was running through `homebrew.mxcl.herdr`; bootstrap starts it only with `--with-herdr-service`.
-- `tmux` 3.7b remains installed locally as legacy state but is deliberately absent from the Brewfile. `bin/tmux-sessionizer` forwards to Herdr.
+- `tmux` is no longer installed; Herdr replaces it through `bin/herdr-sessionizer`.
 - `/etc/shells` contains `/usr/local/bin/fish` twice. This is harmless snapshot drift; bootstrap's exact-match guard does not add another duplicate.
 - No user crontab existed.
 - User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.

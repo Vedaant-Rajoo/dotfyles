@@ -44,7 +44,6 @@ zed/prompts/
 #     are installed by Fisher and stay untracked too. ---
 fish/themes/
 fish/functions/*
-!fish/functions/bin-chmod.fish
 !fish/functions/reload.fish
 fish/conf.d/*
 !fish/conf.d/00-paths.fish
@@ -54,7 +53,6 @@ fish/conf.d/*
 !fish/conf.d/35-herdr-sessionizer.fish
 !fish/conf.d/36-claude-model-picker.fish
 !fish/conf.d/40-zoxide.fish
-!fish/conf.d/45-zig.fish
 !fish/conf.d/50-node.fish
 !fish/conf.d/55-python.fish
 !fish/conf.d/rustup.fish
