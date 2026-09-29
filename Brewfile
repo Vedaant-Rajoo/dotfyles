@@ -3,6 +3,8 @@
 
 # Taps
 tap "anomalyco/tap"
+tap "driceroland/tap"
+tap "nguyenphutrong/tap"
 
 # Shell
 brew "fish"
@@ -11,6 +13,7 @@ brew "fish"
 brew "bat"
 brew "eza"
 brew "fd"
+brew "ffmpeg"
 brew "fzf"
 brew "gnu-tar"
 brew "gum"
@@ -25,6 +28,10 @@ brew "zoxide"
 brew "gh"
 brew "gitleaks"
 brew "lazygit"
+
+# Security keys
+brew "ykman"
+cask "yubico-authenticator"
 
 # Toolchains and package managers
 brew "fnm"
@@ -59,11 +66,13 @@ brew "tree-sitter-cli"
 brew "anomalyco/tap/opencode", trusted: true
 
 # Developer apps and terminal tools
+cask "claudebar"
 cask "codex"
 cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
 cask "ghostty"
 cask "orbstack"
+cask "nguyenphutrong/tap/quotio"
 cask "t3-code@nightly"
 
 # Productivity and desktop UI
@@ -78,7 +87,10 @@ cask "wallspace"
 cask "wispr-flow"
 
 # Browsers, communication, and networking
+cask "driceroland/tap/search"
+cask "firefox"
 cask "google-chrome"
+cask "helium-browser"
 cask "legcord"
 cask "proton-pass"
 cask "tailscale-app"
@@ -92,12 +104,15 @@ cask "wakatime"
 
 # Games
 cask "league-of-legends"
+cask "steam"
 
 # Mac App Store apps (requires App Store sign-in)
 mas "Amphetamine", id: 937984704
 mas "Hush", id: 1544743900
 mas "Proton Pass for Safari", id: 6502835663
 mas "Tampermonkey", id: 6738342400
+# NepTunes (App Store 1006739057) runs as a TestFlight beta; mas cannot see beta installs, so join it in TestFlight.
+mas "TestFlight", id: 899247664
 mas "TrashMe 3", id: 1490879410
 mas "Wipr", id: 1662217862
 mas "Xcode", id: 497799835

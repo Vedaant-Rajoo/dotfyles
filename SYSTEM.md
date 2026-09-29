@@ -30,7 +30,8 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
 | Claude Code | 2.1.220 native install under `~/.local/share/claude`, launcher in `~/.local/bin` | `bin/bootstrap` uses the official native self-updating installer |
 | Cursor Agent | CLI `2026.07.23-e383d2b` under `~/.local/share/cursor-agent`; Cursor.app is `2026.07.09-a3815c0` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
-| Proton Pass CLI | 2.2.3 under `~/.local/bin` | `proton-pass-cli` is now declared as a fresh-machine fallback |
+| Proton Pass CLI | Homebrew `proton-pass-cli` | Declared in Brewfile |
+| Antigravity CLI | `agy` 1.2.13 native install in `~/.local/bin` | Not declaratively installed; `fish/conf.d/00-paths.fish` already puts `~/.local/bin` on PATH, so the installer's own PATH line was removed |
 
 The duplicated Go providers remain an intentional snapshot fact. Rust no longer has any Homebrew provider at all: rustup is the single source, so `bin/bootstrap` rather than the Brewfile is what reproduces it.
 
@@ -67,27 +68,32 @@ The snapshot also contained a separate npm installation and a broken `vaultwork`
 |-------------|-------------:|-----------------:|
 | Amphetamine | 937984704 | 5.3.2 |
 | Hush | 1544743900 | 1.0.19 |
-| NepTunes | 1006739057 | 3.2.8 |
 | Proton Pass for Safari | 6502835663 | 1.38.0 |
 | Tampermonkey | 6738342400 | 5.6.6240 |
+| TestFlight | 899247664 | 4.4.0 |
 | TrashMe 3 | 1490879410 | 3.7.5 |
 | Wipr | 1662217862 | 2.34 |
 | Xcode | 497799835 | 26.6 |
 
 These IDs are captured directly in the Brewfile. Installation still requires an App Store sign-in.
 
+NepTunes (App Store ID 1006739057) runs as a TestFlight beta. `mas` reports beta installs with ID 0, so a `mas` entry would never read as satisfied; join the beta through TestFlight instead.
+
 ## Application coverage
 
 The Brewfile now covers the active package-manageable application set, including:
 
-- development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, FluxMarkdown;
-- productivity/UI: Raycast, Rectangle Pro, Hyperkey, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse, Quotio;
-- browsers/networking: Google Chrome, Zen, Legcord, Proton Pass, Tailscale;
+- development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, Quotio, ClaudeBar;
+- productivity/UI: Raycast, Rectangle Pro, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse;
+- browsers/networking: Google Chrome, Firefox, Helium, Search, Zen, Legcord, Proton Pass, Tailscale;
+- security: Yubico Authenticator and `ykman`;
 - hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
-- games: League of Legends and Riot Client;
+- games: League of Legends (which installs Riot Client) and Steam;
 - font: JetBrains Mono Nerd Font.
 
 Raycast runs its Beta channel selected inside the application; Homebrew exposes the `raycast` cask rather than a beta-specific token.
+
+Cider, Grok Bot, and Octohide VPN are installed by hand; Homebrew has no cask for them.
 
 Zed settings remain tracked, but **Zed.app was not installed at snapshot time**, so `cask "zed"` is intentionally absent. Add it if Zed becomes active again.
 
