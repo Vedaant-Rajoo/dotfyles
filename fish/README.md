@@ -30,22 +30,9 @@ Background Git fetching is disabled by default.
 
 ## Tooling
 
-This setup assumes Homebrew-managed tools when available:
-
-- `fzf`
-- `fzf.fish` via Fisher (`conf.d/30-fzf.fish` configures it)
-- `hydro` via Fisher (default prompt configuration)
-- `autopair.fish` via Fisher
-- `sponge` via Fisher
-- `zoxide`
-- `fnm`
-- `pyenv`
-- `pyenv-virtualenv`
-- `eza`
-- `bat`
-
-Each module is guarded so Fish still starts cleanly when an optional tool is
-missing.
+Command-line tools come from the [Brewfile](../Brewfile) and plugins from
+`fish_plugins`. Each module is guarded so Fish still starts cleanly when an
+optional tool is missing.
 
 ## Startup caches
 

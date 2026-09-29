@@ -27,14 +27,8 @@ opencode/agents/
 fish/fish_variables
 nvim/tmp/
 
-# --- Fish plugins: Fisher installs straight into this repo ($fisher_path
-#     defaults to $__fish_config_dir), so its output lands in the working tree.
-#     fish_plugins is the source of truth; tracking the installed files as well
-#     meant 82 vendored third-party files plus a bootstrap hack to seed
-#     _fisher_plugins so `fisher update` would not treat them as conflicts.
-#     Ignore what Fisher writes and whitelist the hand-written config. New
-#     config files must be whitelisted here on purpose. Hydro's prompt files
-#     are installed by Fisher and stay untracked too. ---
+# --- Fish plugins: Fisher installs into this repo, so ignore its output and
+#     whitelist hand-written config on purpose; see fish/README.md. ---
 fish/themes/
 fish/functions/*
 !fish/functions/reload.fish
@@ -58,9 +52,7 @@ docs/superpowers/
 raycast/
 node_modules/
 
-# --- Legcord: only storage/settings.json is tracked. On Linux the app's
-#     Electron userData dir IS ~/.config/legcord, so session cookies and
-#     caches would otherwise land here; bin/legcord_link documents this. ---
+# --- Legcord: only storage/settings.json is tracked; see bin/legcord_link. ---
 legcord/*
 !legcord/storage
 legcord/storage/*

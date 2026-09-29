@@ -11,9 +11,9 @@ This file records the source Mac at the time the full manifest and bootstrap wer
 | Hardware architecture | Apple Silicon (`arm64`) |
 | macOS | 26.5.2 (build 25F84) |
 | Homebrew | `/opt/homebrew` |
-| Login shell | `/usr/local/bin/fish` |
+| Login shell | `/opt/homebrew/bin/fish` |
 | Active project root | `~/.config` |
-| Primary project directory | `~/Development` |
+| Primary project directory | `~/dev` |
 
 ## Toolchain provenance
 
@@ -21,7 +21,7 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 
 | Tool | Active snapshot state | Reproduction policy |
 |------|-----------------------|---------------------|
-| Fish | 4.6.0, official signed macOS pkg at `/usr/local/bin/fish`; login shell | Fresh machines install Homebrew Fish; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
+| Fish | 4.9.3, Homebrew at `/opt/homebrew/bin/fish`; login shell | Declared in Brewfile; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
 | Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `.node-version`; `bin/bootstrap` installs and selects it, and `fnm env --use-on-cd` reads the same file |
 | Python | 3.14.4, pyenv global | Pinned in `.python-version`; `bin/bootstrap` installs and selects it, and `pyenv init -` reads the same file |
 | Go | Homebrew Go 1.26.5; the official `/usr/local/go` install has been removed | Brewfile Go is the only source; `fish/conf.d/00-paths.fish` puts `$GOPATH/bin` above it for `go install` output |
@@ -121,32 +121,19 @@ Cursor's editor settings, keybindings, MCP configuration, CLI configuration, ses
 
 ## Deliberately unmanaged configuration
 
-These items influence the daily machine but are intentionally excluded from version control:
-
-| State | Reason / recovery path |
-|-------|------------------------|
-| Cursor settings, keybindings, extensions, MCP, account-backed user rules and agent state | Native/account state remains local; no shared behavior is projected |
-| Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; built-in skills remain available |
-| DockDoor plist preferences | User explicitly chose not to export GUI defaults |
-| Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
-| Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; it now lives under `claude/` because `~/.claude` links there, and is gitignored wholesale |
-| `~/.claude.json` | Claude OAuth and project state; never tracked |
-| GitHub Copilot OAuth state | Credential-bearing runtime data |
-| SSH private keys, known hosts, and the `trixie` host alias | Security boundary; recreate manually |
-| WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |
-| OpenCode live provider configuration | `opencode/opencode.json` contains credentials |
-| OrbStack/Docker contexts, registry auth, IPv6/Rosetta preferences | Keychain and machine/runtime state |
-| Legcord Discord session, caches, window geometry, and locale cache | Only `storage/settings.json` is tracked; `bin/legcord_link` connects it |
-| GUI preference plists for third-party apps | Full GUI cloning is outside the repository boundary |
+Machine-local credentials, account state, and runtime data are listed in
+[docs/setup.md](docs/setup.md#machine-local-and-ignored-files). Beyond that list,
+GUI preference plists for third-party apps stay local, because full GUI cloning is
+outside the repository boundary. At snapshot time `~/.ssh/config` also held a
+private `trixie` host alias.
 
 ## Runtime and service state
 
 - Herdr is installed and was running through `homebrew.mxcl.herdr`; bootstrap starts it only with `--with-herdr-service`.
 - `tmux` is no longer installed; Herdr replaces it through `bin/herdr-sessionizer`.
-- `/etc/shells` contains `/usr/local/bin/fish` twice. This is harmless snapshot drift; bootstrap's exact-match guard does not add another duplicate.
 - No user crontab existed.
 - User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.
-- `~/Development` existed; `~/dev` and `~/projects` did not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
+- `~/dev` exists; `~/Development` and `~/projects` do not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
 
 ## Security boundary
 
