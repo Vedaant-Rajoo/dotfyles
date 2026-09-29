@@ -57,7 +57,9 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
-| [`claude/`](claude/README.md) | Native Claude settings; private runtime state is ignored |
+| [`claude/`](claude/README.md) | Claude settings routed through Caveman; private runtime state is ignored |
+| [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
+| [`quotio/`](quotio/README.md) | Quotio routing and prompt-rule notes |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
@@ -73,13 +75,14 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [Git identity](docs/setup.md#git-identity-migration) — retire a shadowing `~/.gitconfig`.
 - [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — first `nvim` run, `~/.wakatime.cfg`.
 - [Postplan](docs/setup.md#postplan) — optional `postplan login`.
-- [AI harness defaults](docs/setup.md#ai-harness-defaults) — native authentication and provider settings.
+- [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
 - Native app auth — [OpenCode](docs/setup.md#opencode), [Zed](docs/setup.md#zed),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).
 
-Harnesses use native configuration. Bootstrap does not install a router or project shared
-rules, skills, subagents, or hooks. See [claude/README.md](claude/README.md) for storage details.
+Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
+Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
+It does not project shared rules, skills, subagents, or hooks.
 
 ## Updating
 

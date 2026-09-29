@@ -61,21 +61,25 @@ postplan whoami
 
 Postplan credentials and local draft mappings stay outside the repository.
 
-## AI harness defaults
+## AI harness routing
 
-Harnesses use native provider selection and authentication. Bootstrap installs
-Claude Code when missing, but does not install or start a router, load proxy
-credentials, or project shared rules, skills, subagents, or hooks.
+Codex, Claude Code and OpenCode send inference through the local Caveman proxy
+(`127.0.0.1:8787`), which forwards to Quotio's CLIProxyAPI (`127.0.0.1:8317`).
+Bootstrap installs Claude Code and the Quotio app, but not the Caveman binaries
+or their launch agent, so the harnesses cannot reach a model until you follow
+[Fresh machine](../caveman/README.md#fresh-machine).
 
 The previous 9router configuration and shared behavior layer were retired on
-2026-09-28. Future middleware configuration is an explicit, separate setup step.
-Do not restore old harness settings or shell exports without reviewing them.
+2026-09-28. Do not restore old harness settings or shell exports without
+reviewing them.
 
 ## OpenCode
 
-`opencode/opencode.jsonc` contains only the schema declaration. Authenticate and
-select providers through OpenCode's native configuration. Machine-local
-`opencode/opencode.json` remains ignored for credential-bearing settings.
+`opencode/opencode.jsonc` routes the `openai` and `anthropic` providers through
+Caveman and registers the `caveman-mcp` recovery server. It reads the client key
+from `~/.local/state/quotio/client-key`, which stays outside the repository; see
+[quotio/README.md](../quotio/README.md). Machine-local `opencode/opencode.json`
+remains ignored for credential-bearing settings.
 
 ## Zed
 

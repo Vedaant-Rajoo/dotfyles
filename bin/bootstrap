@@ -309,7 +309,13 @@ printf '\n==> AI harness configuration\n'
 if dry_run || ! command -v claude >/dev/null 2>&1; then
 	run /bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
 fi
-# Harnesses use their native settings and authentication.
+
+printf '\n==> Caveman proxy\n'
+# Claude Code, Codex, and OpenCode route inference through Caveman, which
+# bootstrap does not build. Without it they have no reachable endpoint.
+if ! dry_run && ! curl -fsS --max-time 2 http://127.0.0.1:8787/health/ready >/dev/null 2>&1; then
+	warn "Caveman proxy is not ready; follow caveman/README.md#fresh-machine"
+fi
 
 printf '\n==> Legcord settings\n'
 if ! run "$REPO_ROOT/bin/legcord_link"; then
@@ -356,7 +362,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Sign in to the App Store and re-run bootstrap if any mas installs failed.
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
-  - Sign in to each AI harness using its native authentication.
+  - Set up Quotio and the Caveman proxy: caveman/README.md#fresh-machine.
   - Run `postplan login` and open Neovim once to install plugins.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.

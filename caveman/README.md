@@ -92,6 +92,50 @@ To return to the official proxy, set the plist's `ProgramArguments` path back to
 `bin-v1.1.7/caveman-proxy` and unload and bootstrap the service as described
 below. Model discovery then returns 404 again; nothing else changes.
 
+## Fresh machine
+
+Bootstrap installs Quotio but not Caveman, and only warns when the proxy is not
+ready. Until these steps are done, Codex, Claude Code and OpenCode have no
+reachable endpoint.
+
+1. Open Quotio, connect the provider accounts, and create a client API key.
+2. Give OpenCode its private copy of the key:
+
+   ```sh
+   (umask 077; mkdir -p ~/.local/state/quotio ~/.local/state/caveman
+    ~/.config/bin/quotio-client-key > ~/.local/state/quotio/client-key)
+   ```
+
+3. Download the official `caveman-proxy` and `caveman-mcp` macOS ARM64 assets from
+   the [`bin-v1.1.7` release](https://github.com/JuliusBrussee/caveman/releases/tag/bin-v1.1.7)
+   into `~/.local/share/caveman/bin-v1.1.7`, and check them against the SHA-256
+   digests in the [feasibility report](../quotio/caveman-proxy-feasibility.md).
+4. Build the patched proxy into `~/.local/share/caveman/bin-v1.1.7-models.1`:
+
+   ```sh
+   git clone https://github.com/JuliusBrussee/caveman ~/.local/src/caveman
+   cd ~/.local/src/caveman
+   git switch -c quotio/compat-models-discovery bin-v1.1.7
+   git am ~/.config/caveman/patches/0001-*.patch
+   GOTOOLCHAIN=go1.26.5 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+     go build -trimpath -o ~/.local/share/caveman/bin-v1.1.7-models.1/caveman-proxy \
+     ./proxy/cmd/caveman-proxy
+   ```
+
+5. Link and start the service, then check readiness:
+
+   ```sh
+   ln -s ~/.config/caveman/local.caveman.proxy.plist ~/Library/LaunchAgents/
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.caveman.proxy.plist
+   curl -fsS http://127.0.0.1:8787/health/ready
+   ```
+
+6. Codex's routing lives in machine-local `~/.codex/config.toml`. Add a `quotio`
+   model provider with `base_url = "http://127.0.0.1:8787/compat/quotio/v1"`,
+   authenticated by `bin/quotio-client-key`, and the `caveman` MCP server
+   using `bin-v1.1.7/caveman-mcp`.
+7. Run `python3 ~/.config/caveman/verify.py`.
+
 ## Operations and rollback
 
 To check the service or restart the current configuration:

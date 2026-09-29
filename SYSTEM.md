@@ -37,16 +37,19 @@ The duplicated Go providers remain an intentional snapshot fact. Rust no longer 
 
 ## AI harness configuration
 
-Updated 2026-09-28: the previous shared behavior layer and 9router integration
-were archived. Bootstrap no longer installs a router or projects shared rules,
-skills, subagents, and hooks. Harnesses use native authentication and provider
-settings. Optional middleware will be configured separately.
+The previous shared behavior layer and 9router integration were archived on
+2026-09-28. Since 2026-09-29, Codex, Claude Code and OpenCode send inference
+through the local Caveman proxy on port 8787, which forwards to Quotio's
+CLIProxyAPI on port 8317; see [caveman/README.md](caveman/README.md) and
+[quotio/README.md](quotio/README.md). Bootstrap installs Quotio but not Caveman,
+and only warns when the proxy is not ready. It still does not project shared
+rules, skills, subagents, or hooks.
 
 `~/.claude` remains a symlink to `claude/` so existing conversations and account
-state stay intact. Its settings have no proxy endpoint, API-key helper, custom
-permissions, hooks, or status line. Previously installed plugins are explicitly
-disabled. Authentication remains native; `~/.claude.json` stays at the home root.
-See [claude/README.md](claude/README.md).
+state stay intact. Its settings point `ANTHROPIC_BASE_URL` at Caveman and
+`apiKeyHelper` at `bin/quotio-client-key`; they have no custom permissions,
+hooks, or status line. Previously installed plugins are explicitly disabled.
+`~/.claude.json` stays at the home root. See [claude/README.md](claude/README.md).
 
 Codex's built-in skills remain installed. Custom rules, skill links, generated
 subagents, and Cursor hook registrations were archived outside the repository.
