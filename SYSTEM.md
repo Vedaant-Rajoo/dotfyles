@@ -133,7 +133,7 @@ private `trixie` host alias.
 - `tmux` is no longer installed; Herdr replaces it through `bin/herdr-sessionizer`.
 - No user crontab existed.
 - User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.
-- `~/dev` exists; `~/Development` and `~/projects` do not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
+- `bin/herdr-sessionizer` searches `~/dev` and `~/.config`.
 
 ## Security boundary
 
