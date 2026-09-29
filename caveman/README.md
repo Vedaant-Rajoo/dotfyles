@@ -9,8 +9,8 @@ rules. Provider model IDs and client-key helpers are unchanged.
 ## Runtime and configuration
 
 - Runtime: official Caveman `bin-v1.1.7` macOS ARM64 proxy and MCP binaries,
-  installed in `~/.local/share/caveman/bin-v1.1.7`. SHA-256 verification matches
-  the [feasibility report](../quotio/caveman-proxy-feasibility.md). Since
+  installed in `~/.local/share/caveman/bin-v1.1.7`. Their SHA-256 digests are
+  listed under [Fresh machine](#fresh-machine). Since
   2026-09-29 the service runs a locally patched proxy from
   `~/.local/share/caveman/bin-v1.1.7-models.1`; see [Local patch](#local-patch).
   All harnesses still use the official `caveman-mcp`.
@@ -108,8 +108,13 @@ reachable endpoint.
 
 3. Download the official `caveman-proxy` and `caveman-mcp` macOS ARM64 assets from
    the [`bin-v1.1.7` release](https://github.com/JuliusBrussee/caveman/releases/tag/bin-v1.1.7)
-   into `~/.local/share/caveman/bin-v1.1.7`, and check them against the SHA-256
-   digests in the [feasibility report](../quotio/caveman-proxy-feasibility.md).
+   into `~/.local/share/caveman/bin-v1.1.7`, and check them with
+   `shasum -a 256` against these digests:
+
+   ```text
+   caveman-proxy_darwin_arm64  2ad5195b357121b4c2fbd4154d6df971affc2cf898f313efb40fb1e9fce50dc2
+   caveman-mcp_darwin_arm64    44664fe2cd72d52998ba4ebb0adc675cc825c56abbc0a839a40ac21f35794c41
+   ```
 4. Build the patched proxy into `~/.local/share/caveman/bin-v1.1.7-models.1`:
 
    ```sh

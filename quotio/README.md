@@ -87,12 +87,12 @@ are claimed for the prompt rules; the prompt itself adds input tokens.
 
 A separate compression-proxy feasibility check passed for both Responses and
 Claude Messages through the connected CLIProxyAPI accounts, including byte-exact
-MCP recovery. See [the historical feasibility report](caveman-proxy-feasibility.md)
-for those results and `../caveman/README.md` for the deployed configuration.
+MCP recovery. See `../caveman/README.md` for the deployed configuration.
 
 Source: [Caveman skill at the pinned commit](https://github.com/JuliusBrussee/caveman/blob/2fd153c67988e980fb0b2455c90832159a6a5a25/skills/caveman/SKILL.md).
 The upstream MIT notice is retained in `licenses/caveman-MIT.txt`.
-See `caveman-verification.json` for checks and the private pre-Caveman backup.
+A private pre-Caveman backup is at
+`~/.local/state/quotio-setup/20260929-004857-caveman`.
 
 This is prompt configuration. AGENTS.md/CLAUDE.md discovery, hooks, skills, and
 slash commands still belong to the harness; a router prompt does not install or
@@ -100,7 +100,7 @@ execute them.
 
 ## Verification and recovery
 
-`verification.json` records the native plugin migration: 21 isolated checks,
+The native plugin migration passed 21 isolated checks, with
 successful live Codex/Claude Code/OpenCode responses, single injection in the
 outgoing requests, preservation of original instructions/messages/tools, and UI
 saves. Chat Completions, Gemini, and Interactions are configured but were not
@@ -108,7 +108,6 @@ live-tested. No token or cost savings were benchmarked.
 
 The user confirmed a fresh T3 Codex thread after Caveman deployment: MCP
 recovery returned the synthetic error and both active router preference markers.
-The earlier migration results remain in the historical verification files.
 
 A private pre-migration backup is at
 `~/.local/state/quotio-setup/20260929-002836-plugin-migration`.
