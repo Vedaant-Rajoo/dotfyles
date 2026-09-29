@@ -98,8 +98,6 @@ Raycast runs its Beta channel selected inside the application; Homebrew exposes 
 
 Cider, Grok Bot, and Octohide VPN are installed by hand; Homebrew has no cask for them.
 
-Zed settings remain tracked, but **Zed.app was not installed at snapshot time**, so `cask "zed"` is intentionally absent. Add it if Zed becomes active again.
-
 ## Cursor extension snapshot
 
 Cursor had 14 extensions installed, but the user chose not to track or bootstrap editor state:

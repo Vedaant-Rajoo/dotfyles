@@ -32,7 +32,6 @@ claude/agents/
 # --- Machine-local runtime state ---
 fish/fish_variables
 nvim/tmp/
-zed/prompts/
 
 # --- Fish plugins: Fisher installs straight into this repo ($fisher_path
 #     defaults to $__fish_config_dir), so its output lands in the working tree.

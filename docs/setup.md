@@ -81,19 +81,6 @@ from `~/.local/state/quotio/client-key`, which stays outside the repository; see
 [quotio/README.md](../quotio/README.md). Machine-local `opencode/opencode.json`
 remains ignored for credential-bearing settings.
 
-## Zed
-
-Zed settings remain tracked even though Zed.app is not installed in this
-snapshot. The tracked
-`context_servers.mcp-server-context7.settings.context7_api_key` value in
-`zed/settings.json` must remain blank so credentials never enter the repository.
-Until a verified machine-local credential mechanism is documented, leave
-Context7 disabled or uncredentialed there. If Zed is re-adopted, install it and
-sign in to GitHub Copilot through Zed's normal account flow.
-
-Add `cask "zed"` to the Brewfile when the app becomes part of the active machine
-again.
-
 ## Legcord
 
 Legcord keeps its configuration at
@@ -182,6 +169,6 @@ gitleaks detect --source . -v
 | `raycast/`, `raycast-x/` | Downloaded extensions and app data |
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
-| `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |
+| `nvim/tmp/`, caches and logs | Generated state |
 | `~/.rustup/`, `~/.cargo/` | Rust toolchains, downloaded crates, and build caches; `bin/bootstrap` installs them with the official rustup installer rather than copying them from a clone |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

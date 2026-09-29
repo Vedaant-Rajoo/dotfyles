@@ -64,7 +64,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `monid/`, `rectangle-pro/`, `zed/`, `.vscode/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `monid/`, `rectangle-pro/`, `.vscode/` |
 
 ## After bootstrap
 
@@ -76,7 +76,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — first `nvim` run, `~/.wakatime.cfg`.
 - [Postplan](docs/setup.md#postplan) — optional `postplan login`.
 - [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
-- Native app auth — [OpenCode](docs/setup.md#opencode), [Zed](docs/setup.md#zed),
+- Native app auth — [OpenCode](docs/setup.md#opencode),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).
 
