@@ -239,7 +239,6 @@ script_sha() {
 	printf '%s\n' "${out%% *}"
 }
 
-valid_sha() { [[ $1 =~ ^[0-9a-f]{64}$ ]]; }
 escape_sed_replacement() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 
 render_plist() {
@@ -251,8 +250,9 @@ render_plist() {
 		-e "s|__T3_AWAKE_SHA256__|$sha|g" "$template" >"$output"
 }
 
+# Prints the first full 64-hex marker only, so an empty result means no valid marker.
 installed_script_sha() {
-	sed -n 's/.*t3-awake-script-sha256: \([0-9a-f][0-9a-f]*\).*/\1/p' "$1" | head -1
+	sed -n '/.*t3-awake-script-sha256: \([0-9a-f]\{64\}\).*/{s//\1/p;q;}' "$1"
 }
 
 atomic_write_plist() {
@@ -311,7 +311,7 @@ cmd_install() (
 		class='identical'
 	elif [ -f "$target" ]; then
 		old_sha="$(installed_script_sha "$target")"
-		if valid_sha "$old_sha" && render_plist "$old_sha" "$compare" && cmp -s "$compare" "$target"; then class='script'; fi
+		if [ -n "$old_sha" ] && render_plist "$old_sha" "$compare" && cmp -s "$compare" "$target"; then class='script'; fi
 	fi
 	key="$loaded:$class"
 

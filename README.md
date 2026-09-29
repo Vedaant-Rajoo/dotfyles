@@ -64,7 +64,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `monid/`, `rectangle-pro/`, `.vscode/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `rectangle-pro/` |
 
 ## After bootstrap
 

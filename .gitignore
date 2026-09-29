@@ -17,7 +17,7 @@ Thumbs.db
 # --- Secrets / auth (never public) ---
 github-copilot/
 fish/local/
-monid/credentials.yaml
+monid/
 opencode/opencode.json
 
 # --- Optional native harness agent definitions remain machine-local. ---
