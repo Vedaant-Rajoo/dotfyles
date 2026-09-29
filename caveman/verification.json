@@ -101,8 +101,25 @@
     "caveman_marker": true
   },
   "known_issues": [
-    "Model discovery through Caveman returns 404; cached/explicit IDs work.",
     "Codex successful stream closes are recorded as client cancellations, suppressing savings counters."
   ],
-  "private_backup": "/Users/newedia/.local/state/quotio-setup/20260929-011633-caveman-deploy"
+  "private_backup": "/Users/newedia/.local/state/quotio-setup/20260929-011633-caveman-deploy",
+  "proxy_patch": {
+    "installed_on": "2026-09-29",
+    "binary": "~/.local/share/caveman/bin-v1.1.7-models.1/caveman-proxy",
+    "sha256": "3f7d44230ec10a38b0cfa0d91b73abfc7dfb43de55c04c0753f7ef50e495dc2b",
+    "base": "bin-v1.1.7 (6b42a31)",
+    "patch_commit": "4d91b800a90224b40f23c88161e983cd7a31ab64",
+    "official_rebuild_byte_identical": true,
+    "go_tests": "gateway, providers, cmd and standalone packages pass; new test fails without the patch",
+    "discovery_parity_formats": [
+      "openai",
+      "codex",
+      "anthropic"
+    ],
+    "unchanged_routes_vs_official": true,
+    "no_discovery_accounting_rows": true,
+    "codex_fresh_catalog": "codex debug models with a throwaway CODEX_HOME wrote a 46-model cache through Caveman",
+    "t3_codex_refresh": "pending: needs a T3 provider refresh or new Codex thread"
+  }
 }

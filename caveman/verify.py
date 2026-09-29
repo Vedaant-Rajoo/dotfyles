@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check live compression and exact MCP recovery using synthetic tool output."""
+"""Check model discovery, live compression and exact MCP recovery using synthetic tool output."""
 import json
 import os
 from pathlib import Path
@@ -12,6 +12,7 @@ HOME_DIR = Path.home()
 STATE = HOME_DIR / '.local/state/caveman'
 BINARY = HOME_DIR / '.local/share/caveman/bin-v1.1.7/caveman-mcp'
 BASE = 'http://127.0.0.1:8787/compat/quotio/v1'
+DIRECT = 'http://127.0.0.1:8317/v1'
 LOG = ''.join(f'INFO task={i:04d} status=complete Build validation completed successfully; no changes required.\n' for i in range(600))
 LOG += 'ERROR CAVEMAN_DEPLOY_927 exit code 72 at /src/alpha.ts:41\n'
 env = os.environ | {'CAVEMAN_HOME': str(STATE), 'CAVEMAN_CCR_DB': str(STATE / 'ccr.db')}
@@ -24,6 +25,21 @@ def rpc(proc, ident, method, params):
     response = json.loads(proc.stdout.readline())
     assert response.get('id') == ident and 'result' in response, 'MCP request failed'
     return response['result']
+
+
+def discovery(key):
+    """Each CLIProxyAPI catalog format must pass through Caveman unchanged."""
+    shapes = {'openai': ('', {'Authorization': 'Bearer ' + key}),
+              'codex': ('?client_version=0.158.0', {'Authorization': 'Bearer ' + key}),
+              'anthropic': ('', {'x-api-key': key, 'anthropic-version': '2023-06-01'})}
+    for name, (query, headers) in shapes.items():
+        catalogs = []
+        for base in [DIRECT, BASE]:
+            with urllib.request.urlopen(urllib.request.Request(base + '/models' + query, headers=headers), timeout=30) as response:
+                catalogs.append(json.load(response))
+        assert catalogs[0] == catalogs[1], f'{name} catalog differs from CLIProxyAPI'
+        models = catalogs[0].get('data', catalogs[0].get('models', []))
+        print(json.dumps({'discovery': name, 'models': len(models)}), flush=True)
 
 
 def send(protocol, data, headers):
@@ -40,6 +56,7 @@ def send(protocol, data, headers):
 
 def main():
     key = subprocess.check_output([str(HOME_DIR / '.config/bin/quotio-client-key')], text=True).strip()
+    discovery(key)
     results = []
     proc = subprocess.Popen([str(BINARY)], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, text=True)

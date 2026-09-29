@@ -5,7 +5,7 @@
   <key>Label</key><string>local.caveman.proxy</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/newedia/.local/share/caveman/bin-v1.1.7/caveman-proxy</string>
+    <string>/Users/newedia/.local/share/caveman/bin-v1.1.7-models.1/caveman-proxy</string>
     <string>serve</string>
   </array>
   <key>EnvironmentVariables</key>

@@ -10,7 +10,10 @@ rules. Provider model IDs and client-key helpers are unchanged.
 
 - Runtime: official Caveman `bin-v1.1.7` macOS ARM64 proxy and MCP binaries,
   installed in `~/.local/share/caveman/bin-v1.1.7`. SHA-256 verification matches
-  the [feasibility report](../quotio/caveman-proxy-feasibility.md).
+  the [feasibility report](../quotio/caveman-proxy-feasibility.md). Since
+  2026-09-29 the service runs a locally patched proxy from
+  `~/.local/share/caveman/bin-v1.1.7-models.1`; see [Local patch](#local-patch).
+  All harnesses still use the official `caveman-mcp`.
 - Configuration: [caveman.yaml](caveman.yaml).
 - Service: `local.caveman.proxy`, loaded from the launch-agent symlink
   `~/Library/LaunchAgents/local.caveman.proxy.plist`. It starts at login and
@@ -38,8 +41,10 @@ project checks used disposable instruction files outside real projects.
 
 ## Verification
 
-[verify.py](verify.py) checks live streaming, compression and exact original
-recovery for Responses and Claude Messages. It makes two small inference calls:
+[verify.py](verify.py) first checks that model discovery through Caveman
+returns the same OpenAI, Codex and Anthropic catalogs as CLIProxyAPI. It then
+checks live streaming, compression and exact original recovery for Responses
+and Claude Messages. It makes two small inference calls:
 
 ```sh
 python3 ~/.config/caveman/verify.py
@@ -50,13 +55,42 @@ log, recovered compressed content and followed the disposable project rule.
 Separate native probes reported both active router preference markers.
 See [verification.json](verification.json) for outcomes and the T3 check status.
 
-Two upstream limitations remain: `GET /compat/quotio/v1/models` returns 404, so
-Codex cannot refresh its model catalog through Caveman; explicitly selected and
-cached models work. Use the direct CLIProxyAPI route when a client needs model
-discovery. Also, Caveman records Codex's stream close as `cave_client_canceled`
-even when Codex successfully finishes; compression is visible in forwarded
-request hashes and recovery records, but its displayed savings can be zero.
-No billing or representative savings claim is made.
+One upstream limitation remains: Caveman records Codex's stream close as
+`cave_client_canceled` even when Codex successfully finishes; compression is
+visible in forwarded request hashes and recovery records, but its displayed
+savings can be zero. No billing or representative savings claim is made.
+
+## Local patch
+
+Official Caveman only proxies inference (POST), so `GET
+/compat/quotio/v1/models` returned 404 and Codex, including T3's Codex
+threads, fell back to its bundled catalog. The patch
+[`patches/0001-…`](patches/0001-feat-gateway-forward-model-discovery-on-named-compat.patch)
+adds one GET route for named compat mounts. It authenticates, forwards the
+query and caller's User-Agent, and relays CLIProxyAPI's status, headers and
+body unchanged, with a 30-second timeout. Discovery reads no body and is never
+compressed or recorded. Every other route and method behaves as before.
+
+Who uses discovery: Codex refreshes at app-server start and every 4.5 minutes.
+Claude Code only does so with `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`
+(not set). OpenCode and T3's Claude and OpenCode pickers never call it.
+
+Source and build details are in `SOURCE` and `SHA256SUMS` next to the binary.
+The branch `quotio/compat-models-discovery` in `~/.local/src/caveman` holds the
+commit. Nothing updates Caveman automatically. For a new `bin-v*` release:
+
+1. Check whether upstream serves GET `/compat/<name>/v1/models`. If so, drop
+   the patch and install the official binaries only.
+2. Otherwise cherry-pick the patch onto the new tag, run
+   `go test ./proxy/internal/gateway/`, and build as described in `SOURCE`
+   into a new versioned directory. Never overwrite an existing one.
+3. Upgrade `caveman-mcp` together with the proxy, because both open `ccr.db`.
+4. Smoke-test on a spare port, switch the plist path, restart the service,
+   then run `verify.py`.
+
+To return to the official proxy, set the plist's `ProgramArguments` path back to
+`bin-v1.1.7/caveman-proxy` and unload and bootstrap the service as described
+below. Model discovery then returns 404 again; nothing else changes.
 
 ## Operations and rollback
 
