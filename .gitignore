@@ -58,12 +58,7 @@ fish/conf.d/*
 !fish/conf.d/50-node.fish
 !fish/conf.d/55-python.fish
 !fish/conf.d/rustup.fish
-fish/completions/*
-!fish/completions/bun.fish
-!fish/completions/docker.fish
-!fish/completions/herdr.fish
-!fish/completions/kubectl.fish
-!fish/completions/orbctl.fish
+fish/completions/
 
 # --- AI planning artifacts: specs and plans are process scaffolding for a
 #     change, not system state; they never belong in the repo. ---

@@ -126,7 +126,7 @@ for the current extension/app snapshot.
 ## OrbStack and Docker
 
 OrbStack is installed by the Brewfile and supplies `docker`, `kubectl`,
-`orbctl`, and the tracked Fish completion targets. Start OrbStack, select its
+`orbctl`, and their Fish completions through its shell integration. Start OrbStack, select its
 Docker context, reauthenticate registries through the macOS keychain, and
 reapply local IPv6/Rosetta preferences if needed.
 

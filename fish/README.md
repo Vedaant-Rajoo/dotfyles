@@ -17,8 +17,9 @@ are gitignored; only `fish_plugins` and the files whitelisted in `.gitignore`
 are tracked. `bin/bootstrap` installs Fisher itself when it is missing and then
 runs `fisher update`, which reinstalls everything `fish_plugins` lists; run
 `fisher update` by hand to do the same later. The whitelist is by filename, so
-every new hand-written `conf.d/`, `functions/`, or `completions/` file must be
-added to `.gitignore` on purpose or it stays untracked. Configure plugins from
+every new hand-written `conf.d/` or `functions/` file must be added to
+`.gitignore` on purpose or it stays untracked. `completions/` is ignored
+entirely: Homebrew and OrbStack ship their own. Configure plugins from
 a numbered `conf.d/` module instead (`30-fzf.fish`), which sorts after the
 plugin's own `conf.d` file and survives updates.
 
