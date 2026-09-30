@@ -1,0 +1,14 @@
+#!/usr/bin/ruby
+# Fetch the local inference credential without copying it into harness settings.
+require "yaml"
+
+begin
+  path = File.expand_path("~/Library/Application Support/Quotio/config.yaml")
+  config = YAML.safe_load(File.read(path), aliases: false)
+  keys = config.dig("access", "api-keys") || config["api-keys"]
+  key = Array(keys).find { |value| value.is_a?(String) && !value.strip.empty? }
+  abort "Quotio has no client API key configured." unless key
+  STDOUT.write(key.strip + "\n")
+rescue StandardError
+  abort "Unable to read the Quotio client API key. Check Quotio's local configuration."
+end

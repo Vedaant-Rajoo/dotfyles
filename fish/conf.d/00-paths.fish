@@ -24,7 +24,3 @@ fish_add_path -gPm $HOME/.config/bin
 if test -d $HOME/.node_modules/bin
 	fish_add_path -gPm $HOME/.node_modules/bin
 end
-
-if test -d $HOME/.yarn/bin
-	fish_add_path -gPm $HOME/.yarn/bin
-end

@@ -11,9 +11,9 @@ This file records the source Mac at the time the full manifest and bootstrap wer
 | Hardware architecture | Apple Silicon (`arm64`) |
 | macOS | 26.5.2 (build 25F84) |
 | Homebrew | `/opt/homebrew` |
-| Login shell | `/usr/local/bin/fish` |
+| Login shell | `/opt/homebrew/bin/fish` |
 | Active project root | `~/.config` |
-| Primary project directory | `~/Development` |
+| Primary project directory | `~/dev` |
 
 ## Toolchain provenance
 
@@ -21,7 +21,7 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 
 | Tool | Active snapshot state | Reproduction policy |
 |------|-----------------------|---------------------|
-| Fish | 4.6.0, official signed macOS pkg at `/usr/local/bin/fish`; login shell | Fresh machines install Homebrew Fish; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
+| Fish | 4.9.3, Homebrew at `/opt/homebrew/bin/fish`; login shell | Declared in Brewfile; `bin/bootstrap` adds it to `/etc/shells` and runs `chsh` |
 | Node | 24.14.1, fnm default under `~/.local/share/fnm` | Pinned in `.node-version`; `bin/bootstrap` installs and selects it, and `fnm env --use-on-cd` reads the same file |
 | Python | 3.14.4, pyenv global | Pinned in `.python-version`; `bin/bootstrap` installs and selects it, and `pyenv init -` reads the same file |
 | Go | Homebrew Go 1.26.5; the official `/usr/local/go` install has been removed | Brewfile Go is the only source; `fish/conf.d/00-paths.fish` puts `$GOPATH/bin` above it for `go install` output |
@@ -30,44 +30,36 @@ The Brewfile declares fresh-machine fallbacks while preserving the source machin
 | pnpm | 11.17.0, Homebrew | Declared in Brewfile |
 | Claude Code | 2.1.220 native install under `~/.local/share/claude`, launcher in `~/.local/bin` | `bin/bootstrap` uses the official native self-updating installer |
 | Cursor Agent | CLI `2026.07.23-e383d2b` under `~/.local/share/cursor-agent`; Cursor.app is `2026.07.09-a3815c0` | Not declaratively installed; Cursor.app is declared, agent state remains manual |
-| Proton Pass CLI | 2.2.3 under `~/.local/bin` | `proton-pass-cli` is now declared as a fresh-machine fallback |
+| Proton Pass CLI | Homebrew `proton-pass-cli` | Declared in Brewfile |
+| Antigravity CLI | `agy` 1.2.13 native install in `~/.local/bin` | Not declaratively installed; `fish/conf.d/00-paths.fish` already puts `~/.local/bin` on PATH, so the installer's own PATH line was removed |
 
 The duplicated Go providers remain an intentional snapshot fact. Rust no longer has any Homebrew provider at all: rustup is the single source, so `bin/bootstrap` rather than the Brewfile is what reproduces it.
 
-## Shared agent configuration
+## AI harness configuration
 
-`agents/` is the canonical behavior layer for the installed AI harnesses. `bin/agents_link` projects it into native locations and `bin/agents_conform` verifies both deterministic wiring and optional behavioral canaries. The evergreen guide to that layer is [agents/README.md](agents/README.md).
+The previous shared behavior layer and 9router integration were archived on
+2026-09-28. Since 2026-09-29, Codex, Claude Code and OpenCode send inference
+through the local Caveman proxy on port 8787, which forwards to Quotio's
+CLIProxyAPI on port 8317; see [caveman/README.md](caveman/README.md) and
+[quotio/README.md](quotio/README.md). Bootstrap installs Quotio but not Caveman,
+and only warns when the proxy is not ready. It still does not project shared
+rules, skills, subagents, or hooks.
 
-| Harness | Rules | Skills | Subagents | Portable hook coverage |
-|---------|-------|--------|-----------|------------------------|
-| Claude Code | `~/.claude` **is** `claude/`; `claude/CLAUDE.md` → `agents/AGENTS.md` | `claude/skills` → `agents/skills` | Generated into `claude/agents` | Native `Stop` command hook, from tracked settings |
-| Codex | `~/.codex/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.codex/skills` | N/A: no stable subagent file format | Unmanaged until the native TOML hook schema stabilizes |
-| OpenCode | `~/.config/opencode/AGENTS.md` → `agents/AGENTS.md` | Per-skill links plus `~/.agents/skills` | Generated into `~/.config/opencode/agents` | Not portable: lifecycle extension surface is the plugin API |
-| Cursor Agent | Generated `~/.cursor/rules/agents.mdc` (`alwaysApply`), found by ancestor walk | Per-skill links in `~/.cursor/skills` and `~/.agents/skills` | N/A: the CLI reads subagents only from a workspace `.cursor/agents` | Generated `~/.cursor/hooks.json` stop hook |
-| Shared standard | `~/.agents/AGENTS.md` → `agents/AGENTS.md` | Per-skill links in `~/.agents/skills` | — | — |
+`~/.claude` remains a symlink to `claude/` so existing conversations and account
+state stay intact. Its settings point `ANTHROPIC_BASE_URL` at Caveman and
+`apiKeyHelper` at `bin/quotio-client-key`; they have no custom permissions,
+hooks, or status line. Previously installed plugins are explicitly disabled.
+`~/.claude.json` stays at the home root. See [claude/README.md](claude/README.md).
 
-Cursor is the awkward one, and the table above understates it. It has no global rules *file*: `LocalCursorRulesService` walks up from the workspace directory reading `<dir>/.cursor/rules/**/*.mdc` and `<dir>/AGENTS.md` at every ancestor until it hits `/`. `~/.cursor/rules` is therefore reached only because `$HOME` is an ancestor — the shared rule applies to every project under the home directory and to nothing outside it. There is no `~/.cursor/AGENTS.md` and no `CURSOR.md` anywhere in the shipped bundle. `CURSOR_CONFIG_DIR` exists but relocates only `cli-config.json` and `permissions.json`, so it cannot move rules, skills, agents, or hooks.
-
-Three Cursor findings worth not rediscovering:
-
-- **Subagents are workspace-only.** `computeAgentsDirs()` resolves from `workspacePath` alone; no `homedir()`-joined agents directory exists in the bundle. Projecting into `~/.cursor/agents` would fail silently, which is why this repo does not.
-- **Cursor's headless `stop` hook never fires.** Measured against the installed CLI with a ten-event probe: a `cursor-agent -p` run fires only `workspaceOpen`, `sessionStart`, and `sessionEnd`, in both `--mode ask` and default agent mode. The portable `stop` hook is therefore projected to **both** `stop` and `sessionEnd`, the latter being the only carrier that actually runs outside the editor.
-- **Cursor imports Claude's hooks** from `~/.claude/settings.json`, mapping `Stop`→`stop` and seven more. That raises an obvious double-fire concern, but it was measured and does **not** occur headless — because `stop` fires from neither channel. Whether it duplicates inside the editor is untested.
-- **`XDG_CONFIG_HOME` is a latent trap for this machine.** It is unset today. Exporting it as `~/.config` — tempting, given this repo lives there — silently moves Cursor's config dir to `~/.config/cursor` and orphans `cli-config.json` and `permissions.json`.
-
-Rules and skills are symlinks elsewhere, so all other harnesses read the same bytes. Subagent frontmatter is harness-specific, so `bin/agents_render` translates each `agents/subagents/<name>.md` and `agents_link` writes the result; those generated files are untracked and carry a generation header that marks them safe to rewrite or prune. The lossy edges — model tier dropped on OpenCode, permission tiers `safe`/`full` dropped on Claude — are recorded in `agents/subagents/README.md`.
-
-Provider/auth/model settings remain native and untracked. Live conformance calls are opt-in because they consume tokens and model obedience is probabilistic.
-
-Claude Code is the one harness whose config directory this repository owns outright: `~/.claude` is a symlink to `claude/`; [claude/README.md](claude/README.md) documents that arrangement and what is tracked inside it. Claude rewrites its own `settings.json`, so the only way to keep the tracked copy authoritative is to make it the live copy and read the drift out of `git diff`. Its credential lives behind `apiKeyHelper` in a gitignored `claude/auth-token`, which is why the tracked settings carry no secret and `agents_conform` now passes end to end, live tier included.
-
-About 340 MB of Claude runtime state — `security/` alone is a 297 MB agent SDK venv — now sits inside the working tree and is gitignored wholesale. `~/.claude.json` is deliberately left at the home root: it is OAuth and per-project state, not configuration.
+Codex's built-in skills remain installed. Custom rules, skill links, generated
+subagents, and Cursor hook registrations were archived outside the repository.
+T3 stores provider preferences separately and must be reset while fully closed.
 
 ## npm global tools
 
 The user-owned npm prefix is `~/.node_modules`. Bootstrap restores:
 
-- `postplan@0.0.4` — required by `agents/skills/html-planning`;
+- `postplan@0.0.4` — standalone optional publishing CLI;
 - `@augmentcode/auggie`;
 - `localtunnel`.
 
@@ -79,29 +71,32 @@ The snapshot also contained a separate npm installation and a broken `vaultwork`
 |-------------|-------------:|-----------------:|
 | Amphetamine | 937984704 | 5.3.2 |
 | Hush | 1544743900 | 1.0.19 |
-| NepTunes | 1006739057 | 3.2.8 |
 | Proton Pass for Safari | 6502835663 | 1.38.0 |
 | Tampermonkey | 6738342400 | 5.6.6240 |
+| TestFlight | 899247664 | 4.4.0 |
 | TrashMe 3 | 1490879410 | 3.7.5 |
 | Wipr | 1662217862 | 2.34 |
 | Xcode | 497799835 | 26.6 |
 
 These IDs are captured directly in the Brewfile. Installation still requires an App Store sign-in.
 
+NepTunes (App Store ID 1006739057) runs as a TestFlight beta. `mas` reports beta installs with ID 0, so a `mas` entry would never read as satisfied; join the beta through TestFlight instead.
+
 ## Application coverage
 
 The Brewfile now covers the active package-manageable application set, including:
 
-- development: Cursor, T3 Code Nightly, OrbStack, Codex, Ghostty, FluxMarkdown;
-- productivity/UI: Raycast, Rectangle Pro, Hyperkey, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse, Quotio;
-- browsers/networking: Google Chrome, Zen, Legcord, Proton Pass, Tailscale;
+- development: Cursor, T3 Code Nightly, Zed, OrbStack, Codex, Ghostty, Quotio, ClaudeBar;
+- productivity/UI: Raycast, Rectangle Pro, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse;
+- browsers/networking: Google Chrome, Firefox, Helium, Search, Zen, Legcord, Proton Pass, Tailscale;
+- security: Yubico Authenticator and `ykman`;
 - hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
-- games: League of Legends and Riot Client;
+- games: League of Legends (which installs Riot Client); Steam comes from `bin/bootstrap` via i1rr/steam-arm64-mac, not the Intel-only cask;
 - font: JetBrains Mono Nerd Font.
 
 Raycast runs its Beta channel selected inside the application; Homebrew exposes the `raycast` cask rather than a beta-specific token.
 
-Zed settings remain tracked, but **Zed.app was not installed at snapshot time**, so `cask "zed"` is intentionally absent. Add it if Zed becomes active again.
+Cider, Grok Bot, and Octohide VPN are installed by hand; Homebrew has no cask for them.
 
 ## Cursor extension snapshot
 
@@ -126,32 +121,19 @@ Cursor's editor settings, keybindings, MCP configuration, CLI configuration, ses
 
 ## Deliberately unmanaged configuration
 
-These items influence the daily machine but are intentionally excluded from version control:
-
-| State | Reason / recovery path |
-|-------|------------------------|
-| Cursor settings, keybindings, extensions, MCP, account-backed user rules and agent state | Native/account state remains local; shared skills and portable hooks are projected from `agents/` |
-| Codex `~/.codex/config.toml`, auth, memories, plugins and sessions | Native/provider state remains local; shared rules and skills are projected from `agents/` |
-| DockDoor plist preferences | User explicitly chose not to export GUI defaults |
-| Raycast Beta preferences, databases, HyperKey state and downloaded extensions | Mutable application database and account state |
-| Claude Code account, conversations, projects, sessions and telemetry | Private runtime state; it now lives under `claude/` because `~/.claude` links there, and is gitignored wholesale |
-| `claude/auth-token` and `~/.claude.json` | The CLIProxyAPI credential and Claude's OAuth/project state; neither is ever tracked |
-| GitHub Copilot OAuth state | Credential-bearing runtime data |
-| SSH private keys, known hosts, and the `trixie` host alias | Security boundary; recreate manually |
-| WakaTime API configuration | Credential-bearing `~/.wakatime.cfg` |
-| OpenCode live provider configuration | `opencode/opencode.json` contains credentials |
-| OrbStack/Docker contexts, registry auth, IPv6/Rosetta preferences | Keychain and machine/runtime state |
-| Legcord Discord session, caches, window geometry, and locale cache | Only `storage/settings.json` is tracked; `bin/legcord_link` connects it |
-| GUI preference plists for third-party apps | Full GUI cloning is outside the repository boundary |
+Machine-local credentials, account state, and runtime data are listed in
+[docs/setup.md](docs/setup.md#machine-local-and-ignored-files). Beyond that list,
+GUI preference plists for third-party apps stay local, because full GUI cloning is
+outside the repository boundary. At snapshot time `~/.ssh/config` also held a
+private `trixie` host alias.
 
 ## Runtime and service state
 
 - Herdr is installed and was running through `homebrew.mxcl.herdr`; bootstrap starts it only with `--with-herdr-service`.
-- `tmux` 3.7b remains installed locally as legacy state but is deliberately absent from the Brewfile. `bin/tmux-sessionizer` forwards to Herdr.
-- `/etc/shells` contains `/usr/local/bin/fish` twice. This is harmless snapshot drift; bootstrap's exact-match guard does not add another duplicate.
+- `tmux` is no longer installed; Herdr replaces it through `bin/herdr-sessionizer`.
 - No user crontab existed.
 - User LaunchAgents were app-generated at snapshot time (Google updater, Riot client, Herdr). `dev.newedia.t3-awake` is this repository's own hand-authored agent, installed by `bin/t3_awake install`; see `docs/t3-awake.md`.
-- `~/Development` existed; `~/dev` and `~/projects` did not. `bin/herdr-sessionizer` safely searches all three plus `~/.config`.
+- `bin/herdr-sessionizer` searches `~/dev` and `~/.config`.
 
 ## Security boundary
 
@@ -160,6 +142,6 @@ The repository intentionally omits tokens, API keys, browser/account sessions, p
 At snapshot time:
 
 - the working tree was clean before implementation;
-- `bin/agents_link --check claude` passed;
+- the since-retired Claude conformance check passed;
 - there were no ordinary untracked files under `~/.config`;
 - ignored files matched the documented secret/runtime policy.

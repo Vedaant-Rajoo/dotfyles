@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
-# Whole-machine maintenance: Neovim plugins, Homebrew formulae, and casks. A
-# cask whose app is running is gracefully quit (force-quit on request),
+# Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
+# Store apps, the Rust toolchain, npm globals, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
 # upgraded, and reopened immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
@@ -33,6 +33,32 @@ function u_run_brew_upgrade
     brew upgrade $argv[2..-1] 2>&1 | tee -a "$argv[1]"
     set -l upgrade_status $pipestatus[1]
     return $upgrade_status
+end
+
+# Runs one non-Homebrew updater. A failure is recorded and the run continues.
+function u_run_step --argument-names log_file category title
+    u_run_logged "$log_file" gum spin --spinner globe --title "$title" --show-output -- $argv[4..-1]
+    if test $status -eq 0
+        u_log "$log_file" ""
+        echo "✅ $title"
+        return 0
+    end
+    u_record_failure "$category" all "$argv[4..-1] failed"
+    return 1
+end
+
+# Upgrades every outdated npm global except postplan, which bin/bootstrap pins.
+function u_npm_upgrade --argument-names log_file
+    set -l names (npm outdated -g --json 2>/dev/null | jq -r 'keys[] | select(. != "postplan")')
+    or begin
+        u_record_failure npm all 'npm outdated -g --json was unreadable'
+        return 1
+    end
+    if test (count $names) -eq 0
+        u_log "$log_file" "No outdated npm globals"
+        return 0
+    end
+    u_run_step "$log_file" npm "📦 npm globals" npm install -g $names@latest
 end
 
 function u_record_failure --argument-names category subject detail
@@ -428,7 +454,9 @@ function u_main
  '
 
     set -l NOW (date +%Y-%m-%d-%H-%M-%S)
-    set -l log_file /tmp/u-$NOW.txt
+    set -l log_dir (set -q XDG_STATE_HOME; and echo $XDG_STATE_HOME; or echo ~/.local/state)/u
+    mkdir -p "$log_dir"; or return 1
+    set -l log_file "$log_dir/u-$NOW.txt"
     u_log "$log_file" "$NOW" ""
 
     if not gum confirm "Do you wish to update your scripts?"
@@ -557,6 +585,20 @@ function u_main
         echo "✅ 🍻 brew doctored"
     else
         u_record_failure brew-doctor all 'brew doctor failed'
+        set final_status 1
+    end
+
+    u_run_step "$log_file" mas "🍎 App Store apps" mas upgrade; or set final_status 1
+    u_run_step "$log_file" rustup "🦀 rustup" rustup update; or set final_status 1
+    u_npm_upgrade "$log_file"; or set final_status 1
+
+    # Fisher is a fish function, which gum spin cannot run.
+    echo "🐟 fisher updating..."
+    if u_run_logged "$log_file" fisher update
+        u_log "$log_file" ""
+        echo "✅ 🐟 fisher updated"
+    else
+        u_record_failure fisher all 'fisher update failed'
         set final_status 1
     end
 

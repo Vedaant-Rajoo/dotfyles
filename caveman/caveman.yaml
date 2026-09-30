@@ -1,0 +1,14 @@
+label: quotio
+mode: compress
+listen: 127.0.0.1:8787
+upstream_proxy: "off"
+toolschema_strip: "off"
+breakpoint_plan: "off"
+optimizers:
+  anthropic-cache-breakpoints: false
+  openai-prompt-cache-key: false
+  bedrock-cache-points: false
+compat:
+  quotio:
+    base_url: http://127.0.0.1:8317
+    wire_dialect: anthropic

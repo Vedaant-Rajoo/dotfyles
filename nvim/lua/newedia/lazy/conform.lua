@@ -12,7 +12,6 @@ return {
 				go = { "goimports", "gofmt", stop_after_first = true },
 				python = { "ruff_format", "black", stop_after_first = true },
 				rust = { "rustfmt" },
-				zig = { "zigfmt" },
 				sh = { "shfmt" },
 				bash = { "shfmt" },
 				javascript = { "prettierd", "prettier", stop_after_first = true },

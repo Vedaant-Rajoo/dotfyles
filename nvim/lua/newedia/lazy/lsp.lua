@@ -17,8 +17,6 @@ return {
 		"saghen/blink.cmp",
 	},
 	config = function()
-		vim.g.zig_fmt_autosave = 0
-
 		require("fidget").setup({})
 		require("mason").setup()
 
@@ -37,17 +35,6 @@ return {
 							indent_size = "2",
 						},
 					},
-				},
-			},
-		})
-
-		vim.lsp.config("zls", {
-			root_markers = { "build.zig", "zls.json", ".git" },
-			settings = {
-				zls = {
-					enable_inlay_hints = true,
-					enable_snippets = true,
-					warn_style = true,
 				},
 			},
 		})
@@ -71,7 +58,6 @@ return {
 				"lua_ls",
 				"gopls",
 				"rust_analyzer",
-				"zls",
 				"vtsls",
 				"tailwindcss",
 				"bashls",

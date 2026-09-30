@@ -16,6 +16,13 @@ else if not command -q fnm
 	return
 end
 
+# `fnm env` creates a per-shell symlink in fnm_multishells that is never
+# removed, so only interactive shells get one. Scripts use the default Node.
+if not status is-interactive
+	fish_add_path -gP $FNM_DIR/aliases/default/bin
+	return
+end
+
 set -l fnm_env (fnm env --use-on-cd --shell fish 2>/dev/null | string collect)
 
 if test -n "$fnm_env"

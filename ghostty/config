@@ -35,6 +35,5 @@ keybind = alt+left=unbind
 keybind = alt+right=unbind
 keybind = super+enter=unbind
 
-# Herdr sessionizer. Cmd-s types the command at a shell prompt; also reachable
-# via Ctrl-o in Fish, prefix+f inside Herdr, or the herdr-sessionizer CLI.
+# Herdr sessionizer: Cmd-s types the command at a shell prompt.
 keybind = cmd+s=text:herdr-sessionizer\r

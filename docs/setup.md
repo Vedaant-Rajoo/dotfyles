@@ -49,10 +49,10 @@ Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also
 requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal
 authentication flow and never commit its API key.
 
-## HTML planning / Postplan
+## Postplan
 
-`bin/bootstrap` installs the pinned `postplan@0.0.4` required by the tracked
-`html-planning` skill. Authenticate it separately:
+`bin/bootstrap` installs the standalone `postplan@0.0.4` CLI. If needed,
+authenticate it separately:
 
 ```bash
 postplan login
@@ -61,56 +61,25 @@ postplan whoami
 
 Postplan credentials and local draft mappings stay outside the repository.
 
-## 9Router
+## AI harness routing
 
-Bootstrap installs `9router@0.5.69` and runs `bin/9router_autostart` to configure
-startup at the next macOS login. It reuses 9Router's own
-`~/Library/LaunchAgents/com.9router.autostart.plist`, with tray mode, update checks
-and browser opening disabled, and an explicit `127.0.0.1:20128` binding.
-It does not load or restart the service during setup. Quitting from the tray
-keeps it stopped until the next login.
+Codex, Claude Code and OpenCode send inference through the local Caveman proxy
+(`127.0.0.1:8787`), which forwards to Quotio's CLIProxyAPI (`127.0.0.1:8317`).
+Bootstrap installs Claude Code and the Quotio app, but not the Caveman binaries
+or their launch agent, so the harnesses cannot reach a model until you follow
+[Fresh machine](../caveman/README.md#fresh-machine).
 
-For an existing installation, apply just the startup configuration with:
-
-```sh
-bin/9router_autostart
-```
-
-After logging out and back in, open <http://127.0.0.1:20128/dashboard> without
-launching 9Router manually. Connect providers under **Providers**, then configure
-each harness under **CLI Tools**. Credentials and the database in `~/.9router`
-remain machine-local. Claude's Apply action can write a token into the tracked
-`claude/settings.json`; move that credential into the existing ignored
-`claude/auth-token` / `apiKeyHelper` arrangement before committing settings.
-
-Use this helper to restore startup settings if 9Router's Auto-start toggle
-rewrites the plist: the built-in toggle omits the localhost binding. Re-run the
-helper after replacing the Node runtime, because launchd uses its absolute path.
-Change `NINE_ROUTER_VERSION` in `bin/bootstrap` when intentionally upgrading.
-
-Verify the startup helper in an isolated temporary directory with
-`python3 tests/bin/9router_autostart_test.py`.
+The previous 9router configuration and shared behavior layer were retired on
+2026-09-28. Do not restore old harness settings or shell exports without
+reviewing them.
 
 ## OpenCode
 
-`opencode/opencode.jsonc` is the sanitized tracked base and points at the shared
-global rules/skill roots. Recreate machine-local provider/proxy configuration in
-`opencode/opencode.json`; it is ignored because it contains live credentials.
-OpenCode lifecycle customization uses plugins rather than portable command
-hooks, so `agents_conform` reports hook coverage as not applicable.
-
-## Zed
-
-Zed settings remain tracked even though Zed.app is not installed in this
-snapshot. The tracked
-`context_servers.mcp-server-context7.settings.context7_api_key` value in
-`zed/settings.json` must remain blank so credentials never enter the repository.
-Until a verified machine-local credential mechanism is documented, leave
-Context7 disabled or uncredentialed there. If Zed is re-adopted, install it and
-sign in to GitHub Copilot through Zed's normal account flow.
-
-Add `cask "zed"` to the Brewfile when the app becomes part of the active machine
-again.
+`opencode/opencode.jsonc` routes the `openai` and `anthropic` providers through
+Caveman and registers the `caveman-mcp` recovery server. It reads the client key
+from `~/.local/state/quotio/client-key`, which stays outside the repository; see
+[quotio/README.md](../quotio/README.md). Machine-local `opencode/opencode.json`
+remains ignored for credential-bearing settings.
 
 ## Legcord
 
@@ -127,19 +96,9 @@ everything except `storage/settings.json` out of version control there.
 
 ## Cursor, Codex, DockDoor, and Raycast
 
-Cursor Agent must be authenticated separately before any of its shared
-configuration can be verified — `cursor-agent status` reports `unauthenticated`
-on a fresh machine, which is what makes its conformance row `BLOCKED` rather
-than passing. Run `cursor-agent login`.
-
-Cursor has several further caveats — headless hook coverage, the ancestor-walk
-rule scope, and the `XDG_CONFIG_HOME` trap — that matter when you touch shared
-agent configuration. They are documented in
-[agents/README.md](../agents/README.md).
-
-These applications are installed by the Brewfile. Shared agent behavior is
-projected by `bin/agents_link`, but mutable native settings remain deliberately
-untracked:
+Authenticate Cursor Agent with `cursor-agent login` and sign in to other
+harnesses using their native flows. These applications are installed by the
+Brewfile; mutable native settings remain deliberately untracked:
 
 - Cursor editor/agent settings, MCP configuration, extension list, sessions, and
   account-backed user rules;
@@ -154,7 +113,7 @@ for the current extension/app snapshot.
 ## OrbStack and Docker
 
 OrbStack is installed by the Brewfile and supplies `docker`, `kubectl`,
-`orbctl`, and the tracked Fish completion targets. Start OrbStack, select its
+`orbctl`, and their Fish completions through its shell integration. Start OrbStack, select its
 Docker context, reauthenticate registries through the macOS keychain, and
 reapply local IPv6/Rosetta preferences if needed.
 
@@ -199,15 +158,14 @@ gitleaks detect --source . -v
 | `fish/local/` | Shell secrets and machine-specific exports |
 | `fish/fish_variables` | Fish runtime/universal variables |
 | Fisher-installed plugin files under `fish/{functions,conf.d,completions,themes}/` | Fisher installs into this repo; `fish/fish_plugins` is the tracked source, and `fisher update` reinstalls them |
-| `opencode/agents/`, `claude/agents/` | Generated from `agents/subagents/`; regenerate with `bin/agents_link all` |
-| `claude/auth-token` | CLIProxyAPI token read by the tracked `apiKeyHelper`; mode `600` — see [claude/README.md](../claude/README.md) |
+| `opencode/agents/` | Optional machine-local agent definitions; none are installed by bootstrap |
 | `claude/` runtime state (`sessions/`, `projects/`, `plugins/`, `security/`, `history.jsonl`, caches) | Claude Code writes it into the working tree because `~/.claude` links here; only config is tracked — see [claude/README.md](../claude/README.md) |
 | `~/.claude.json` | Stays at the home root: OAuth, per-project state, and user MCP configuration — see [claude/README.md](../claude/README.md) |
 | Harness-native auth/config (`~/.codex`, `~/.cursor`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |
 | `opencode/opencode.json` | Provider configuration and API credentials |
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |
-| `raycast/`, `raycast-x/` | Downloaded extensions and app data |
+| `raycast/` | Downloaded extensions and app data |
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |

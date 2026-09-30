@@ -38,9 +38,9 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
    [`fish/fish_plugins`](fish/fish_plugins) manifest.
 4. **Runtimes** — Node via fnm and Python via pyenv at the pinned [`.node-version`](.node-version) /
    [`.python-version`](.python-version), Rust via the official rustup installer, plus the npm tools
-   this config needs, including pinned `postplan` and `9router`.
-5. **Wiring** — AI harness config, Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
-   LaunchAgent, 9Router startup at next login, repo hooks, and the optional
+   this config needs, including pinned `postplan`.
+5. **Wiring** — native Claude installation, Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
+   LaunchAgent, repo hooks, and the optional
    `--with-defaults` / `--with-herdr-service` steps.
 
 The App Store must be signed in before `mas` installs entries; after a reported failure, sign in and re-run bootstrap.
@@ -50,20 +50,21 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Path | Purpose |
 |------|---------|
 | `Brewfile` | Full Homebrew formula, cask, tap, and Mac App Store manifest |
-| `bin/` | 14 executables: bootstrap, linkers, conformance checks, maintenance |
+| `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`SYSTEM.md`](SYSTEM.md) | Dated snapshot of toolchain provenance and deliberate exceptions |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake design note |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
-| [`agents/`](agents/README.md) | Canonical cross-harness rules, skills, subagents, hooks |
-| [`claude/`](claude/README.md) | Claude-native settings, hooks, statusline, adapters into `agents/` |
+| [`claude/`](claude/README.md) | Claude settings routed through Caveman; private runtime state is ignored |
+| [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
+| [`quotio/`](quotio/README.md) | Quotio routing and prompt-rule notes |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
 | `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `monid/`, `rectangle-pro/`, `zed/`, `.vscode/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `rectangle-pro/` |
 
 ## After bootstrap
 
@@ -73,21 +74,22 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [SSH and GitHub](docs/setup.md#ssh-and-github) — key, `gh auth login`, remote.
 - [Git identity](docs/setup.md#git-identity-migration) — retire a shadowing `~/.gitconfig`.
 - [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — first `nvim` run, `~/.wakatime.cfg`.
-- [Postplan](docs/setup.md#html-planning--postplan) — `postplan login`.
-- [9Router](docs/setup.md#9router) — provider connections and harness routing in the local dashboard.
-- Native app auth — [OpenCode](docs/setup.md#opencode), [Zed](docs/setup.md#zed),
+- [Postplan](docs/setup.md#postplan) — optional `postplan login`.
+- [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
+- Native app auth — [OpenCode](docs/setup.md#opencode),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).
 
-Then verify the wiring: [agents/README.md](agents/README.md) covers `bin/agents_link --check all`
-and `bin/agents_conform`, [claude/README.md](claude/README.md) covers `bin/agents_link --check claude`.
+Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
+Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
+It does not project shared rules, skills, subagents, or hooks.
 
 ## Updating
 
 ```bash
 cd ~/.config
 git pull
-bin/u                              # the interactive machine update: nvim, brew, casks
+bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, fisher
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
@@ -98,10 +100,10 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Six Fish suites share [`tests/lib/harness.fish`](tests/lib/harness.fish), emit TAP-style lines, and have no aggregate runner; run one with `fish tests/<path>_test.fish`:
+Five Fish suites emit TAP-style lines and have no aggregate runner; the three under `tests/bin/` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
 
 ```
-tests/bin/agents_link_test.fish          tests/bin/u_test.fish
+tests/bin/u_test.fish
 tests/bin/t3_awake_test.fish             tests/git/hooks/commit-msg_test.fish
 tests/bin/u-cask-lifecycle_test.fish     tests/fish/conf.d/init-cache_test.fish
 ```
@@ -116,15 +118,13 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 2. Install Fish from the distro package manager; make it the login shell.
 3. Install compatible Brewfile formulae via Linuxbrew or native packages, skipping casks and `mas`.
 4. Install Node with fnm and Python with pyenv at the pinned versions.
-5. Run `bin/agents_link all` and `fish -c 'fisher update'`.
+5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
 6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, `macos-*` Ghostty) with
    Linux equivalents.
 
 ## Documentation map
 
 - [docs/setup.md](docs/setup.md) — per-machine manual setup after bootstrap.
-- [agents/README.md](agents/README.md) — shared harness rules, skills, and conformance.
-- [agents/subagents/README.md](agents/subagents/README.md) — subagent format, translation contract.
 - [claude/README.md](claude/README.md) — why this repo *is* `~/.claude`.
 - [fish/README.md](fish/README.md) — Fish layout, plugins, and init cache.
 - [docs/t3-awake.md](docs/t3-awake.md) — the T3 Code activity wake hold.

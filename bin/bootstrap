@@ -4,7 +4,6 @@
 set -euo pipefail
 
 POSTPLAN_VERSION="0.0.4"
-NINE_ROUTER_VERSION="0.5.69"
 
 DRY_RUN=0
 WITH_DEFAULTS=0
@@ -165,6 +164,14 @@ else
 	die "Homebrew installation did not complete"
 fi
 
+# The steam cask ships Valve's Intel-only stub, so it would pull in Rosetta.
+# This installer fetches Valve's universal bootstrapper from Valve's CDN,
+# verifies its checksum and signature, and opts into the native ARM64 beta.
+printf '\n==> Steam (native ARM64)\n'
+if dry_run || [[ ! -d /Applications/Steam.app ]]; then
+	run /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/i1rr/steam-arm64-mac/main/install.sh | /bin/bash'
+fi
+
 printf '\n==> Fish login shell\n'
 if [[ -x "$BREW_PREFIX/bin/fish" ]]; then
 	FISH_BIN="$BREW_PREFIX/bin/fish"
@@ -251,7 +258,6 @@ printf '\n==> npm global tools\n'
 export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
-	"9router@$NINE_ROUTER_VERSION"
 	"@augmentcode/auggie"
 	"localtunnel"
 )
@@ -307,19 +313,16 @@ else
 	warn "npm is unavailable; re-run bootstrap after fnm activates Node $NODE_VERSION"
 fi
 
-printf '\n==> 9Router login startup\n'
-if ! run "$REPO_ROOT/bin/9router_autostart"; then
-	warn "9Router startup setup failed; run bin/9router_autostart after Node and 9router are installed"
-fi
-
 printf '\n==> AI harness configuration\n'
 if dry_run || ! command -v claude >/dev/null 2>&1; then
 	run /bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
 fi
-if ! run "$REPO_ROOT/bin/agents_link" all; then
-	warn "agent links were seeded, but one or more adapters need attention"
-	warn "write your CLIProxyAPI token into claude/auth-token, then re-run bin/agents_link all"
-	warn "if ~/.claude is still a real directory, fold it in with bin/agents_link --migrate claude"
+
+printf '\n==> Caveman proxy\n'
+# Claude Code, Codex, and OpenCode route inference through Caveman, which
+# bootstrap does not build. Without it they have no reachable endpoint.
+if ! dry_run && ! curl -fsS --max-time 2 http://127.0.0.1:8787/health/ready >/dev/null 2>&1; then
+	warn "Caveman proxy is not ready; follow caveman/README.md#fresh-machine"
 fi
 
 printf '\n==> Legcord settings\n'
@@ -347,6 +350,10 @@ run "$FISH_BIN" -c '
 	fisher update
 '
 
+printf '\n==> bat theme cache\n'
+# bat only loads bat/themes/ from its cache, so the configured theme needs a build.
+run bat cache --build
+
 if [[ "$WITH_DEFAULTS" -eq 1 ]]; then
 	printf '\n==> macOS defaults\n'
 	run "$FISH_BIN" "$REPO_ROOT/bin/macdefaults"
@@ -367,9 +374,8 @@ Bootstrap complete. Remaining machine-local steps:
   - Sign in to the App Store and re-run bootstrap if any mas installs failed.
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
-  - Write your CLIProxyAPI token into claude/auth-token, then run bin/agents_link all.
+  - Set up Quotio and the Caveman proxy: caveman/README.md#fresh-machine.
   - Run `postplan login` and open Neovim once to install plugins.
-  - At next login, open http://127.0.0.1:20128/dashboard to connect 9Router providers and configure CLI Tools.
 
 See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
 EOF

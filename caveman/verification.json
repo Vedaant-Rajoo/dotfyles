@@ -1,0 +1,125 @@
+{
+  "deployed_on": "2026-09-29",
+  "checkpoint_commit": "a543f2d",
+  "runtime_release": "bin-v1.1.7",
+  "listen": "127.0.0.1:8787",
+  "upstream": "http://127.0.0.1:8317",
+  "recovery": "mcp",
+  "service": "local.caveman.proxy",
+  "codex_retrieve_auto_approval": "explicitly approved by user",
+  "quotio_config_unchanged": true,
+  "api_streaming_compression_and_exact_recovery": [
+    "responses",
+    "messages"
+  ],
+  "native_recovery_and_marker_checks": [
+    {
+      "harness": "codex",
+      "exit_code": 0,
+      "seconds": 11.4,
+      "event_count": 6,
+      "recovery_tool_named": true,
+      "recovered_error_present": true,
+      "ponytail_marker": true,
+      "caveman_marker": true
+    },
+    {
+      "harness": "claude",
+      "exit_code": 0,
+      "seconds": 6.8,
+      "event_count": 11,
+      "recovery_tool_named": true,
+      "recovered_error_present": true,
+      "ponytail_marker": true,
+      "caveman_marker": true
+    },
+    {
+      "harness": "opencode",
+      "exit_code": 0,
+      "seconds": 6.8,
+      "event_count": 6,
+      "recovery_tool_named": true,
+      "recovered_error_present": true,
+      "ponytail_marker": true,
+      "caveman_marker": true
+    }
+  ],
+  "native_project_checks": [
+    {
+      "harness": "codex",
+      "exit_code": 0,
+      "seconds": 16.8,
+      "project_rule_followed": true,
+      "error_reported": true,
+      "recovery_calls": [
+        {
+          "tool": "caveman_retrieve",
+          "status": "completed",
+          "arguments": {
+            "recovery_handle": "ccr_a4c73c46814b3e0f0ffdb85ca6e714ee"
+          }
+        }
+      ]
+    },
+    {
+      "harness": "claude",
+      "exit_code": 0,
+      "seconds": 45.6,
+      "project_rule_followed": true,
+      "error_reported": true,
+      "ponytail_marker": true,
+      "caveman_marker": true,
+      "recovery_calls": [
+        {
+          "tool": "mcp__caveman__caveman_retrieve",
+          "arguments": {
+            "recovery_handle": "ccr_d08a662f92c21546b4d47da29265f049",
+            "query": "error details CAVEMAN_DEPLOY_927 exit code 72"
+          }
+        }
+      ]
+    },
+    {
+      "harness": "opencode",
+      "exit_code": 0,
+      "seconds": 13.0,
+      "project_rule_followed": true,
+      "error_reported": true,
+      "recovery_calls": [
+        {
+          "tool": "caveman_caveman_retrieve",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "t3_fresh_thread": {
+    "model": "gpt-6-luna",
+    "user_confirmed": true,
+    "recovered_error": true,
+    "ponytail_marker": true,
+    "caveman_marker": true
+  },
+  "known_issues": [
+    "Codex successful stream closes are recorded as client cancellations, suppressing savings counters."
+  ],
+  "private_backup": "/Users/newedia/.local/state/quotio-setup/20260929-011633-caveman-deploy",
+  "proxy_patch": {
+    "installed_on": "2026-09-29",
+    "binary": "~/.local/share/caveman/bin-v1.1.7-models.1/caveman-proxy",
+    "sha256": "3f7d44230ec10a38b0cfa0d91b73abfc7dfb43de55c04c0753f7ef50e495dc2b",
+    "base": "bin-v1.1.7 (6b42a31)",
+    "patch_commit": "4d91b800a90224b40f23c88161e983cd7a31ab64",
+    "official_rebuild_byte_identical": true,
+    "go_tests": "gateway, providers, cmd and standalone packages pass; new test fails without the patch",
+    "discovery_parity_formats": [
+      "openai",
+      "codex",
+      "anthropic"
+    ],
+    "unchanged_routes_vs_official": true,
+    "no_discovery_accounting_rows": true,
+    "codex_fresh_catalog": "codex debug models with a throwaway CODEX_HOME wrote a 46-model cache through Caveman",
+    "t3_codex_refresh": "pending: needs a T3 provider refresh or new Codex thread"
+  }
+}

@@ -1,0 +1,422 @@
+From 4d91b800a90224b40f23c88161e983cd7a31ab64 Mon Sep 17 00:00:00 2001
+From: Vedaant <vedaant12345@gmail.com>
+Date: Tue, 29 Sep 2026 11:51:38 +0530
+Subject: [PATCH] feat(gateway): forward model discovery on named compat mounts
+
+GET /compat/<name>/v1/models returned 404 cave_route_not_found because
+adapter routes are an inference-only (POST) allowlist, so clients could
+not refresh their model catalog through the proxy.
+
+Add a dedicated GET route on the mux. It authenticates first, selects the
+adapter exactly as the inference route would, maps credentials and headers
+through the adapter, keeps the caller's User-Agent and query verbatim, and
+relays the upstream status, headers and body unchanged under a bounded
+timeout. It reads no body and never inspects, compresses, captures or
+records, so discovery does not touch token accounting.
+
+Only named mounts serve discovery; the default /compat/ adapter would turn
+any unnamed segment into an upstream path. HEAD, POST and every other
+method keep their existing proxy-route behavior.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ proxy/internal/gateway/compat_models.go      | 102 ++++++++
+ proxy/internal/gateway/compat_models_test.go | 262 +++++++++++++++++++
+ proxy/internal/gateway/server.go             |   3 +
+ 3 files changed, 367 insertions(+)
+ create mode 100644 proxy/internal/gateway/compat_models.go
+ create mode 100644 proxy/internal/gateway/compat_models_test.go
+
+diff --git a/proxy/internal/gateway/compat_models.go b/proxy/internal/gateway/compat_models.go
+new file mode 100644
+index 0000000..40e36a3
+--- /dev/null
++++ b/proxy/internal/gateway/compat_models.go
+@@ -0,0 +1,102 @@
++package gateway
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"time"
++
++	"github.com/JuliusBrussee/caveman/proxy/providers"
++	"github.com/JuliusBrussee/caveman/proxy/providers/openaicompat"
++	"github.com/JuliusBrussee/caveman/shared/platform/httpx"
++	"github.com/JuliusBrussee/caveman/shared/platform/id"
++	"github.com/JuliusBrussee/caveman/shared/platform/redact"
++)
++
++// compatModelsTimeout bounds one model-discovery round trip, response body
++// included. It is a variable so tests can shorten it.
++var compatModelsTimeout = 30 * time.Second
++
++// compatModels forwards GET /compat/<name>/v1/models to the mount's upstream so
++// clients can refresh their model catalog through the proxy. It is a dedicated
++// handler because adapter routes are an inference-only (POST) allowlist, and
++// discovery is not inference: no request body is read, nothing is inspected,
++// transformed, captured or recorded, and the upstream status, headers and body
++// are relayed unchanged. The query and the caller's User-Agent pass through
++// verbatim because an upstream may choose the catalog format from them.
++func (s *Server) compatModels(w http.ResponseWriter, r *http.Request) {
++	if r.Method != http.MethodGet {
++		// ServeMux also routes HEAD here; keep it on the proxy route's 404.
++		s.proxy(w, r)
++		return
++	}
++	w.Header().Set("x-cave-request-id", id.NewUUIDv7())
++	w.Header().Set("x-cave-trace-id", traceIDFrom(r))
++
++	// Authenticate FIRST, as the proxy route does, so the 401/404 split cannot
++	// enumerate the configured mounts.
++	if _, err := s.auth.Authenticate(r.Context(), r); err != nil {
++		s.rejectUnauthorized(w, r)
++		return
++	}
++	// Select the adapter exactly as the inference route on this path would,
++	// including the ambiguous-encoding checks of matchAdapter. Only named mounts
++	// serve discovery: the default /compat/ adapter claims every unnamed
++	// segment and would turn it into an upstream path.
++	match := r.Clone(r.Context())
++	match.Method = http.MethodPost
++	adapter := s.matchAdapter(match)
++	_, isDefault := adapter.(openaicompat.Adapter)
++	if adapter == nil || isDefault || adapter.Name() != "openai_compatible" {
++		httpx.Error(w, r, http.StatusNotFound, "cave_route_not_found", "Proxy path is not recognized.")
++		return
++	}
++	upstreamURL, err := adapter.ResolveUpstreamURL(r.Context(), r, providers.RouteContext{})
++	if err != nil {
++		// An unconfigured mount must not look different from an unknown route.
++		httpx.Error(w, r, http.StatusNotFound, "cave_route_not_found", "Proxy path is not recognized.")
++		return
++	}
++	credential := s.creds.Resolve(adapter.Name(), r)
++	headers, err := adapter.SanitizeAndMapHeaders(r.Context(), r, credential, upstreamURL)
++	if err != nil {
++		providerHeaderError(w, r, err)
++		return
++	}
++	if ua := r.UserAgent(); ua != "" {
++		headers.Set("user-agent", ua)
++	}
++	s.applyUpstreamAuthFallback(adapter.Name(), credential, headers)
++
++	ctx, cancel := context.WithTimeout(r.Context(), compatModelsTimeout)
++	defer cancel()
++	resp, err := s.doUpstream(ctx, func() (*http.Request, error) {
++		// nil body: a bodyless GET must not go out chunked.
++		req, err := http.NewRequestWithContext(ctx, r.Method, upstreamURL.String(), nil)
++		if err != nil {
++			return nil, err
++		}
++		req.Header = headers.Clone()
++		return req, nil
++	})
++	if err != nil {
++		if s.logger != nil {
++			s.logger.Warn("model discovery upstream failed", "error", redact.Error(err))
++		}
++		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
++			httpx.Error(w, r, http.StatusGatewayTimeout, "cave_upstream_timeout", "Upstream provider timed out.")
++			return
++		}
++		httpx.Error(w, r, http.StatusBadGateway, "cave_upstream_unavailable", "Upstream provider unavailable.")
++		return
++	}
++	defer resp.Body.Close()
++	copySafeResponseHeaders(w.Header(), resp.Header)
++	w.WriteHeader(resp.StatusCode)
++	if _, err := io.Copy(w, resp.Body); err != nil {
++		// Headers are committed: abort framing so a truncated catalog is never
++		// a clean EOF.
++		panic(http.ErrAbortHandler)
++	}
++}
+diff --git a/proxy/internal/gateway/compat_models_test.go b/proxy/internal/gateway/compat_models_test.go
+new file mode 100644
+index 0000000..25e5c30
+--- /dev/null
++++ b/proxy/internal/gateway/compat_models_test.go
+@@ -0,0 +1,262 @@
++package gateway
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/JuliusBrussee/caveman/proxy/providers"
++	"github.com/JuliusBrussee/caveman/proxy/providers/openaicompat"
++)
++
++type rejectAuth struct{}
++
++func (rejectAuth) Authenticate(context.Context, *http.Request) (RequestContext, error) {
++	return RequestContext{}, errors.New("rejected")
++}
++
++type seenRequest struct {
++	method, path, rawQuery string
++	header                 http.Header
++	body                   []byte
++	transferEncoding       []string
++}
++
++// modelsUpstream is a loopback upstream that records every request it gets.
++type modelsUpstream struct {
++	mu   sync.Mutex
++	seen []seenRequest
++}
++
++func (u *modelsUpstream) record(r *http.Request) {
++	body, _ := io.ReadAll(r.Body)
++	u.mu.Lock()
++	defer u.mu.Unlock()
++	u.seen = append(u.seen, seenRequest{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body, r.TransferEncoding})
++}
++
++func (u *modelsUpstream) requests() []seenRequest {
++	u.mu.Lock()
++	defer u.mu.Unlock()
++	return append([]seenRequest(nil), u.seen...)
++}
++
++// compatModelsServer mounts "quotio" (Anthropic wire dialect, as deployed) on
++// upstream, plus any extra adapters after it.
++func compatModelsServer(t *testing.T, auth Authenticator, upstream string, extra ...providers.Adapter) (*Server, *captureSink) {
++	t.Helper()
++	named, err := openaicompat.NewNamedWithWireDialect("quotio", upstream, "anthropic")
++	if err != nil {
++		t.Fatal(err)
++	}
++	sink := &captureSink{}
++	return New(Config{
++		Adapters:   append([]providers.Adapter{named}, extra...),
++		Auth:       auth,
++		Creds:      stubCreds{key: "sk-byok"},
++		Sink:       sink,
++		HTTPClient: &http.Client{}, // plain client: the upstream stub is on loopback
++	}), sink
++}
++
++func TestCompatModelsRelaysUpstreamCatalog(t *testing.T) {
++	for _, tc := range []struct {
++		name      string
++		target    string
++		header    map[string]string
++		status    int
++		body      string
++		wantQuery string
++	}{
++		{
++			name:   "openai default",
++			target: "/compat/quotio/v1/models",
++			status: http.StatusOK,
++			body:   `{"object":"list","data":[{"id":"gpt-5.5","object":"model","created":1,"owned_by":"quotio"}]}`,
++		},
++		{
++			name:      "codex client_version",
++			target:    "/compat/quotio/v1/models?client_version=0.158.0",
++			status:    http.StatusOK,
++			body:      `{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5"}]}`,
++			wantQuery: "client_version=0.158.0",
++		},
++		{
++			name:   "claude catalog headers",
++			target: "/compat/quotio/v1/models",
++			header: map[string]string{"anthropic-version": "2023-06-01", "User-Agent": "claude-cli/2.1.0 (external, cli)"},
++			status: http.StatusOK,
++			body:   `{"data":[{"id":"claude-fable-5","type":"model"}],"first_id":"claude-fable-5","has_more":false,"last_id":"claude-fable-5"}`,
++		},
++		{
++			name:   "upstream 401",
++			target: "/compat/quotio/v1/models",
++			status: http.StatusUnauthorized,
++			body:   `{"error":"Missing API key"}`,
++		},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			up := &modelsUpstream{}
++			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				up.record(r)
++				w.Header().Set("Content-Type", "application/json; charset=utf-8")
++				w.WriteHeader(tc.status)
++				_, _ = io.WriteString(w, tc.body)
++			}))
++			defer upstream.Close()
++			srv, sink := compatModelsServer(t, stubAuth{}, upstream.URL)
++
++			req := httptest.NewRequest(http.MethodGet, tc.target, nil)
++			for name, value := range tc.header {
++				req.Header.Set(name, value)
++			}
++			rec := httptest.NewRecorder()
++			srv.Handler().ServeHTTP(rec, req)
++
++			if rec.Code != tc.status || rec.Body.String() != tc.body {
++				t.Fatalf("response = %d %q, want %d %q", rec.Code, rec.Body.String(), tc.status, tc.body)
++			}
++			if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
++				t.Fatalf("content-type = %q", got)
++			}
++			if rec.Header().Get("x-cave-request-id") == "" {
++				t.Fatal("missing x-cave-request-id")
++			}
++			seen := up.requests()
++			if len(seen) != 1 {
++				t.Fatalf("upstream requests = %d, want 1", len(seen))
++			}
++			got := seen[0]
++			if got.method != http.MethodGet || got.path != "/v1/models" || got.rawQuery != tc.wantQuery {
++				t.Fatalf("upstream got %s %s?%s", got.method, got.path, got.rawQuery)
++			}
++			if len(got.body) != 0 || len(got.transferEncoding) != 0 {
++				t.Fatalf("upstream GET carried body %q, transfer-encoding %v", got.body, got.transferEncoding)
++			}
++			if got.header.Get("Authorization") != "Bearer sk-byok" || got.header.Get("x-api-key") != "" {
++				t.Fatal("upstream credential not mapped to Bearer")
++			}
++			for name, value := range tc.header {
++				if got.header.Get(name) != value {
++					t.Fatalf("upstream %s = %q, want %q", name, got.header.Get(name), value)
++				}
++			}
++			if len(sink.rows) != 0 {
++				t.Fatalf("discovery recorded %d telemetry rows, want 0", len(sink.rows))
++			}
++		})
++	}
++}
++
++func TestCompatModelsAuthRejectedBeforeRouting(t *testing.T) {
++	up := &modelsUpstream{}
++	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { up.record(r) }))
++	defer upstream.Close()
++	srv, _ := compatModelsServer(t, rejectAuth{}, upstream.URL)
++	// A configured and an unknown mount must be indistinguishable to an
++	// unauthenticated caller.
++	for _, target := range []string{"/compat/quotio/v1/models", "/compat/nope/v1/models"} {
++		rec := httptest.NewRecorder()
++		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
++		if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "cave_unauthorized") {
++			t.Fatalf("%s: response = %d %s, want 401 cave_unauthorized", target, rec.Code, rec.Body.String())
++		}
++	}
++	if n := len(up.requests()); n != 0 {
++		t.Fatalf("upstream requests = %d, want 0", n)
++	}
++}
++
++func TestCompatModelsServesOnlyTheExactRoute(t *testing.T) {
++	up := &modelsUpstream{}
++	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		up.record(r)
++		w.Header().Set("Content-Type", "application/json")
++		_, _ = io.WriteString(w, `{}`)
++	}))
++	defer upstream.Close()
++	// The second server adds a configured default /compat/ mount. It claims every
++	// unnamed and legacy mount, but discovery serves named mounts only. HEAD keeps
++	// the proxy route's 404 even though ServeMux routes it to the GET pattern.
++	for _, extra := range [][]providers.Adapter{nil, {openaicompat.New(upstream.URL)}} {
++		srv, sink := compatModelsServer(t, stubAuth{}, upstream.URL, extra...)
++		for _, target := range []string{
++			"GET /compat/nope/v1/models",
++			"GET /compat/stub/v1/models",
++			"GET /compat/quotio/v1/models/extra",
++			"GET /compat/quotio/v1/models/",
++			"HEAD /compat/quotio/v1/models",
++		} {
++			method, path, _ := strings.Cut(target, " ")
++			rec := httptest.NewRecorder()
++			srv.Handler().ServeHTTP(rec, httptest.NewRequest(method, path, nil))
++			if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "cave_route_not_found") {
++				t.Fatalf("%s (%d extra adapters): response = %d %s, want 404", target, len(extra), rec.Code, rec.Body.String())
++			}
++		}
++		if len(sink.rows) != 0 {
++			t.Fatalf("404s recorded %d telemetry rows", len(sink.rows))
++		}
++	}
++	if n := len(up.requests()); n != 0 {
++		t.Fatalf("upstream requests = %d, want 0", n)
++	}
++
++	// POST keeps its existing inference route: it is forwarded as POST and
++	// metered, never turned into a discovery GET.
++	srv, sink := compatModelsServer(t, stubAuth{rc: RequestContext{Label: "local", RuntimeMode: "record"}}, upstream.URL)
++	rec := httptest.NewRecorder()
++	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/compat/quotio/v1/models", strings.NewReader(`{}`)))
++	seen := up.requests()
++	if len(seen) != 1 || seen[0].method != http.MethodPost {
++		t.Fatalf("POST reached upstream as %+v, want one POST", seen)
++	}
++	if len(sink.rows) != 1 {
++		t.Fatalf("POST recorded %d telemetry rows, want 1 from the inference route", len(sink.rows))
++	}
++}
++
++func TestCompatModelsUpstreamFailures(t *testing.T) {
++	down := httptest.NewServer(http.NotFoundHandler())
++	downURL := down.URL
++	down.Close()
++	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		select {
++		case <-r.Context().Done():
++		case <-time.After(5 * time.Second):
++		}
++	}))
++	defer slow.Close()
++
++	for _, tc := range []struct {
++		name     string
++		upstream string
++		timeout  time.Duration
++		status   int
++		code     string
++	}{
++		{"upstream down", downURL, compatModelsTimeout, http.StatusBadGateway, "cave_upstream_unavailable"},
++		{"upstream slower than timeout", slow.URL, 100 * time.Millisecond, http.StatusGatewayTimeout, "cave_upstream_timeout"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			previous := compatModelsTimeout
++			compatModelsTimeout = tc.timeout
++			defer func() { compatModelsTimeout = previous }()
++			srv, sink := compatModelsServer(t, stubAuth{}, tc.upstream)
++			rec := httptest.NewRecorder()
++			srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/compat/quotio/v1/models", nil))
++			if rec.Code != tc.status || !strings.Contains(rec.Body.String(), tc.code) {
++				t.Fatalf("response = %d %s, want %d %s", rec.Code, rec.Body.String(), tc.status, tc.code)
++			}
++			if len(sink.rows) != 0 {
++				t.Fatalf("discovery recorded %d telemetry rows, want 0", len(sink.rows))
++			}
++		})
++	}
++}
+diff --git a/proxy/internal/gateway/server.go b/proxy/internal/gateway/server.go
+index 0cdef59..614f7f1 100644
+--- a/proxy/internal/gateway/server.go
++++ b/proxy/internal/gateway/server.go
+@@ -592,6 +592,9 @@ func serveMux(s *Server) *http.ServeMux {
+ 	// ChatGPT-login Codex: OAuth-preserving forward with OpenAI Responses
+ 	// live-zone compression and exact-original fallback.
+ 	mux.HandleFunc("/chatgpt/", s.chatgpt)
++	// Model discovery on a named compat mount; every other method falls
++	// through to the inference-only proxy route.
++	mux.HandleFunc("GET /compat/{name}/v1/models", s.compatModels)
+ 	mux.HandleFunc("/", s.proxy)
+ 	return mux
+ }
+-- 
+2.54.0 (Apple Git-157)
+

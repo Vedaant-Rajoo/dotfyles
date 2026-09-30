@@ -1,44 +1,26 @@
 #!/usr/bin/env bash
 # herdr-sessionizer — fuzzy-find a project dir and open/focus a Herdr workspace.
-# The tmux→Herdr cutover replacement for tmux-sessionizer (workspaces ≈ sessions).
 # Launch surfaces: Fish Ctrl-o, Ghostty cmd+s, prefix+f inside Herdr, or direct CLI.
 
+# shellcheck disable=SC2016 # single-quoted $v is a jq variable, not a shell one
 set -euo pipefail
 
-SEARCH_PATHS=(
-	"$HOME/Development"
-	"$HOME/dev"
-	"$HOME/projects"
-	"$HOME/.config"
-)
-DEFAULT_DEPTH=2
+SEARCH_PATHS=("$HOME/dev" "$HOME/.config")
+SEARCH_DEPTH=2
 
 # Seconds to wait for a freshly-spawned server to report running.
-START_TIMEOUT="${HERDR_SESSIONIZER_START_TIMEOUT:-5}"
+START_TIMEOUT=5
 
 die() {
 	echo "herdr-sessionizer: $*" >&2
 	exit 1
 }
 
-# --- Preflight -------------------------------------------------------------
-# Resolve herdr (HERDR_BIN_PATH wins) and hard-fail on any missing dependency.
-herdr_bin="${HERDR_BIN_PATH:-$(command -v herdr || true)}"
-if [[ -z "$herdr_bin" || ! -x "$herdr_bin" ]]; then
-	echo "herdr-sessionizer: 'herdr' not found on PATH (set HERDR_BIN_PATH to override)" >&2
-	exit 127
-fi
-
-# fzf + jq are required; fd is optional (find fallback below).
-missing=()
-for tool in fzf jq; do
-	command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+# --- Preflight: all four come from the Brewfile. ----------------------------
+for tool in herdr fzf jq fd; do
+	command -v "$tool" >/dev/null 2>&1 || { echo "herdr-sessionizer: missing required tool: $tool" >&2; exit 127; }
 done
-if [[ ${#missing[@]} -gt 0 ]]; then
-	echo "herdr-sessionizer: missing required tool(s): ${missing[*]}" >&2
-	echo "  install them and retry (required: herdr, fzf, jq; optional: fd)" >&2
-	exit 127
-fi
+herdr_bin="$(command -v herdr)"
 
 # --- Herdr helpers ---------------------------------------------------------
 # Herdr is Rust: NEVER pipe its CLI output into grep -q / head — an early pipe
@@ -93,86 +75,28 @@ ensure_server() {
 	die "herdr server did not come up within ${START_TIMEOUT}s; try 'herdr status' and check herdr-server.log"
 }
 
-workspace_list_json() {
-	"$herdr_bin" workspace list 2>/dev/null
-}
-
-pane_list_json() {
-	"$herdr_bin" pane list 2>/dev/null
-}
-
 find_dirs() {
-	# Existing workspaces first (label\tid), then project dirs.
-	if server_running; then
-		local list
-		list="$(workspace_list_json || true)"
-		if [[ -n "$list" ]]; then
-			jq -r '
-				.result.workspaces[]?
-				| "\(.label)\tworkspace:\(.workspace_id)"
-			' <<<"$list" 2>/dev/null || true
-		fi
-	fi
+	# Existing workspaces first (label\tid), then project dirs. ensure_server
+	# has already run, so the server is up.
+	local list
+	list="$("$herdr_bin" workspace list 2>/dev/null || true)"
+	jq -r '.result.workspaces[]? | "\(.label)\tworkspace:\(.workspace_id)"' <<<"$list" 2>/dev/null || true
 
-	local entry path depth
-	for entry in "${SEARCH_PATHS[@]}"; do
-		path="$entry"
-		depth="$DEFAULT_DEPTH"
-		if [[ "$entry" == *:* ]]; then
-			path="${entry%:*}"
-			depth="${entry##*:}"
-		fi
+	local path
+	for path in "${SEARCH_PATHS[@]}"; do
 		[[ -d "$path" ]] || continue
-		if command -v fd &>/dev/null; then
-			fd . "$path" --min-depth 1 --max-depth "$depth" --type d \
-				--exclude .git --exclude node_modules
-		else
-			find "$path" -mindepth 1 -maxdepth "$depth" \
-				\( -name .git -o -name node_modules \) -prune -o -type d -print
-		fi
+		fd . "$path" --min-depth 1 --max-depth "$SEARCH_DEPTH" --type d \
+			--exclude .git --exclude node_modules
 	done
 }
 
-resolve_dir() {
-	( cd "$1" 2>/dev/null && pwd -P )
-}
-
-# First workspace id whose pane cwd/foreground_cwd matches $1 (jq first(): no head → no SIGPIPE).
-workspace_id_for_cwd() {
-	local dir="$1" list
-	list="$(pane_list_json || true)"
+# First workspace id from `herdr $1 list` whose entry matches jq condition $2,
+# with $v bound to $3 (jq first(): no head, so no SIGPIPE).
+workspace_id() {
+	local list
+	list="$("$herdr_bin" "$1" list 2>/dev/null || true)"
 	[[ -n "$list" ]] || return 0
-	jq -r --arg d "$dir" '
-		first(
-			.result.panes[]?
-			| select(.cwd == $d or .foreground_cwd == $d)
-			| .workspace_id
-		) // empty
-	' <<<"$list" 2>/dev/null || true
-}
-
-# First workspace id whose label matches $1.
-workspace_id_for_label() {
-	local label="$1" list
-	list="$(workspace_list_json || true)"
-	[[ -n "$list" ]] || return 0
-	jq -r --arg l "$label" '
-		first(
-			.result.workspaces[]?
-			| select(.label == $l)
-			| .workspace_id
-		) // empty
-	' <<<"$list" 2>/dev/null || true
-}
-
-focus_workspace() {
-	local id="$1"
-	"$herdr_bin" workspace focus "$id" >/dev/null
-}
-
-create_workspace() {
-	local dir="$1" label="$2"
-	"$herdr_bin" workspace create --cwd "$dir" --label "$label" --focus >/dev/null
+	jq -r --arg v "$3" "first(.result.${1}s[]? | select($2) | .workspace_id) // empty" <<<"$list" 2>/dev/null || true
 }
 
 maybe_attach() {
@@ -201,36 +125,33 @@ fi
 
 # Existing workspace row from fzf: "label<TAB>workspace:ID"
 if [[ "$selected" == *$'\t'workspace:* ]]; then
-	ws_id="${selected##*$'\t'workspace:}"
-	focus_workspace "$ws_id"
+	"$herdr_bin" workspace focus "${selected##*$'\t'workspace:}" >/dev/null
 	maybe_attach
 	exit 0
 fi
 
 # Path → focus an existing workspace (matched by cwd, then label) else create.
 if [[ "$selected" == */* ]]; then
-	start_dir="$(resolve_dir "$selected" || true)"
+	start_dir="$(cd "$selected" 2>/dev/null && pwd -P || true)"
 	[[ -n "$start_dir" ]] || die "cannot resolve directory '$selected'"
 	selected_name="$(basename "$start_dir" | tr ' .:' '___')"
 
-	existing="$(workspace_id_for_cwd "$start_dir" || true)"
-	if [[ -z "$existing" ]]; then
-		existing="$(workspace_id_for_label "$selected_name" || true)"
-	fi
+	existing="$(workspace_id pane '.cwd == $v or .foreground_cwd == $v' "$start_dir")"
+	[[ -n "$existing" ]] || existing="$(workspace_id workspace '.label == $v' "$selected_name")"
 
 	if [[ -n "$existing" ]]; then
-		focus_workspace "$existing"
+		"$herdr_bin" workspace focus "$existing" >/dev/null
 	else
-		create_workspace "$start_dir" "$selected_name"
+		"$herdr_bin" workspace create --cwd "$start_dir" --label "$selected_name" --focus >/dev/null
 	fi
 	maybe_attach
 	exit 0
 fi
 
 # Bare label (CLI arg or legacy): focus by label if present.
-ws_id="$(workspace_id_for_label "$selected" || true)"
+ws_id="$(workspace_id workspace '.label == $v' "$selected")"
 if [[ -n "$ws_id" ]]; then
-	focus_workspace "$ws_id"
+	"$herdr_bin" workspace focus "$ws_id" >/dev/null
 	maybe_attach
 	exit 0
 fi

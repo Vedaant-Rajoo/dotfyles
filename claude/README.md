@@ -1,72 +1,21 @@
-# Claude Code owns ~/.claude, so this repo *is* ~/.claude
+# Native Claude configuration
 
-`~/.claude` is a symlink to this directory. That inversion is deliberate. Claude
-Code rewrites its own `settings.json` — it once dropped every hook, permission,
-and statusline entry this repo had configured while adding six plugins of its
-own — so a tracked file that is merely *copied outward* rots silently and the
-live file always wins. Pointing Claude at the working tree makes the live file
-the tracked file: anything it rewrites shows up in `git diff`, which is the only
-thing that keeps it honest.
+`~/.claude` remains a symlink to this directory, preserving existing runtime
+state. `settings.json` keeps native model selection, permissions, and hook
+behavior. Existing plugins are explicitly disabled; theme and onboarding
+preferences are retained.
 
-## Credentials
+Inference goes through the local Caveman proxy: `ANTHROPIC_BASE_URL` is
+`http://127.0.0.1:8787/compat/quotio`, and `apiKeyHelper` reads Quotio's client
+key through `bin/quotio-client-key`. See [caveman/README.md](../caveman/README.md).
 
-Credentials still never enter the repository. `claude/settings.json` carries an
-`apiKeyHelper` command rather than a token; `claude/api-key-helper.sh` is
-tracked and reads `claude/auth-token`, which is gitignored and mode `600`. The
-base URL is a localhost proxy and the model ids are not secrets, so those stay
-tracked in `env`. `bin/agents_link --check claude` fails hard if a literal
-`ANTHROPIC_AUTH_TOKEN` ever appears in the tracked settings.
+The previous shared rules, skill links, generated subagents, custom hooks,
+status line, and 9router integration were archived on 2026-09-28. Bootstrap no
+longer recreates them.
 
-## Runtime state
+Runtime files, plugin installations, sessions, transcripts, and caches remain
+ignored. `~/.claude.json` stays at the home root with OAuth and per-project state.
+Do not remove account or conversation data to reset routing.
 
-Everything Claude writes at runtime — `sessions/`, `projects/`,
-`history.jsonl`, `shell-snapshots/`, `plugins/`, `security/`, caches — lands in
-the working tree and is gitignored, so `git status` stays clean while ~340 MB of
-state sits beside the few tracked files. `~/.claude.json` is **not** part of
-this: it stays at the home root, holding OAuth and per-project state.
-
-## Linking
-
-```bash
-bin/agents_link claude            # link ~/.claude, seed the token, generate subagents
-bin/agents_link --check claude    # symlink, settings, helper, and token status
-bin/agents_link --migrate claude  # fold a pre-existing real ~/.claude in, backup first
-```
-
-`--migrate` clones `~/.claude` to `~/.claude.pre-migrate-backup` (an APFS clone,
-so it is near-instant and nearly free), moves everything the repo does not
-already track into `claude/`, drops its own stale per-file links, and lets the
-repo copy win every collision. Remove the backup once you are satisfied.
-
-`CLAUDE_CONFIG_DIR` would also relocate the directory and is the officially
-documented mechanism, but it depends on the environment being set — any launch
-that does not inherit it silently falls back to a fresh `~/.claude`. The symlink
-has no such failure mode. (Note that on this build `CLAUDE_CONFIG_DIR` also
-relocates `~/.claude.json`, which the published docs say it does not.)
-
-Authentication, provider settings, sessions, transcripts, caches, and model
-selection remain native and machine-local for every harness. The bootstrap still
-installs Claude Code with Anthropic's native self-updating installer when
-`claude` is missing.
-
-## Generated and tested parts
-
-`claude/agents/` is **generated** from the canonical sources in
-[`agents/subagents/`](../agents/subagents/README.md) by `bin/agents_link all`;
-it is untracked, and edits belong in the source files. `CLAUDE.md` and `skills/`
-are symlinks into `agents/`, so shared rules and skills are the same bytes here
-as in every other harness.
-
-Commit-message style is enforced for every author — human or agent, in any
-harness — by the tracked git hook `git/hooks/commit-msg`, not by a Claude hook
-(see [docs/setup.md](../docs/setup.md)). Its tests run with:
-
-```bash
-fish tests/git/hooks/commit-msg_test.fish
-```
-
----
-
-Back to [the repository overview](../README.md); the shared harness architecture
-is in [agents/README.md](../agents/README.md), and the machine inventory in
-[SYSTEM.md](../SYSTEM.md).
+Repository Git hooks remain independent of AI harness hooks. See
+[docs/setup.md](../docs/setup.md) and [README.md](../README.md).
