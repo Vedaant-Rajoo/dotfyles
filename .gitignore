@@ -19,6 +19,7 @@ github-copilot/
 fish/local/
 monid/
 opencode/opencode.json
+opencode/service.json
 
 # --- Optional native harness agent definitions remain machine-local. ---
 opencode/agents/

@@ -75,6 +75,7 @@ reviewing them.
 
 ## OpenCode
 
+OpenCode V2 (`anomalyco/tap/opencode-v2`) uses native V2 config.
 `opencode/opencode.jsonc` routes the `openai` and `anthropic` providers through
 Caveman and registers the `caveman-mcp` recovery server. It reads the client key
 from `~/.local/state/quotio/client-key`, which stays outside the repository; see

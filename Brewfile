@@ -63,7 +63,7 @@ brew "neovim"
 brew "tree-sitter-cli"
 
 # Product CLIs
-brew "anomalyco/tap/opencode", trusted: true
+brew "anomalyco/tap/opencode-v2", trusted: true
 
 # Developer apps and terminal tools
 cask "claudebar"

@@ -1,26 +1,31 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "openai/gpt-6-luna",
+  "agents": {
+    "title": {
+      "model": "openai/gpt-6-luna"
+    }
+  },
   "mcp": {
-    "caveman": {
-      "type": "local",
-      "command": ["/Users/newedia/.local/share/caveman/bin-v1.1.7/caveman-mcp"],
-      "enabled": true,
-      "environment": {
-        "CAVEMAN_HOME": "/Users/newedia/.local/state/caveman",
-        "CAVEMAN_CCR_DB": "/Users/newedia/.local/state/caveman/ccr.db"
+    "servers": {
+      "caveman": {
+        "type": "local",
+        "command": ["/Users/newedia/.local/share/caveman/bin-v1.1.7/caveman-mcp"],
+        "environment": {
+          "CAVEMAN_HOME": "/Users/newedia/.local/state/caveman",
+          "CAVEMAN_CCR_DB": "/Users/newedia/.local/state/caveman/ccr.db"
+        }
       }
     }
   },
-  "provider": {
+  "providers": {
     "openai": {
-      "options": {
+      "settings": {
         "baseURL": "http://127.0.0.1:8787/compat/quotio/v1",
         "apiKey": "{file:/Users/newedia/.local/state/quotio/client-key}"
       }
     },
     "anthropic": {
-      "options": {
+      "settings": {
         "baseURL": "http://127.0.0.1:8787/compat/quotio/v1",
         "apiKey": "{file:/Users/newedia/.local/state/quotio/client-key}"
       }

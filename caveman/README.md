@@ -167,4 +167,4 @@ Prefer reverting individual routing/MCP fields over replacing whole settings
 files after later configuration changes.
 
 References: [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli),
-[OpenCode MCP configuration](https://opencode.ai/docs/mcp-servers/).
+[OpenCode MCP configuration](https://opencode.ai/v2/docs/mcp-servers/).
