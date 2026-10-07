@@ -136,21 +136,45 @@ remain outside scope.
 
 ## Git hooks and secret scanning
 
-Bootstrap enables the tracked hooks for this clone:
+Bootstrap enables the tracked hooks for this clone. The path is absolute, so
+every worktree, including T3's, runs the main checkout's hooks:
 
 ```bash
-git config core.hooksPath git/hooks
+git config core.hooksPath ~/.config/git/hooks
 ```
 
 Two hooks run from there: `pre-commit` scans staged changes with
-`gitleaks protect --staged -v`, and `commit-msg` enforces the commit style —
-a single lowercase conventional-commit subject of at most 100 characters, no
-prose body, trailers only — for every author, human or agent. Before commits
-that affect credential-adjacent config, also run:
+`gitleaks protect --staged -v`, and `commit-msg` enforces the scoped commit
+standard in [`git/commit-style.md`](../git/commit-style.md) —
+`<scope>: <description>`, where the scope names a path in the repository — for
+every author, human or agent. That file is the only copy of the rule: the
+repo-root `AGENTS.md` links to it, and the hook prints it with every rejection.
+T3's commit button reads `AGENTS.md` because its writing style stays on
+`repo_conventions`. Before commits that affect credential-adjacent config, also
+run:
 
 ```bash
 gitleaks detect --source . -v
 ```
+
+### Opting another repository in
+
+Inside the other repository, add the hook through Git's config-based hooks
+(Git 2.54+). They run alongside the repository's own hooks, so husky, lefthook,
+or pre-commit keep working. Never add this entry to `~/.config` itself, where
+`core.hooksPath` already runs the hook, nor to the global `git/config`:
+
+```bash
+git config set hook.scoped-commits.command "$HOME/.config/git/hooks/commit-msg"
+git config set hook.scoped-commits.event commit-msg
+git hook list --show-scope commit-msg   # should list scoped-commits
+```
+
+Then paste [`git/commit-style.md`](../git/commit-style.md) into that
+repository's `AGENTS.md` so agents and T3's commit button see the rule before the
+hook rejects anything. A symlink does not work there: T3 ignores an `AGENTS.md`
+that resolves outside the repository. The pasted copy is a hand copy; refresh it
+when the standard changes.
 
 ## Machine-local and ignored files
 

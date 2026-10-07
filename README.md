@@ -61,7 +61,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
 | [`quotio/`](quotio/README.md) | Quotio routing and prompt-rule notes |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
-| `git/` | Global XDG Git identity, ignore rules, and opt-in repository hooks (secrets, commit style) |
+| `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
 | leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `rectangle-pro/` |
@@ -82,7 +82,8 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
-It does not project shared rules, skills, subagents, or hooks.
+It does not project shared rules, skills, subagents, or hooks. The only agent instruction file is
+the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md).
 
 ## Updating
 
@@ -100,7 +101,7 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Five Fish suites emit TAP-style lines and have no aggregate runner; the three under `tests/bin/` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
+Five Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, and `commit-msg` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
 
 ```
 tests/bin/u_test.fish

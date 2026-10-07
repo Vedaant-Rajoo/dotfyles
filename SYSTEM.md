@@ -45,6 +45,14 @@ CLIProxyAPI on port 8317; see [caveman/README.md](caveman/README.md) and
 and only warns when the proxy is not ready. It still does not project shared
 rules, skills, subagents, or hooks.
 
+Since 2026-10-07 the repo-root `AGENTS.md` links to
+[git/commit-style.md](git/commit-style.md), the scoped commit standard that
+`git/hooks/commit-msg` enforces. It is repo-scoped, not projected into any
+harness home. T3's `sourceControlWritingStyle` stays `repo_conventions`, so its
+commit button reads that file; `custom` mode would apply to every repository and
+drop `AGENTS.md`. The shared `core.hooksPath` is the absolute
+`~/.config/git/hooks`, so every worktree runs the main checkout's hooks.
+
 `~/.claude` remains a symlink to `claude/` so existing conversations and account
 state stay intact. Its settings point `ANTHROPIC_BASE_URL` at Caveman and
 `apiKeyHelper` at `bin/quotio-client-key`; they have no custom permissions,

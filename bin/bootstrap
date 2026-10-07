@@ -336,7 +336,8 @@ if ! run "$REPO_ROOT/bin/t3_awake" install; then
 fi
 
 printf '\n==> Repository hooks\n'
-run git -C "$REPO_ROOT" config core.hooksPath git/hooks
+# Absolute, so every worktree of this repo runs the main checkout's hooks.
+run git -C "$REPO_ROOT" config core.hooksPath "$REPO_ROOT/git/hooks"
 
 printf '\n==> Fisher plugins\n'
 # fish_plugins is the source of truth and .gitignore keeps Fisher's output
