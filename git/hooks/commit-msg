@@ -1,18 +1,25 @@
-#!/usr/bin/env python3
-# commit-msg — vet every commit message in this repository, whoever wrote it:
-# one lowercase conventional-commit subject line of <= 100 chars, and no prose
-# body. A commit should be readable at a glance in `git log --oneline`;
-# anything that needs a paragraph belongs in SYSTEM.md or README.md, where it
-# is actually discoverable later. Enabled per-clone by bootstrap through
-# `git config core.hooksPath git/hooks`.
+#!/usr/bin/python3
+# commit-msg — vet every commit message, whoever wrote it, against the scoped
+# commit standard in git/commit-style.md: "<scope>: <description>", where each
+# scope names a path in the repository. The standard's text lives only in that
+# file (AGENTS.md links to it); this hook prints it with every rejection so the
+# author, human or agent, can rewrite the message and retry.
+#
+# ~/.config enables it through core.hooksPath (bin/bootstrap); other repos opt
+# in with a hook.scoped-commits config entry (docs/setup.md). The interpreter is
+# the system python3 on purpose: a pyenv shim would read an opted-in repo's
+# .python-version, and a version missing there would block every commit.
 import re
+import subprocess
 import sys
+from pathlib import Path
 
-TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
-LIMIT = 100
+RULES = Path(__file__).resolve().parent.parent / "commit-style.md"
+LIMIT = 72
+TYPES = {"feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"}
 
-# Machine-meaningful trailers are not prose and stay allowed after a blank line:
-# git and forges parse these for attribution and sign-off.
+# Machine-meaningful trailers are not prose: git and forges parse these for
+# attribution and sign-off.
 TRAILERS = (
     "co-authored-by",
     "signed-off-by",
@@ -24,25 +31,17 @@ TRAILERS = (
     "cc",
 )
 
-STYLE = (
-    "required style: a single line, <type>(<scope>)?: <description> — all "
-    f"lowercase, <= {LIMIT} chars, no body. types: {TYPES}. keep it simple but "
-    'informative, e.g. "feat(fish): add tmux sessionizer keybind". put rationale '
-    "and findings in SYSTEM.md or README.md, not in the commit. only trailers "
-    f"({', '.join(TRAILERS)}) may follow, after a blank line. "
-    "rewrite the commit message and retry."
-)
-
-CONVENTIONAL = re.compile(r"^(?:" + TYPES + r")(?:\([a-z0-9._/-]+\))?!?: \S")
-
-TRAILER_LINE = re.compile(
-    r"^(?:" + "|".join(TRAILERS) + r"):\s+\S",
-    re.IGNORECASE,
-)
-
 # Subjects git writes itself (merges, reverts, autosquash targets); denying
 # them would break the porcelain that generates them.
 GIT_GENERATED = ("Merge ", 'Revert "', 'Reapply "', "fixup! ", "squash! ", "amend! ")
+
+# Imperative verbs that end like past tense, gerunds, or third person.
+LOOKALIKES = {"embed", "shed", "bring", "ping", "ring", "spring", "string", "alias", "always"}
+
+TYPED = re.compile(r"(?P<type>[A-Za-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!?): (?P<desc>.*)")
+SUBJECT = re.compile(r"(?P<scopes>[^:]+): (?P<desc>\S.*)")
+SCOPE = re.compile(r"[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*")
+TRAILER = re.compile(r"(?P<key>[A-Za-z][A-Za-z0-9-]*): \S")
 
 
 def strip_git_syntax(text):
@@ -54,61 +53,143 @@ def strip_git_syntax(text):
             if ">8" in line:
                 break
             continue
-        lines.append(line)
+        lines.append(line.rstrip())
     return "\n".join(lines)
 
 
-def split_message(message):
-    """Return (subject, prose_body_lines). Blank lines and trailers are dropped."""
-    lines = message.splitlines()
-    subject = None
-    body = []
-    for line in lines:
-        stripped = line.strip()
-        if subject is None:
-            if stripped:
-                subject = stripped
-            continue
-        if not stripped or TRAILER_LINE.match(stripped):
-            continue
-        body.append(stripped)
-    return subject, body
+def path_names():
+    """Return (names, top-level names) of every tracked file and directory,
+    lowercased, also without extension or leading dot (Brewfile -> brewfile,
+    .gitignore -> gitignore). --with-tree keeps paths this commit deletes; a
+    repository without commits has no HEAD to add, so retry without it.
+    ponytail: amending a commit that deleted a directory loses that name, as
+    HEAD already lacks it; use the parent's scope or treewide there."""
+    for extra in (["--with-tree=HEAD"], []):
+        listing = subprocess.run(
+            ["git", "ls-files", "-z", *extra],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+        if listing.returncode == 0:
+            break
+    else:
+        return None, None
+    names, top = {"treewide"}, set()
+    for path in filter(None, listing.stdout.split("\0")):
+        parts = [part.lower().lstrip(".") for part in path.split("/")]
+        top.add(parts[0] if len(parts) > 1 else parts[0].partition(".")[0])
+        for part in parts:
+            names.update((part, part.partition(".")[0]))
+    return names, top
 
 
-def validate(subject, body):
+def not_imperative(word):
+    """Heuristic: past tense, gerunds, and third person are the usual slips."""
+    word = word.lower()
+    if not re.fullmatch(r"[a-z]+(?:-[a-z]+)*", word):
+        return False
+    word = word.rsplit("-", 1)[-1]  # re-derive -> derive
+    if word in LOOKALIKES:
+        return False
+    return (
+        (word.endswith("ed") and not word.endswith("eed"))
+        or word.endswith("ing")
+        or (word.endswith("s") and not word.endswith(("ss", "us", "is")))
+    )
+
+
+def check_subject(subject):
     problems = []
     if len(subject) > LIMIT:
         problems.append(f"subject is {len(subject)} chars (limit {LIMIT})")
-    if re.search(r"[A-Z]", subject):
-        problems.append("subject contains uppercase letters")
-    if not CONVENTIONAL.match(subject):
-        problems.append("subject is not conventional commit format")
-    if body:
-        preview = body[0][:60] + ("…" if len(body[0]) > 60 else "")
-        problems.append(
-            f"message has a {len(body)}-line body, which is not allowed "
-            f'(first line: "{preview}")'
-        )
+    # A conventional "type(scope)!: desc" gets a rewrite hint, then the same
+    # checks on its scope and description, so one retry can fix everything.
+    typed = TYPED.fullmatch(subject)
+    if typed and (typed["scope"] is not None or typed["bang"]):
+        scopes, desc = typed["scope"], typed["desc"]
+        problems.append(f'drop the conventional type: write "{scopes or "<scope>"}: {desc}"')
+    else:
+        match = SUBJECT.fullmatch(subject)
+        if not match:
+            problems.append('subject is not "<scope>: <description>"')
+            return problems
+        scopes, desc = match["scopes"], match["desc"]
+
+    names, top = path_names()
+    unknown = False
+    for scope in scopes.split(", ") if scopes else []:
+        if not SCOPE.fullmatch(scope):
+            problems.append(
+                f'scope "{scope}" must be lowercase path names: nest with "/", '
+                'separate two areas with ", "'
+            )
+            continue
+        for part in scope.split("/"):
+            if names is None or part in names:
+                continue
+            unknown = True
+            if part in TYPES:
+                problems.append(f'"{part}" is a conventional commit type, not a path in this repository')
+            else:
+                problems.append(f'scope "{part}" names no file or directory in this repository')
+    if unknown:
+        problems.append("scopes here include: " + ", ".join(sorted(top) + ["treewide"]))
+
+    if not desc.strip():
+        return problems
+    if re.match(r"[A-Z][a-z]", desc):
+        problems.append("description starts with a capitalized word")
+    if desc.endswith("."):
+        problems.append("description ends with a period")
+    word = desc.split()[0]
+    if not_imperative(word):
+        problems.append(f'"{word}" is not imperative: write "add", not "added", "adding", or "adds"')
     return problems
+
+
+def check_trailers(paragraphs):
+    """Git reads a final paragraph made only of "Key: value" lines as
+    trailers, so every key there must be an allowed one."""
+    if len(paragraphs) < 2:
+        return []
+    matches = [TRAILER.match(line) for line in paragraphs[-1].splitlines()]
+    if not all(matches):
+        return []
+    unknown = sorted({m["key"] for m in matches if m["key"].lower() not in TRAILERS})
+    if not unknown:
+        return []
+    return [
+        f"unknown trailer {', '.join(unknown)}: git reads a final paragraph of "
+        f"\"Key: value\" lines as trailers, and only {', '.join(TRAILERS)} are "
+        "allowed; reword it as prose or drop it"
+    ]
 
 
 def main():
     with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
-        message = strip_git_syntax(fh.read())
-    subject, body = split_message(message)
-    if subject is None:
+        message = strip_git_syntax(fh.read()).strip("\n")
+    paragraphs = [p for p in re.split(r"\n{2,}", message) if p]
+    if not paragraphs:
         return 0  # empty message; git aborts those on its own
+    subject_lines = paragraphs[0].splitlines()
+    subject = subject_lines[0].strip()
     if subject.startswith(GIT_GENERATED):
         return 0
-    problems = validate(subject, body)
-    if problems:
-        print(
-            f'commit message blocked ("{subject}"): '
-            + "; ".join(problems) + ". " + STYLE,
-            file=sys.stderr,
-        )
-        return 1
-    return 0
+    problems = check_subject(subject)
+    if len(subject_lines) > 1:
+        problems.append("the subject must be one line: put a blank line before the body")
+    problems += check_trailers(paragraphs)
+    if not problems:
+        return 0
+
+    print(f'commit message blocked: "{subject}"', file=sys.stderr)
+    for problem in problems:
+        print(f"  - {problem}", file=sys.stderr)
+    try:
+        print("\n" + RULES.read_text(encoding="utf-8").strip() + "\n", file=sys.stderr)
+    except OSError:
+        print(file=sys.stderr)
+    print("rewrite the commit message and retry.", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
