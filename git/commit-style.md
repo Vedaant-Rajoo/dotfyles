@@ -9,8 +9,9 @@ Commits use scoped subjects, as in Linux, Git, Go, and nixpkgs:
     Co-Authored-By: Name <email>
 
 - The scope names the area the change touches: a directory or file that exists
-  in the repository, at any depth, lowercase and without extension (`fish`,
-  `nvim`, `bootstrap` for `bin/bootstrap`, `brewfile` for `Brewfile`). Nest
+  in the repository, at any depth, without extension, and always lowercase,
+  even when the file name is not (`fish`, `nvim`, `bootstrap` for
+  `bin/bootstrap`, `brewfile` for `Brewfile`, `readme` for `README.md`). Nest
   with `/` (`fish/conf.d`), name two areas with `, ` (`fish, nvim`), and use
   `treewide` for repository-wide changes.
 - No type words: not `feat(fish):`, not `chore:`. Older history uses
@@ -31,4 +32,5 @@ Commits use scoped subjects, as in Linux, Git, Go, and nixpkgs:
 - good: `treewide: drop zig tooling`
 - bad: `feat(fish): add tmux sessionizer keybind` (type word)
 - bad: `chore: prune gitignore entries` (`chore` is not a path; use `gitignore:`)
+- bad: `Brewfile, fish: add direnv` (scopes are lowercase: `brewfile, fish:`)
 - bad: `fish: Added a keybind.` (capitalized, past tense, trailing period)
