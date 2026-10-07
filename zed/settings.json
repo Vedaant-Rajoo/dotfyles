@@ -7,6 +7,19 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "agent_servers": {
+    "codex-acp": {
+      "favorite_config_option_values": {
+        "reasoning_effort": [
+          "xhigh"
+        ]
+      },
+      "default_config_options": {
+        "fast-mode": true
+      },
+      "type": "registry"
+    }
+  },
   "vim": {
     "toggle_relative_line_numbers": true
   },
@@ -24,7 +37,7 @@
     "enabled": true
   },
   "buffer_font_family": "JetBrainsMono Nerd Font",
-  "disable_ai": true,
+  "disable_ai": false,
   "session": {
     "trust_all_worktrees": true
   },

@@ -66,7 +66,6 @@ brew "tree-sitter-cli"
 brew "anomalyco/tap/opencode-v2", trusted: true
 
 # Developer apps and terminal tools
-cask "claudebar"
 cask "codex"
 cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
@@ -91,11 +90,9 @@ cask "wispr-flow"
 cask "driceroland/tap/search"
 cask "firefox"
 cask "google-chrome"
-cask "helium-browser"
 cask "legcord"
 cask "proton-pass"
 cask "tailscale-app"
-cask "zen"
 
 # Hardware and system utilities
 cask "logitech-g-hub"
