@@ -96,7 +96,7 @@ The Brewfile now covers the active package-manageable application set, including
 
 - development: Cursor, T3 Code Nightly, Zed, OrbStack, Codex, Ghostty, Quotio;
 - productivity/UI: Raycast, Rectangle Pro, Bartender 6, Shottr, Alcove, Wallspace, Wispr Flow, DockDoor, LinearMouse;
-- browsers/networking: Google Chrome, Firefox, Helium, Search, Zen, Legcord, Proton Pass, Tailscale;
+- browsers/networking: Google Chrome, Firefox, Search, Legcord, Proton Pass, Tailscale;
 - security: Yubico Authenticator and `ykman`;
 - hardware/system: Logitech G Hub, Macs Fan Control, Music Presence, WakaTime;
 - games: League of Legends (which installs Riot Client); Steam comes from `bin/bootstrap` via i1rr/steam-arm64-mac, not the Intel-only cask;

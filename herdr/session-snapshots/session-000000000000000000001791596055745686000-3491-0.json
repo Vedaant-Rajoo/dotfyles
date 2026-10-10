@@ -1,0 +1,129 @@
+{
+  "version": 3,
+  "workspaces": [
+    {
+      "id": "wC",
+      "custom_name": "dotfyles",
+      "identity_cwd": "/Users/newedia/Dev",
+      "public_pane_numbers": {
+        "2": 2,
+        "1": 1
+      },
+      "next_public_pane_number": 3,
+      "public_tab_numbers": [
+        1
+      ],
+      "next_public_tab_number": 2,
+      "tabs": [
+        {
+          "custom_name": null,
+          "layout": {
+            "Split": {
+              "direction": "Horizontal",
+              "ratio": 0.5,
+              "first": {
+                "Pane": 1
+              },
+              "second": {
+                "Pane": 2
+              }
+            }
+          },
+          "panes": {
+            "1": {
+              "cwd": "/Users/newedia/Dev"
+            },
+            "2": {
+              "cwd": "/Users/newedia/.config"
+            }
+          },
+          "zoomed": false,
+          "focused": 1,
+          "root_pane": 1
+        }
+      ],
+      "active_tab": 0
+    },
+    {
+      "id": "wD",
+      "custom_name": null,
+      "identity_cwd": "/Users/newedia/.config",
+      "public_pane_numbers": {
+        "3": 1
+      },
+      "next_public_pane_number": 4,
+      "public_tab_numbers": [
+        1
+      ],
+      "next_public_tab_number": 4,
+      "tabs": [
+        {
+          "custom_name": null,
+          "layout": {
+            "Pane": 3
+          },
+          "panes": {
+            "3": {
+              "cwd": "/Users/newedia/.config"
+            }
+          },
+          "zoomed": false,
+          "focused": 3,
+          "root_pane": 3
+        }
+      ],
+      "active_tab": 0
+    },
+    {
+      "id": "wF",
+      "custom_name": null,
+      "identity_cwd": "/Users/newedia/Dev/Search",
+      "public_pane_numbers": {
+        "5": 2,
+        "4": 1
+      },
+      "next_public_pane_number": 3,
+      "public_tab_numbers": [
+        1,
+        2
+      ],
+      "next_public_tab_number": 3,
+      "tabs": [
+        {
+          "custom_name": null,
+          "layout": {
+            "Pane": 4
+          },
+          "panes": {
+            "4": {
+              "cwd": "/Users/newedia/Dev/Search"
+            }
+          },
+          "zoomed": false,
+          "focused": 4,
+          "root_pane": 4
+        },
+        {
+          "custom_name": "u",
+          "layout": {
+            "Pane": 5
+          },
+          "panes": {
+            "5": {
+              "cwd": "/Users/newedia/Dev/Search"
+            }
+          },
+          "zoomed": false,
+          "focused": 5,
+          "root_pane": 5
+        }
+      ],
+      "active_tab": 1
+    }
+  ],
+  "active": 2,
+  "selected": 2,
+  "sidebar_width": null,
+  "sidebar_section_split": null,
+  "collapsed_space_keys": []
+}
