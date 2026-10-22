@@ -7,6 +7,12 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "outline_panel": {
+    "button": false
+  },
+  "collaboration_panel": {
+    "button": false
+  },
   "agent_servers": {
     "codex-acp": {
       "favorite_config_option_values": {
@@ -42,7 +48,11 @@
     "trust_all_worktrees": true
   },
   "vim_mode": true,
-  "icon_theme": "Symbols Icon Theme",
+  "icon_theme": {
+    "mode": "system",
+    "light": "Symbols Icon Theme",
+    "dark": "Symbols Icon Theme"
+  },
   "ui_font_size": 16,
   "buffer_font_size": 16.0,
   "theme": {
