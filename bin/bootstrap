@@ -318,6 +318,12 @@ if dry_run || ! command -v claude >/dev/null 2>&1; then
 	run /bin/bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
 fi
 
+printf '\n==> Agent skills\n'
+# agents/skill-lock.json is the install list; skill files come from their sources.
+if ! run "$FISH_BIN" "$REPO_ROOT/bin/agent-skills" restore; then
+	warn "agent skill restore failed; run bin/agent-skills restore again"
+fi
+
 printf '\n==> Caveman proxy\n'
 # Claude Code, Codex, and OpenCode route inference through Caveman, which
 # bootstrap does not build. Without it they have no reachable endpoint.

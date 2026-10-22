@@ -39,7 +39,8 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
 4. **Runtimes** — Node via fnm and Python via pyenv at the pinned [`.node-version`](.node-version) /
    [`.python-version`](.python-version), Rust via the official rustup installer, plus the npm tools
    this config needs, including pinned `postplan`.
-5. **Wiring** — native Claude installation, Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
+5. **Wiring** — native Claude installation, the shared agent skills listed in
+   [`agents/skill-lock.json`](agents/skill-lock.json), Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
    LaunchAgent, repo hooks, and the optional
    `--with-defaults` / `--with-herdr-service` steps.
 
@@ -50,6 +51,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Path | Purpose |
 |------|---------|
 | `Brewfile` | Full Homebrew formula, cask, tap, and Mac App Store manifest |
+| `agents/` | Install list of the shared agent skills, restored and updated by `bin/agent-skills` |
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`SYSTEM.md`](SYSTEM.md) | Dated snapshot of toolchain provenance and deliberate exceptions |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake design note |
@@ -90,7 +92,7 @@ the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md).
 ```bash
 cd ~/.config
 git pull
-bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, fisher
+bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, agent skills, fisher
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
@@ -101,10 +103,10 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Five Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, and `commit-msg` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
+Six Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, `agent-skills`, and `commit-msg` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
 
 ```
-tests/bin/u_test.fish
+tests/bin/u_test.fish                    tests/bin/agent-skills_test.fish
 tests/bin/t3_awake_test.fish             tests/git/hooks/commit-msg_test.fish
 tests/bin/u-cask-lifecycle_test.fish     tests/fish/conf.d/init-cache_test.fish
 ```

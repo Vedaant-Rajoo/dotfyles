@@ -114,6 +114,9 @@ A private pre-migration backup is at
 The old payload rules, `bin/quotio-ponytail`, and `quotio/ponytail.json` were removed
 from the active setup. The backup contains credentials; keep it private.
 
-Prompt source: [9router's pinned Ponytail Full adaptation](https://github.com/decolua/9router/blob/f01fb909e37189008080632ddaf404f096345cde/open-sse/rtk/ponytailPrompt.js).
+Prompt source: [Ponytail v5.3.2 rules](https://github.com/DietrichGebert/ponytail/blob/16352ac229eb08a9598dcae48fe9f2b342567d86/.agents/rules/ponytail.md),
+with Markdown headings changed to plain labels. It replaced 9router's older
+adaptation on 2026-10-22; that pre-update config is backed up at
+`~/.local/state/quotio-setup/20261022-061900-ponytail-v5.3.2`.
 Original project: [Ponytail](https://github.com/DietrichGebert/ponytail).
 Plugin: [Prompt Rules v0.2.1](https://github.com/markhuangai/cpa-plugin-prompt-rules/tree/v0.2.1).

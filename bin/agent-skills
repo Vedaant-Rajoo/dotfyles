@@ -1,0 +1,168 @@
+#!/usr/bin/env fish
+# agent-skills — keep ~/.agents/skills in step with agents/skill-lock.json.
+#
+# The skills CLI (https://skills.sh) owns that lock: `npx skills add -g` records
+# each skill's source and folder hash there. The repository tracks only that
+# install list; skill files stay machine-local and come from their sources.
+#
+# Usage:
+#   agent-skills link      Point the CLI's lock paths at the tracked lock and
+#                          link every skill into Antigravity.
+#   agent-skills restore   Install every listed skill that is missing.
+#   agent-skills update    Re-install listed skills whose upstream folder changed.
+#
+# `npx skills update -g` is not used: it re-installs with -y and no agent list,
+# which links skills into every agent the CLI detects. Installs here name Claude
+# Code and Codex; Codex stands for every agent that reads ~/.agents/skills.
+
+set -g agent_skills_lock (path resolve (dirname (path resolve (status filename)))/..)/agents/skill-lock.json
+# shortcut: pinned so the lock path and format stay known; bump after checking a release.
+set -g agent_skills_cli skills@1.7.4
+
+# The CLI reads $XDG_STATE_HOME/skills/.skill-lock.json when that variable is
+# set (fish sets it) and ~/.agents/.skill-lock.json otherwise, so both paths
+# must lead to the tracked file. It writes with a plain writeFile, which keeps
+# the links intact.
+function agent_skills_lock_paths
+    echo $HOME/.agents/.skill-lock.json
+    if set -q XDG_STATE_HOME
+        echo $XDG_STATE_HOME/skills/.skill-lock.json
+    else
+        echo $HOME/.local/state/skills/.skill-lock.json
+    end
+end
+
+function agent_skills_link_lock
+    for lock_path in (agent_skills_lock_paths)
+        if test -L $lock_path; and test (readlink $lock_path) = $agent_skills_lock
+            continue
+        end
+        mkdir -p (dirname $lock_path); or return 1
+        if test -e $lock_path; or test -L $lock_path
+            set -l backup $lock_path.(date +%Y%m%d%H%M%S).bak
+            mv $lock_path $backup; or return 1
+            echo "agent-skills: moved the untracked lock aside to $backup" >&2
+        end
+        ln -s $agent_skills_lock $lock_path; or return 1
+    end
+end
+
+# Antigravity reads ~/.gemini/config/skills/<name>/SKILL.md and may skip
+# symlinked directories, so each skill gets a real directory of file links.
+# Every top-level entry is linked because skills read their sibling files.
+function agent_skills_link_antigravity
+    set -l canonical $HOME/.agents/skills
+    set -l agy $HOME/.gemini/config/skills
+
+    for skill_md in $canonical/*/SKILL.md
+        set -l name (basename (dirname $skill_md))
+        mkdir -p $agy/$name; or return 1
+        for entry in $canonical/$name/*
+            ln -sfn $entry $agy/$name/(basename $entry); or return 1
+        end
+    end
+
+    # Links left by removed files or skills dangle; only links are deleted, and
+    # then only directories they leave empty.
+    if test -d $agy
+        find $agy -mindepth 2 -maxdepth 2 -type l ! -exec test -e '{}' ';' -delete
+        find $agy -mindepth 1 -maxdepth 1 -type d -empty -delete
+    end
+end
+
+function agent_skills_link
+    agent_skills_link_lock; or return 1
+    agent_skills_link_antigravity
+end
+
+function agent_skills_install --argument-names source_url
+    env DO_NOT_TRACK=1 DISABLE_TELEMETRY=1 npx -y $agent_skills_cli add $source_url \
+        -g -a claude-code codex -s $argv[2..-1] -y
+end
+
+# One line per source: the source URL, then the names of every listed skill.
+function agent_skills_sources
+    jq -r '.skills | to_entries | group_by(.value.sourceUrl)[]
+        | [.[0].value.sourceUrl] + map(.key) | @tsv' $agent_skills_lock
+end
+
+function agent_skills_restore
+    agent_skills_link_lock; or return 1
+    set -l restore_status 0
+
+    for row in (agent_skills_sources)
+        set -l fields (string split \t -- $row)
+        set -l missing
+        for name in $fields[2..-1]
+            test -e $HOME/.agents/skills/$name/SKILL.md; or set -a missing $name
+        end
+        if test (count $missing) -gt 0
+            agent_skills_install $fields[1] $missing; or set restore_status 1
+        end
+    end
+
+    agent_skills_link_antigravity; or set restore_status 1
+    return $restore_status
+end
+
+# Emits the listed skills of one GitHub source whose folder hash differs from
+# the default branch's tree. The lock stores Git tree SHAs for GitHub sources;
+# a SKILL.md at the repository root hashes as the whole tree.
+function agent_skills_changed --argument-names source tree_file
+    jq -r --arg source $source --slurpfile tree $tree_file '
+        $tree[0] as $t
+        | .skills | to_entries[] | select(.value.source == $source)
+        | (.value.skillPath | sub("(^|/)SKILL[.]md$"; "")) as $dir
+        | (if $dir == "" then $t.sha
+           else ([$t.tree[] | select(.type == "tree" and .path == $dir) | .sha][0] // "missing")
+           end) as $sha
+        | select($sha != .value.skillFolderHash) | .key
+    ' $agent_skills_lock
+end
+
+function agent_skills_update
+    agent_skills_link_lock; or return 1
+    set -l update_status 0
+    set -l tree_file (mktemp)
+
+    # shortcut: only GitHub sources on their default branch are checked; every
+    # listed skill is one today. Other sources need the CLI's clone-and-hash path.
+    for skipped in (jq -r '.skills | to_entries[] | select(.value.sourceType != "github" or .value.ref != null) | .key' $agent_skills_lock)
+        echo "agent-skills: $skipped is not a default-branch GitHub source; update it by hand" >&2
+    end
+
+    for source in (jq -r '[.skills[] | select(.sourceType == "github" and .ref == null) | .source] | unique[]' $agent_skills_lock)
+        if not gh api "repos/$source/git/trees/HEAD?recursive=1" >$tree_file
+            echo "agent-skills: unable to read the $source tree" >&2
+            set update_status 1
+            continue
+        end
+
+        set -l changed (agent_skills_changed $source $tree_file)
+        if test (count $changed) -eq 0
+            continue
+        end
+
+        set -l source_url (jq -r --arg source $source 'first(.skills[] | select(.source == $source) | .sourceUrl)' $agent_skills_lock)
+        echo "agent-skills: updating $source: $changed"
+        agent_skills_install $source_url $changed; or set update_status 1
+    end
+
+    rm -f $tree_file
+    agent_skills_link_antigravity; or set update_status 1
+    return $update_status
+end
+
+if not set -q AGENT_SKILLS_TEST_MODE
+    switch "$argv[1]"
+        case link
+            agent_skills_link
+        case restore
+            agent_skills_restore
+        case update
+            agent_skills_update
+        case '*'
+            echo 'usage: agent-skills link|restore|update' >&2
+            exit 64
+    end
+end

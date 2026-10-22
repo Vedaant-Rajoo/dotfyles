@@ -500,6 +500,7 @@ u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
 u_test_mock mas 'exit 0'
 u_test_mock rustup 'exit 0'
+u_test_mock agent-skills 'exit 0'
 u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
 u_test_mock npm 'if test "$argv[1]" = outdated
     if test -e "$U_MOCK_DIR/npm-outdated.json"
@@ -581,7 +582,7 @@ end
 function u_test_run_main --argument-names case_name
     set -l output_file "$u_mock_root/$case_name.out"
     env U_TEST_MODE=1 U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
-        fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
+        U_AGENT_SKILLS="$u_mock_bin/agent-skills" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
     set -g u_test_main_status $status
     set -g u_test_main_output (string collect <"$output_file")
 end
@@ -628,6 +629,7 @@ assert_equal 1 (u_test_calls '^brew doctor$') \
     'main still doctors Homebrew when nothing is outdated'
 assert_equal 1 (u_test_calls '^mas upgrade$') 'main upgrades App Store apps'
 assert_equal 1 (u_test_calls '^rustup update$') 'main updates the Rust toolchain'
+assert_equal 1 (u_test_calls '^agent-skills update$') 'main updates the agent skills'
 assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
 assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
 assert_equal 1 (count $XDG_STATE_HOME/u/u-*.txt) 'main logs under XDG_STATE_HOME'

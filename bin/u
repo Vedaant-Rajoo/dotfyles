@@ -2,7 +2,7 @@
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
 # Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
-# Store apps, the Rust toolchain, npm globals, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
+# Store apps, the Rust toolchain, npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
 # upgraded, and reopened immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
@@ -12,6 +12,9 @@
 # Symlinks resolve first, so a linked `u` still finds its own helper.
 if not set -q U_LIFECYCLE_HELPER
     set -g U_LIFECYCLE_HELPER (dirname (path resolve (status filename)))/u-cask-lifecycle.js
+end
+if not set -q U_AGENT_SKILLS
+    set -g U_AGENT_SKILLS (dirname (path resolve (status filename)))/agent-skills
 end
 
 # In-memory lifecycle state, tab-joined rows:
@@ -433,8 +436,9 @@ function u_upgrade_cask --argument-names log_file token
 end
 
 function u_main
-    # Include Raycast even though its cask advertises in-app updates.
-    set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast)
+    # Include Raycast and Tailscale even though their casks advertise in-app
+    # updates. Tailscale's pkg quits and relaunches the app itself.
+    set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast tailscale-app)
 
     set -g U_APPS
     set -g U_CLOSED
@@ -591,6 +595,7 @@ function u_main
     u_run_step "$log_file" mas "🍎 App Store apps" mas upgrade; or set final_status 1
     u_run_step "$log_file" rustup "🦀 rustup" rustup update; or set final_status 1
     u_npm_upgrade "$log_file"; or set final_status 1
+    u_run_step "$log_file" skills "🧠 agent skills" $U_AGENT_SKILLS update; or set final_status 1
 
     # Fisher is a fish function, which gum spin cannot run.
     echo "🐟 fisher updating..."

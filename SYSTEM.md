@@ -43,7 +43,19 @@ through the local Caveman proxy on port 8787, which forwards to Quotio's
 CLIProxyAPI on port 8317; see [caveman/README.md](caveman/README.md) and
 [quotio/README.md](quotio/README.md). Bootstrap installs Quotio but not Caveman,
 and only warns when the proxy is not ready. It still does not project shared
-rules, skills, subagents, or hooks.
+rules, subagents, or hooks.
+
+Since 2026-10-22 the shared agent skills are restored from
+[agents/skill-lock.json](agents/skill-lock.json), the lock file of the skills CLI
+(skills.sh). `bin/agent-skills` links the CLI's two lock paths to it, installs
+missing skills for bootstrap, and re-installs changed ones for `bin/u`. Skill
+files stay machine-local in `~/.agents/skills`. Claude Code gets directory links
+in `~/.claude/skills`, and Antigravity gets per-file links in
+`~/.gemini/config/skills`. Add a skill with
+`npx skills@1.7.4 add <source> -g -a claude-code codex -s <name> -y`, then run
+`bin/agent-skills link` and commit the lock. Do not run `npx skills update -g`,
+because it links skills into every agent the CLI detects. A restore rewrites
+each skill's `updatedAt`, so the lock can show timestamp-only diffs.
 
 Since 2026-10-07 the repo-root `AGENTS.md` links to
 [git/commit-style.md](git/commit-style.md), the scoped commit standard that
@@ -59,8 +71,9 @@ state stay intact. Its settings point `ANTHROPIC_BASE_URL` at Caveman and
 hooks, or status line. Previously installed plugins are explicitly disabled.
 `~/.claude.json` stays at the home root. See [claude/README.md](claude/README.md).
 
-Codex's built-in skills remain installed. Custom rules, skill links, generated
-subagents, and Cursor hook registrations were archived outside the repository.
+Codex's built-in skills remain installed. Custom rules, the July skill links,
+generated subagents, and Cursor hook registrations were archived outside the
+repository.
 T3 stores provider preferences separately and must be reset while fully closed.
 
 ## npm global tools
