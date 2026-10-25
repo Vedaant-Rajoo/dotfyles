@@ -355,8 +355,9 @@ set -g u_mock_root (harness_tmpdir)
 set -gx U_MOCK_DIR "$u_mock_root/fixtures"
 set -gx U_MOCK_LOG "$u_mock_root/calls.log"
 set -g u_mock_bin "$u_mock_root/bin"
-# Executable Fish mocks must not load the user's configuration and reorder PATH
-# back to the real maintenance tools.
+# Executable Fish mocks start with --no-config: configuration, including the
+# vendor_conf.d snippet Homebrew's mise installs for `mise activate`, would
+# reorder PATH or wrap commands and hand a mocked call to the real tool.
 set -gx XDG_CONFIG_HOME "$u_mock_root/config"
 set -gx XDG_STATE_HOME "$u_mock_root/state"
 mkdir -p "$U_MOCK_DIR" "$u_mock_bin" "$XDG_CONFIG_HOME"
@@ -365,7 +366,7 @@ touch "$U_MOCK_LOG"
 # Write an executable PATH mock. Every mock first logs its invocation to
 # U_MOCK_LOG so assertions can pin call shapes and order.
 function u_test_mock --argument-names name body
-    printf '#!/usr/bin/env fish\necho "%s $argv" >>"$U_MOCK_LOG"\n%s\n' $name $body >"$u_mock_bin/$name"
+    printf '#!/usr/bin/env -S fish --no-config\necho "%s $argv" >>"$U_MOCK_LOG"\n%s\n' $name $body >"$u_mock_bin/$name"
     chmod +x "$u_mock_bin/$name"
 end
 
