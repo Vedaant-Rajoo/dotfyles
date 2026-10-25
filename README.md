@@ -149,12 +149,13 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 The tests guard behavior that a person relies on: which runtime answers in which shell and
 directory, what a bootstrap dry run may touch, that an interrupted update still reopens the
-applications it closed, which harnesses receive skills, and what stays out of commits. Each suite
+applications it closed, that a migration runs once and waits for what it needs, which harnesses
+receive skills, and what stays out of commits. Each suite
 runs the real scripts against a sandboxed home and stub commands, so it leaves the machine as it
 was. [`CLAUDE.md`](CLAUDE.md#tests) holds the rules for adding checks.
 
-The suites print one TAP-style line per check and have no aggregate runner. Run one with
-`fish tests/<path>_test.fish`:
+The suites print one TAP-style line per check. `tests/run` runs them all and exits non-zero if
+any fails; `tests/run tests/<path>_test.fish` runs only the named ones:
 
 ```
 tests/bin/bootstrap_test.fish            tests/fish/conf.d/runtime-selection_test.fish

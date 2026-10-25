@@ -61,4 +61,5 @@ the script. A good check goes red when that behavior drifts.
   exit codes that only mirror how the code happens to be written.
 - Extend the existing suites and `tests/lib/harness.fish`; small fixtures beat a
   framework.
-- Run the suites covering the change, and report which ran on which platform.
+- Run the suites covering the change with `tests/run <suite>...`, or all of them
+  with `tests/run`, and report which ran on which platform.
