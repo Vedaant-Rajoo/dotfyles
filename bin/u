@@ -346,14 +346,19 @@ function u_cleanup_on_exit --on-event fish_exit
     return $exit_status
 end
 
+# `exit` inside a signal handler ends fish with status 0, which would report an
+# interrupted run as a success. Remove the handler and re-raise the signal so
+# the caller sees the interruption.
 function u_cleanup_on_sigint --on-signal SIGINT
     u_reopen_closed
-    exit 130
+    functions -e u_cleanup_on_sigint
+    kill -s INT $fish_pid
 end
 
 function u_cleanup_on_sigterm --on-signal SIGTERM
     u_reopen_closed
-    exit 143
+    functions -e u_cleanup_on_sigterm
+    kill -s TERM $fish_pid
 end
 
 function u_report_cask_group --argument-names log_file label

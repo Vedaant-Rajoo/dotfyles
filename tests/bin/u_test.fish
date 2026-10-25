@@ -410,6 +410,12 @@ if test "$argv[1]" = upgrade; and contains -- "$argv[2]" --formula --cask
     if test "$argv[2]" = --cask
         set kind cask
     end
+    # A signal fixture interrupts u itself mid-upgrade, as Ctrl-C or a
+    # closing terminal would.
+    set -l signal_fixture "$U_MOCK_DIR/signal-brew-upgrade-$kind-"(string join + $argv[3..-1])
+    if test -e "$signal_fixture"
+        kill -s (string trim <"$signal_fixture") (ps -o ppid= -p $fish_pid | string trim)
+    end
     set -l exit_fixture "$U_MOCK_DIR/exit-brew-upgrade-$kind-"(string join + $argv[3..-1])
     if test -e "$exit_fixture"
         exit (string trim <"$exit_fixture")
@@ -544,7 +550,7 @@ function u_test_running --argument-names bundle_id
 end
 
 function u_test_reset
-    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'gum-*' -o -name 'open-*' -o -name 'outdated.json' -o -name 'cask-info.json' \))
+    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'signal-*' -o -name 'gum-*' -o -name 'open-*' -o -name 'outdated.json' -o -name 'cask-info.json' \))
         rm -f "$fixture"
     end
     printf '' >"$U_MOCK_LOG"
@@ -884,5 +890,23 @@ u_test_run_main tee-failure
 assert_equal 0 $u_test_main_status 'a tee failure does not replace successful brew pipeline status'
 assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 0 skipped, 0 failed') \
     'main counts the cask upgrade from brew status rather than tee status'
+
+# An interrupted run stops and still reopens the applications it closed.
+for case in INT:130 TERM:143
+    set -l signal (string split : -- $case)[1]
+    set -l expected_status (string split : -- $case)[2]
+    u_test_reset
+    printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+    u_test_write_cask_info '{"casks":['$u_cask_cursor_json','$u_cask_calm_json']}'
+    u_test_running com.todesktop.230313mzl4w4u92 111 -
+    echo $signal >"$U_MOCK_DIR/signal-brew-upgrade-cask-cursor"
+    u_test_run_main interrupted-$signal
+    assert_equal $expected_status $u_test_main_status \
+        "SIG$signal during a cask upgrade is reported as an interruption, not success"
+    assert_equal 1 (u_test_calls '^open /Applications/Cursor.app$') \
+        "SIG$signal during a cask upgrade reopens the application it closed"
+    assert_equal 0 (u_test_calls '^brew upgrade --cask calm$') \
+        "SIG$signal stops the run before the next cask"
+end
 
 harness_exit
