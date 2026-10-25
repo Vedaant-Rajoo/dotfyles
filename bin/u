@@ -2,8 +2,8 @@
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
 # Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
-# Store apps, mise's language runtimes, the Rust toolchain, npm globals, agent
-# skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
+# Store apps, mise's language runtimes, pending migrations, the Rust toolchain,
+# npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
 # upgraded, and reopened immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
@@ -16,6 +16,9 @@ if not set -q U_LIFECYCLE_HELPER
 end
 if not set -q U_AGENT_SKILLS
     set -g U_AGENT_SKILLS (dirname (path resolve (status filename)))/agent-skills
+end
+if not set -q U_MIGRATE
+    set -g U_MIGRATE (dirname (path resolve (status filename)))/migrate
 end
 
 # In-memory lifecycle state, tab-joined rows:
@@ -608,6 +611,8 @@ function u_main
     # npm globals upgrade under the patched Node.
     u_run_step "$log_file" mise "🧰 mise install" mise install; or set final_status 1
     u_run_step "$log_file" mise "🧰 mise upgrade" mise upgrade; or set final_status 1
+    # After the runtimes, because a migration may retire what they replace.
+    u_run_step "$log_file" migrations "🧳 migrations" $U_MIGRATE; or set final_status 1
     u_run_step "$log_file" rustup "🦀 rustup" rustup update; or set final_status 1
     u_npm_upgrade "$log_file"; or set final_status 1
     u_run_step "$log_file" skills "🧠 agent skills" $U_AGENT_SKILLS update; or set final_status 1

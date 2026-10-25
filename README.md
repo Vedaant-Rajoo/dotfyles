@@ -56,7 +56,7 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
    the official rustup installer, plus the npm tools this config needs, including pinned `postplan`.
 5. **Wiring** — native Claude installation, the shared agent skills listed in
    [`agents/skill-lock.json`](agents/skill-lock.json), Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
-   LaunchAgent, repo hooks, and the optional
+   LaunchAgent, repo hooks, pending [migrations](migrations/README.md), and the optional
    `--with-defaults` / `--with-herdr-service` steps.
 
 The App Store must be signed in before `mas` installs entries; after a reported failure, sign in and re-run bootstrap.
@@ -70,6 +70,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
+| `migrations/` | One-time scripts that bring an existing machine in line, run by `bin/migrate` |
 | `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
@@ -99,6 +100,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Neovim language servers | Mason | `nvim/lua/newedia/lazy/lsp.lua` | `bin/u` refreshes the registry; `:Mason` updates packages |
 | Shared agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
+| Leftovers of retired setups on existing machines | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
 | Credentials, sessions, caches | each machine | not tracked | |
 
 Homebrew also installs its own Go, Python, and Ruby as dependencies of gofumpt and goimports,
@@ -134,7 +136,7 @@ only `AGENTS.md`.
 ```bash
 cd ~/.config
 git pull
-bin/u                              # the interactive machine update: nvim, brew, casks, mas, mise, rustup, npm, agent skills, fisher
+bin/u                              # the interactive machine update: nvim, brew, casks, mas, mise, migrations, rustup, npm, agent skills, fisher
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
@@ -159,7 +161,7 @@ tests/bin/bootstrap_test.fish            tests/fish/conf.d/runtime-selection_tes
 tests/bin/u_test.fish                    tests/fish/conf.d/init-cache_test.fish
 tests/bin/u-cask-lifecycle_test.fish     tests/git/hooks/commit-msg_test.fish
 tests/bin/agent-skills_test.fish         tests/gitignore_test.fish
-tests/bin/t3_awake_test.fish
+tests/bin/t3_awake_test.fish             tests/bin/migrate_test.fish
 ```
 
 `runtime-selection` needs mise on `PATH`, or `MISE_TEST_BIN` set to a mise binary.
@@ -181,6 +183,8 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
 6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, `macos-*` Ghostty) with
    Linux equivalents.
+7. `bin/u` is macOS-only. After `git pull`, run `mise install && mise upgrade` from `~`, then
+   `bin/migrate`.
 
 ## Documentation map
 

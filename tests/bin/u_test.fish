@@ -492,6 +492,7 @@ exit 0'
 u_test_mock rustup 'exit 0'
 u_test_mock agent-skills 'exit 0'
 u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
+u_test_mock migrate 'test -e "$U_MOCK_DIR/exit-migrate"; and exit 1; exit 0'
 u_test_mock npm 'echo "cwd npm $PWD" >>"$U_MOCK_LOG"
 if test "$argv[1]" = outdated
     if test -e "$U_MOCK_DIR/npm-outdated.json"
@@ -575,7 +576,7 @@ function u_test_run_main --argument-names case_name start_dir
     test -n "$start_dir"; or set start_dir $PWD
     cd $start_dir
     env U_TEST_MODE=1 U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
-        U_AGENT_SKILLS="$u_mock_bin/agent-skills" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
+        U_AGENT_SKILLS="$u_mock_bin/agent-skills" U_MIGRATE="$u_mock_bin/migrate" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
     set -g u_test_main_status $status
     cd $repo_root
     set -g u_test_main_output (string collect <"$output_file")
@@ -627,6 +628,8 @@ assert_call_before '^mise install$' '^mise upgrade$' \
     'main installs newly declared runtimes before upgrading the rest'
 assert_call_before '^mise upgrade$' '^npm ' \
     'main upgrades runtimes before npm globals, so they upgrade under the patched Node'
+assert_call_before '^mise install$' '^migrate' \
+    'main runs pending migrations only after installing the runtimes they may depend on'
 assert_equal 1 (u_test_calls '^agent-skills update$') 'main updates the agent skills'
 assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
 assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
@@ -641,7 +644,7 @@ printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
 u_test_run_main pinned-project $pinned_project
 assert_equal 0 (u_test_calls "^cwd .* $pinned_project\$") \
     'main started in a pinned project runs no runtime from that project'
-assert_equal 4 (u_test_calls "^cwd \(mise\|npm\|nvim\) $HOME\$") \
+assert_equal 'mise npm nvim' "$(string match -rg "^cwd (\S+) $HOME\$" <$U_MOCK_LOG | sort -u | string join ' ')" \
     'main runs mise, npm, and Neovim maintenance from the home directory'
 
 u_test_reset
@@ -671,6 +674,15 @@ assert_equal 1 (u_test_output_contains 'mise upgrade failed') \
     'main reports the failed runtime upgrade in the final details'
 assert_equal 1 (u_test_calls '^fisher update$') \
     'a failed runtime upgrade does not stop later maintenance'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/exit-migrate"
+u_test_run_main migrate-failure
+rm -f "$U_MOCK_DIR/exit-migrate"
+assert_equal 1 $u_test_main_status 'an unfinished migration produces an aggregate failure'
+assert_equal 1 (u_test_calls '^fisher update$') \
+    'an unfinished migration does not stop later maintenance'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"

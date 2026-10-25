@@ -46,6 +46,7 @@ assert_equal 0 $bootstrap_status 'a dry run succeeds on a machine with nothing i
 assert_equal 'brew --prefix' "$bootstrap_calls" 'a dry run invokes nothing but the read-only Homebrew prefix query'
 assert_equal '' "$(find $home -mindepth 1)" 'a dry run leaves the home directory untouched'
 assert_equal 1 (plans 'mise install$') 'a dry run plans installing the declared runtimes'
+assert_equal 1 (plans '.*bin/migrate$') 'a dry run plans running pending migrations'
 assert_equal 0 (plans '.*macdefaults') 'macOS defaults are not planned unless requested'
 assert_equal 0 (plans 'brew services start herdr') 'the Herdr service is not planned unless requested'
 

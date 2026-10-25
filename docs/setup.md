@@ -49,34 +49,32 @@ Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also
 requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal
 authentication flow and never commit its API key.
 
-## Moving from fnm and pyenv to mise
+## Moving an existing machine to mise
 
-A machine bootstrapped before mise has Node under fnm and Python under pyenv.
-Fish in this repository no longer loads either, so finish the move in this
-order:
+On a machine bootstrapped before mise owned the language runtimes, run
+`brew install mise` first: `bin/u` upgrades what Homebrew has but installs no
+new Brewfile entries. The next `bin/u` then installs the mise defaults and runs
+the migrations that uninstall fnm, pyenv, pyenv-virtualenv, and Homebrew's Bun,
+pnpm, prettier, and prettierd; Homebrew removes its Node with them unless
+another formula still needs it. A migration waits, and says so, until mise can
+run every replacement. Open a new shell afterwards and check:
 
 ```bash
-brew install mise
-cd ~ && mise install          # the defaults in mise/mise.toml
-exec fish
-command -s node python3       # both should be in ~/.local/share/mise/shims
-node --version; python3 --version
-npm ls -g --depth=0           # globals stay in ~/.node_modules
+command -s node python3 bun go pnpm   # all in ~/.local/share/mise/shims
+npm ls -g --depth=0                   # globals stay in ~/.node_modules
 ```
 
-Global npm CLIs keep working because their prefix, `~/.node_modules`, does not
-depend on the Node manager. Native modules among them need `npm rebuild -g`
-only when the mise default differs from the Node version fnm had. mise's
-Python is a prebuilt python-build-standalone interpreter rather than pyenv's
-local build, so recreate any project virtualenv that points into
-`~/.pyenv/versions` before removing pyenv. Once nothing refers to the old
-managers, remove them by hand: `brew uninstall pyenv-virtualenv pyenv fnm`,
-then `~/.pyenv`, `~/.local/share/fnm`, `~/.local/state/fnm_multishells`, and
-the stale `~/.cache/fish/pyenv-init-*.fish` and
-`~/.config/fish/completions/pyenv.fish`.
+The migrations keep `~/.pyenv` and `~/.local/share/fnm`. mise's Python is a
+prebuilt python-build-standalone interpreter rather than pyenv's local build,
+so recreate any virtualenv that points into `~/.pyenv/versions`, then delete
+both directories by hand. Global npm modules with compiled parts need
+`npm rebuild -g` only when the default Node major version changes.
 
 A project that pins a version mise has not installed fails with a message
-naming `mise install`; run it in that project to install the version.
+naming `mise install`; run it in that project. JavaScript projects list
+prettier as a dev dependency (`bun add -d prettier` or `npm i -D prettier`).
+Neovim formats with that copy; outside a project, JavaScript and TypeScript
+fall back to the language server, and JSON, HTML, and CSS stay as written.
 
 ## Postplan
 

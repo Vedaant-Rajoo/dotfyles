@@ -31,6 +31,9 @@ T3's commit button, and the commit-msg hook enforces it.
 - A worktree is a draft, not the live configuration. From a worktree, run
   `bin/bootstrap --dry-run` at most, and test against a sandboxed `HOME`, leaving
   the machine's packages, runtimes, and applications as they are.
+- When a change leaves state on existing machines that the new configuration no
+  longer owns, such as a retired formula, add a migration; read
+  [migrations/README.md](migrations/README.md) first.
 - Credentials, sessions, conversation history, and caches stay machine-local.
   A new hand-written file under `claude/` or `fish/` needs its own `.gitignore`
   whitelist entry; `tests/gitignore_test.fish` holds that boundary.

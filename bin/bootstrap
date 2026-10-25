@@ -338,6 +338,14 @@ printf '\n==> bat theme cache\n'
 # bat only loads bat/themes/ from its cache, so the configured theme needs a build.
 run bat cache --build
 
+printf '\n==> Migrations\n'
+# Migrations are idempotent: on a new machine they find nothing to change and
+# are recorded as done; on an existing one they retire what older versions of
+# this configuration left behind. One that fails stays pending for the next run.
+if ! run "$REPO_ROOT/bin/migrate"; then
+	warn "a migration did not finish; fix what it reported, then run bin/migrate"
+fi
+
 if [[ "$WITH_DEFAULTS" -eq 1 ]]; then
 	printf '\n==> macOS defaults\n'
 	run "$FISH_BIN" "$REPO_ROOT/bin/macdefaults"
