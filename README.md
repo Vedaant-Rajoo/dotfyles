@@ -2,8 +2,11 @@
 
 Personal machine configuration for macOS, with Linux as a secondary target. Clone the repository
 itself directly to `~/.config`, then run one bootstrap command to install the declared software,
-configure Fish, restore pinned runtimes, and connect tracked application settings. [SYSTEM.md](SYSTEM.md)
-is a dated audit snapshot (2026-07-28), not a promise that every source-machine detail is portable.
+configure Fish, restore pinned runtimes, and connect tracked application settings.
+
+Tracked documentation explains configuration, maintenance, and setup on a new machine.
+Keep personal research, comparisons, design drafts, machine snapshots, and one-off
+verification reports in the gitignored `.local/` directory.
 
 ## Quick start (macOS)
 
@@ -53,8 +56,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `Brewfile` | Full Homebrew formula, cask, tap, and Mac App Store manifest |
 | `agents/` | Install list of the shared agent skills, restored and updated by `bin/agent-skills` |
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
-| [`SYSTEM.md`](SYSTEM.md) | Dated snapshot of toolchain provenance and deliberate exceptions |
-| [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake design note |
+| [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
@@ -84,7 +86,8 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
-It does not project shared rules, skills, subagents, or hooks. The only agent instruction file is
+Shared skills are restored through `bin/agent-skills`; see [agent skills](docs/setup.md#agent-skills).
+Bootstrap does not project shared rules, subagents, or harness hooks. The only agent instruction file is
 the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md).
 
 ## Updating
@@ -131,4 +134,3 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 - [claude/README.md](claude/README.md) — why this repo *is* `~/.claude`.
 - [fish/README.md](fish/README.md) — Fish layout, plugins, and init cache.
 - [docs/t3-awake.md](docs/t3-awake.md) — the T3 Code activity wake hold.
-- [SYSTEM.md](SYSTEM.md) — dated machine snapshot and deliberate exceptions.

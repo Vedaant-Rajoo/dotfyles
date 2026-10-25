@@ -9,9 +9,9 @@ Inference goes through the local Caveman proxy: `ANTHROPIC_BASE_URL` is
 `http://127.0.0.1:8787/compat/quotio`, and `apiKeyHelper` reads Quotio's client
 key through `bin/quotio-client-key`. See [caveman/README.md](../caveman/README.md).
 
-The previous shared rules, skill links, generated subagents, custom hooks,
-status line, and 9router integration were archived on 2026-09-28. Bootstrap no
-longer recreates them.
+Shared skills are restored separately by `bin/agent-skills`; see
+[agent skills](../docs/setup.md#agent-skills). Bootstrap does not install
+shared harness rules, generated subagents, custom hooks, or a status line.
 
 Runtime files, plugin installations, sessions, transcripts, and caches remain
 ignored. `~/.claude.json` stays at the home root with OAuth and per-project state.

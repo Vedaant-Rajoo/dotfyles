@@ -4,8 +4,8 @@ A complete clone deliberately does **not** copy credentials, account sessions,
 conversation history, caches, or application databases. Complete these steps on
 each machine.
 
-Back to [the repository overview](../README.md); the current machine inventory
-and intentional exceptions are recorded in [SYSTEM.md](../SYSTEM.md).
+Back to [the repository overview](../README.md). The [Brewfile](../Brewfile)
+and [bootstrap script](../bin/bootstrap) declare the software restored on a new machine.
 
 ## SSH and GitHub
 
@@ -69,9 +69,24 @@ Bootstrap installs Claude Code and the Quotio app, but not the Caveman binaries
 or their launch agent, so the harnesses cannot reach a model until you follow
 [Fresh machine](../caveman/README.md#fresh-machine).
 
-The previous 9router configuration and shared behavior layer were retired on
-2026-09-28. Do not restore old harness settings or shell exports without
-reviewing them.
+## Agent skills
+
+The [skills lock](../agents/skill-lock.json) records the shared skills restored
+by bootstrap. Skill files remain machine-local in `~/.agents/skills`.
+`bin/agent-skills` connects the CLI's lock paths to the tracked lock, installs
+missing skills, and links them for the configured agents.
+
+To restore skills or add one:
+
+```bash
+bin/agent-skills restore
+npx skills@1.7.4 add <source> -g -a claude-code codex -s <name> -y
+bin/agent-skills link
+```
+
+Commit the resulting lock change. Use `bin/agent-skills update` or `bin/u` for
+updates; `npx skills update -g` links skills into every agent it detects instead
+of preserving this setup's selected agents.
 
 ## OpenCode
 
@@ -97,9 +112,10 @@ everything except `storage/settings.json` out of version control there.
 
 ## Cursor, Codex, DockDoor, and Raycast
 
-Authenticate Cursor Agent with `cursor-agent login` and sign in to other
-harnesses using their native flows. These applications are installed by the
-Brewfile; mutable native settings remain deliberately untracked:
+The Brewfile installs Cursor, Codex, DockDoor, and Raycast. Install Cursor Agent
+separately if needed, then authenticate it with `cursor-agent login`. Sign in
+to other harnesses using their native flows. Mutable native settings remain
+deliberately untracked:
 
 - Cursor editor/agent settings, MCP configuration, extension list, sessions, and
   account-backed user rules;
@@ -108,8 +124,8 @@ Brewfile; mutable native settings remain deliberately untracked:
 - DockDoor plist preferences;
 - Raycast Beta preferences, databases, and downloaded extensions.
 
-Sign in and configure the native state manually. See [SYSTEM.md](../SYSTEM.md)
-for the current extension/app snapshot.
+Sign in and configure the native state manually. Select Raycast's Beta channel
+inside the application if desired; the Brewfile installs the `raycast` cask.
 
 ## OrbStack and Docker
 
@@ -180,6 +196,7 @@ when the standard changes.
 
 | Path | Why it remains local |
 |------|----------------------|
+| `.local/` | Personal research, comparisons, design drafts, machine snapshots, and one-off verification reports; not restored by a clone |
 | `fish/local/` | Shell secrets and machine-specific exports |
 | `fish/fish_variables` | Fish runtime/universal variables |
 | Fisher-installed plugin files under `fish/{functions,conf.d,completions,themes}/` | Fisher installs into this repo; `fish/fish_plugins` is the tracked source, and `fisher update` reinstalls them |
@@ -193,6 +210,6 @@ when the standard changes.
 | `raycast/` | Downloaded extensions and app data |
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
-| `nvim/tmp/`, `zed/prompts/`, caches and logs | Generated state |
+| `nvim/tmp/`, caches and logs | Generated state |
 | `~/.rustup/`, `~/.cargo/` | Rust toolchains, downloaded crates, and build caches; `bin/bootstrap` installs them with the official rustup installer rather than copying them from a clone |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

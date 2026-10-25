@@ -1,6 +1,5 @@
 # Caveman deployment
 
-Deployed on 2026-09-29 after checkpoint commit `a543f2d`.
 Codex, Claude Code and OpenCode now send inference through Caveman on
 `127.0.0.1:8787`, which forwards to Quotio's CLIProxyAPI on `127.0.0.1:8317`.
 Quotio still manages provider accounts and the native Ponytail/Caveman prompt
@@ -30,14 +29,13 @@ recovery tools in top-level `tools`. Explicit recovery mode is therefore needed
 for native Codex compression. All three configured harnesses share the same MCP
 recovery database. Clients without Caveman MCP must use CLIProxyAPI directly.
 
-Codex requires the MCP server to initialize. Only `caveman_retrieve` is configured
-for automatic approval, as explicitly approved by the user. Other tool policies
-are unchanged. Claude and OpenCode retain their normal tool permission behavior;
-the headless Claude validation explicitly allowed Read and Caveman recovery.
+Codex requires the MCP server to initialize. Configure approval for
+`caveman_retrieve` according to your tool permission policy. Claude and OpenCode
+retain their native tool permission behavior.
 
 No hooks or project instruction files were installed. AGENTS.md/CLAUDE.md,
 skills, hooks, and tool execution continue to belong to the harness. The native
-project checks used disposable instruction files outside real projects.
+configuration remains separate from project instructions.
 
 ## Verification
 
@@ -49,11 +47,6 @@ and Claude Messages. It makes two small inference calls:
 ```sh
 python3 ~/.config/caveman/verify.py
 ```
-
-Additional native Codex, Claude Code and OpenCode checks read a synthetic build
-log, recovered compressed content and followed the disposable project rule.
-Separate native probes reported both active router preference markers.
-See [verification.json](verification.json) for outcomes and the T3 check status.
 
 One upstream limitation remains: Caveman records Codex's stream close as
 `cave_client_canceled` even when Codex successfully finishes; compression is
@@ -161,8 +154,6 @@ Then stop Caveman with `launchctl bootout gui/$(id -u)/local.caveman.proxy`.
 Recovery can remain registered for existing conversations. Preserve its state.
 To disable login startup, remove only the launch-agent symlink after stopping it.
 
-Private pre-deployment settings are in
-`~/.local/state/quotio-setup/20260929-011633-caveman-deploy`.
 Prefer reverting individual routing/MCP fields over replacing whole settings
 files after later configuration changes.
 

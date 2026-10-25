@@ -85,38 +85,15 @@ No Caveman hooks, slash commands or status line were installed. Credentials,
 skills and project instruction files remain unchanged. No token or cost savings
 are claimed for the prompt rules; the prompt itself adds input tokens.
 
-A separate compression-proxy feasibility check passed for both Responses and
-Claude Messages through the connected CLIProxyAPI accounts, including byte-exact
-MCP recovery. See `../caveman/README.md` for the deployed configuration.
-
 Source: [Caveman skill at the pinned commit](https://github.com/JuliusBrussee/caveman/blob/2fd153c67988e980fb0b2455c90832159a6a5a25/skills/caveman/SKILL.md).
 The upstream MIT notice is retained in `licenses/caveman-MIT.txt`.
-A private pre-Caveman backup is at
-`~/.local/state/quotio-setup/20260929-004857-caveman`.
-
 This is prompt configuration. AGENTS.md/CLAUDE.md discovery, hooks, skills, and
 slash commands still belong to the harness; a router prompt does not install or
 execute them.
 
-## Verification and recovery
-
-The native plugin migration passed 21 isolated checks, with
-successful live Codex/Claude Code/OpenCode responses, single injection in the
-outgoing requests, preservation of original instructions/messages/tools, and UI
-saves. Chat Completions, Gemini, and Interactions are configured but were not
-live-tested. No token or cost savings were benchmarked.
-
-The user confirmed a fresh T3 Codex thread after Caveman deployment: MCP
-recovery returned the synthetic error and both active router preference markers.
-
-A private pre-migration backup is at
-`~/.local/state/quotio-setup/20260929-002836-plugin-migration`.
-The old payload rules, `bin/quotio-ponytail`, and `quotio/ponytail.json` were removed
-from the active setup. The backup contains credentials; keep it private.
+## Sources
 
 Prompt source: [Ponytail v5.3.2 rules](https://github.com/DietrichGebert/ponytail/blob/16352ac229eb08a9598dcae48fe9f2b342567d86/.agents/rules/ponytail.md),
-with Markdown headings changed to plain labels. It replaced 9router's older
-adaptation on 2026-10-22; that pre-update config is backed up at
-`~/.local/state/quotio-setup/20261022-061900-ponytail-v5.3.2`.
+with Markdown headings changed to plain labels.
 Original project: [Ponytail](https://github.com/DietrichGebert/ponytail).
 Plugin: [Prompt Rules v0.2.1](https://github.com/markhuangai/cpa-plugin-prompt-rules/tree/v0.2.1).

@@ -27,7 +27,6 @@ opencode/agents/
 # --- Machine-local runtime state ---
 fish/fish_variables
 nvim/tmp/
-zed/prompts/
 
 # --- Fish plugins: Fisher installs into this repo, so ignore its output and
 #     whitelist hand-written config on purpose; see fish/README.md. ---
@@ -46,8 +45,9 @@ fish/conf.d/*
 !fish/conf.d/rustup.fish
 fish/completions/
 
-# --- AI planning artifacts: specs and plans are process scaffolding for a
-#     change, not system state; they never belong in the repo. ---
+# --- Personal research, snapshots, and planning artifacts ---
+/.local/
+# Keep older planning output ignored if a tool recreates it here.
 docs/superpowers/
 
 # --- Large / downloaded app data ---

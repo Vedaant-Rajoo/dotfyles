@@ -384,5 +384,5 @@ Bootstrap complete. Remaining machine-local steps:
   - Set up Quotio and the Caveman proxy: caveman/README.md#fresh-machine.
   - Run `postplan login` and open Neovim once to install plugins.
 
-See README.md for the complete checklist and SYSTEM.md for snapshot provenance.
+See README.md and docs/setup.md for the complete setup checklist.
 EOF
