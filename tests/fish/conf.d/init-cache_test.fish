@@ -8,26 +8,12 @@
 # fake PATH that logs every invocation and emits known init code, which is what
 # lets us assert the cache is used instead of the tool.
 
-set -g repo (path resolve (status dirname)/../../..)
-set -g zoxide_conf $repo/fish/conf.d/40-zoxide.fish
+set -g repo_root (path resolve (status dirname)/../../..)
+source $repo_root/tests/lib/harness.fish
+
+set -g zoxide_conf $repo_root/fish/conf.d/40-zoxide.fish
 set -g fish_bin (status fish-path)
-set -g failures 0
-set -g checks 0
-set -g workdir (mktemp -d /tmp/fish-init-cache-test.XXXXXX)
-
-function teardown --on-event fish_exit
-    test -n "$workdir"; and rm -rf $workdir
-end
-
-function check --argument-names label expected actual
-    set -g checks (math $checks + 1)
-    if test "$expected" = "$actual"
-        printf 'ok   %s\n' $label
-    else
-        set -g failures (math $failures + 1)
-        printf 'FAIL %s\n       expected: %s\n       actual:   %s\n' $label $expected $actual
-    end
-end
+set -g workdir (harness_tmpdir)
 
 # A sandbox is a fake home plus a fake PATH holding the stub.
 function fresh_sandbox
@@ -77,19 +63,18 @@ set -g zoxide_cache_rel cache/fish/zoxide-init.fish
 # --- zoxide ---------------------------------------------------------------
 
 set z (fresh_sandbox)
-check "the first interactive source applies the zoxide init" applied (zoxide_run $z)
-check "the first interactive source creates the zoxide cache" 0 (test -s $z/$zoxide_cache_rel; echo $status)
-check "the first interactive source invokes zoxide once" 1 (log_lines $z/zoxide.log)
+assert_equal applied "$(zoxide_run $z)" 'the first interactive source applies the zoxide init'
+test -s $z/$zoxide_cache_rel
+assert_equal 0 $status 'the first interactive source creates the zoxide cache'
+assert_equal 1 (log_lines $z/zoxide.log) 'the first interactive source invokes zoxide once'
 
-check "the second interactive source still applies the zoxide init" applied (zoxide_run $z)
-check "the second interactive source does not invoke zoxide again" 1 (log_lines $z/zoxide.log)
+assert_equal applied "$(zoxide_run $z)" 'the second interactive source still applies the zoxide init'
+assert_equal 1 (log_lines $z/zoxide.log) 'the second interactive source does not invoke zoxide again'
 
-set -g good_zoxide_sum (shasum $z/$zoxide_cache_rel | string split ' ')[1]
+set -g good_zoxide_sum "$(shasum $z/$zoxide_cache_rel | string split -f1 ' ')"
 backdate $z/$zoxide_cache_rel
-check "a failed zoxide regeneration still applies the old cache" applied (zoxide_run $z 1)
-check "a failed zoxide regeneration preserves the old cache byte for byte" $good_zoxide_sum (shasum $z/$zoxide_cache_rel 2>/dev/null | string split ' ')[1]
+assert_equal applied "$(zoxide_run $z 1)" 'a failed zoxide regeneration still applies the old cache'
+assert_equal $good_zoxide_sum "$(shasum $z/$zoxide_cache_rel 2>/dev/null | string split -f1 ' ')" \
+    'a failed zoxide regeneration preserves the old cache byte for byte'
 
-# --- summary --------------------------------------------------------------
-
-printf '\n%d checks, %d failures\n' $checks $failures
-test $failures -eq 0
+harness_exit
