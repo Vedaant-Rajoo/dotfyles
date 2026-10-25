@@ -1,5 +1,15 @@
 # Common tool preferences.
 
+set -q XDG_DATA_HOME
+or set -gx XDG_DATA_HOME $HOME/.local/share
+
+set -q XDG_STATE_HOME
+or set -gx XDG_STATE_HOME $HOME/.local/state
+
+# Keep npm global installs on a stable user-owned path, whichever Node version
+# mise selects.
+set -gx npm_config_prefix $HOME/.node_modules
+
 if command -q nvim
     set -gx EDITOR nvim
 else if command -q vim

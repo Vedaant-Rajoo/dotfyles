@@ -39,9 +39,9 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
 2. **Packages** — the full [`Brewfile`](Brewfile): formulae, casks, and `mas` App Store entries.
 3. **Shell** — Homebrew Fish into `/etc/shells` and as the login shell, then Fisher and the
    [`fish/fish_plugins`](fish/fish_plugins) manifest.
-4. **Runtimes** — Node via fnm and Python via pyenv at the pinned [`.node-version`](.node-version) /
-   [`.python-version`](.python-version), Rust via the official rustup installer, plus the npm tools
-   this config needs, including pinned `postplan`.
+4. **Runtimes** — Node and Python via mise at the defaults in [`mise/mise.toml`](mise/mise.toml),
+   Rust via the official rustup installer, plus the npm tools this config needs, including
+   pinned `postplan`.
 5. **Wiring** — native Claude installation, the shared agent skills listed in
    [`agents/skill-lock.json`](agents/skill-lock.json), Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
    LaunchAgent, repo hooks, and the optional
@@ -58,6 +58,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
+| `mise/` | Global mise config: the default Node and Python, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
@@ -96,6 +97,7 @@ the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md).
 cd ~/.config
 git pull
 bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, agent skills, fisher
+mise install                       # after mise/mise.toml changes a default runtime
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
@@ -106,13 +108,16 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Six Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, `agent-skills`, and `commit-msg` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
+Seven Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, `agent-skills`, `commit-msg`, and `runtime-selection` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
 
 ```
 tests/bin/u_test.fish                    tests/bin/agent-skills_test.fish
 tests/bin/t3_awake_test.fish             tests/git/hooks/commit-msg_test.fish
 tests/bin/u-cask-lifecycle_test.fish     tests/fish/conf.d/init-cache_test.fish
+tests/fish/conf.d/runtime-selection_test.fish
 ```
+
+`runtime-selection` needs mise on `PATH`, or `MISE_TEST_BIN` set to a mise binary.
 
 ## Linux
 
@@ -123,7 +128,9 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 1. Clone the repository directly to `~/.config`.
 2. Install Fish from the distro package manager; make it the login shell.
 3. Install compatible Brewfile formulae via Linuxbrew or native packages, skipping casks and `mas`.
-4. Install Node with fnm and Python with pyenv at the pinned versions.
+4. Install mise from the distro or [mise.jdx.dev](https://mise.jdx.dev), then run `mise install`
+   from `~` to install the default Node and Python from `mise/mise.toml`. Fish puts mise's shims on
+   `PATH` the same way on Linux.
 5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
 6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, `macos-*` Ghostty) with
    Linux equivalents.

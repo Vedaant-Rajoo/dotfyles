@@ -501,14 +501,15 @@ if test "$argv[1]" = spin
 end
 exit 0'
 
-u_test_mock nvim 'exit 0'
+u_test_mock nvim 'echo "cwd nvim $PWD" >>"$U_MOCK_LOG"'
 u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
 u_test_mock mas 'exit 0'
 u_test_mock rustup 'exit 0'
 u_test_mock agent-skills 'exit 0'
 u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
-u_test_mock npm 'if test "$argv[1]" = outdated
+u_test_mock npm 'echo "cwd npm $PWD" >>"$U_MOCK_LOG"
+if test "$argv[1]" = outdated
     if test -e "$U_MOCK_DIR/npm-outdated.json"
         cat "$U_MOCK_DIR/npm-outdated.json"
         exit 1
@@ -585,11 +586,14 @@ function u_test_output_contains --argument-names needle
     end
 end
 
-function u_test_run_main --argument-names case_name
+function u_test_run_main --argument-names case_name start_dir
     set -l output_file "$u_mock_root/$case_name.out"
+    test -n "$start_dir"; or set start_dir $PWD
+    cd $start_dir
     env U_TEST_MODE=1 U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
         U_AGENT_SKILLS="$u_mock_bin/agent-skills" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
     set -g u_test_main_status $status
+    cd $repo_root
     set -g u_test_main_output (string collect <"$output_file")
 end
 
@@ -639,6 +643,18 @@ assert_equal 1 (u_test_calls '^agent-skills update$') 'main updates the agent sk
 assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
 assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
 assert_equal 1 (count $XDG_STATE_HOME/u/u-*.txt) 'main logs under XDG_STATE_HOME'
+
+# Started inside a project that pins its own Node and Python, u must still
+# maintain npm globals and Neovim's tools with the machine defaults.
+u_test_reset
+set -l pinned_project (harness_tmpdir)
+echo 18.20.8 >$pinned_project/.node-version
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main pinned-project $pinned_project
+assert_equal 0 (u_test_calls "^cwd .* $pinned_project\$") \
+    'main started in a pinned project runs no runtime from that project'
+assert_equal 2 (u_test_calls "^cwd \(npm\|nvim\) $HOME\$") \
+    'main runs npm and Neovim maintenance from the home directory'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"

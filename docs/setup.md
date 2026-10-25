@@ -49,6 +49,35 @@ Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also
 requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal
 authentication flow and never commit its API key.
 
+## Moving from fnm and pyenv to mise
+
+A machine bootstrapped before mise has Node under fnm and Python under pyenv.
+Fish in this repository no longer loads either, so finish the move in this
+order:
+
+```bash
+brew install mise
+cd ~ && mise install          # the defaults in mise/mise.toml
+exec fish
+command -s node python3       # both should be in ~/.local/share/mise/shims
+node --version; python3 --version
+npm ls -g --depth=0           # globals stay in ~/.node_modules
+```
+
+Global npm CLIs keep working because their prefix, `~/.node_modules`, does not
+depend on the Node manager. Native modules among them need `npm rebuild -g`
+only when the mise default differs from the Node version fnm had. mise's
+Python is a prebuilt python-build-standalone interpreter rather than pyenv's
+local build, so recreate any project virtualenv that points into
+`~/.pyenv/versions` before removing pyenv. Once nothing refers to the old
+managers, remove them by hand: `brew uninstall pyenv-virtualenv pyenv fnm`,
+then `~/.pyenv`, `~/.local/share/fnm`, `~/.local/state/fnm_multishells`, and
+the stale `~/.cache/fish/pyenv-init-*.fish` and
+`~/.config/fish/completions/pyenv.fish`.
+
+A project that pins a version mise has not installed fails with a message
+naming `mise install`; run it in that project to install the version.
+
 ## Postplan
 
 `bin/bootstrap` installs the standalone `postplan@0.0.4` CLI. If needed,
@@ -211,5 +240,6 @@ when the standard changes.
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, caches and logs | Generated state |
+| `~/.local/share/mise/`, `~/.local/state/mise/`, mise's cache | Installed runtimes, shims, trust records, and downloads; `mise install` recreates them from `mise/mise.toml` |
 | `~/.rustup/`, `~/.cargo/` | Rust toolchains, downloaded crates, and build caches; `bin/bootstrap` installs them with the official rustup installer rather than copying them from a clone |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

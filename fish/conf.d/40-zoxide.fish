@@ -5,8 +5,8 @@ if not command -q zoxide
     return
 end
 
-# `zoxide init` output is cached like pyenv's and regenerated when the zoxide
-# binary is newer than the cache. A Homebrew bottle can install with an mtime
+# `zoxide init` output is cached and regenerated only when the zoxide binary
+# is newer than the cache. A Homebrew bottle can install with an mtime
 # older than the cache it supersedes, in which case the stale cache is kept —
 # benign, since the init code rarely changes.
 # Escape hatch: rm ~/.cache/fish/zoxide-init.fish; reload

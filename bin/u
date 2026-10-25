@@ -441,6 +441,10 @@ function u_upgrade_cask --argument-names log_file token
 end
 
 function u_main
+    # mise selects runtimes from the working directory. Machine maintenance must
+    # get the machine defaults, not the pins of whatever project u started in.
+    cd $HOME; or return 1
+
     # Include Raycast and Tailscale even though their casks advertise in-app
     # updates. Tailscale's pkg quits and relaunches the app itself.
     set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast tailscale-app)

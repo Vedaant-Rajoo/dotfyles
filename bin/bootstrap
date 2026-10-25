@@ -105,17 +105,9 @@ fi
 
 BREWFILE="$REPO_ROOT/Brewfile"
 
-# Toolchain versions live in the files fnm and pyenv already read natively --
-# `fnm env --use-on-cd` and `pyenv init -` are both active in fish/conf.d -- so
-# the pin is data this script consumes rather than a constant it owns.
-read_pin() {
-	local file="$REPO_ROOT/$1"
-	[[ -r "$file" ]] || die "missing version pin: $1"
-	tr -d '[:space:]' <"$file"
-}
-
-NODE_VERSION="$(read_pin .node-version)"
-PYTHON_VERSION="$(read_pin .python-version)"
+# mise selects runtimes from the working directory. Machine setup must get the
+# machine defaults, not the pins of whatever project bootstrap was started in.
+cd "$HOME"
 
 printf '\n==> Xcode Command Line Tools\n'
 if dry_run || ! xcode-select -p >/dev/null 2>&1; then
@@ -190,30 +182,14 @@ if dry_run || [[ "$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{pr
 	run chsh -s "$FISH_BIN"
 fi
 
-printf '\n==> Node %s via fnm\n' "$NODE_VERSION"
-export FNM_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fnm"
-if have fnm; then
-	if dry_run || ! fnm list 2>/dev/null | grep -Eq "(^|[^0-9])v?${NODE_VERSION}([^0-9]|$)"; then
-		run fnm install "$NODE_VERSION"
-	fi
-	if dry_run || ! fnm default 2>/dev/null | grep -q "$NODE_VERSION"; then
-		run fnm default "$NODE_VERSION"
-	fi
-	load_env fnm env --shell bash
+printf '\n==> Node and Python via mise\n'
+# Once this repository is ~/.config, mise/mise.toml is mise's global config, so
+# `mise install` installs exactly the declared defaults and skips installed ones.
+if have mise; then
+	run mise install
+	load_env mise env --shell bash
 else
-	die "fnm was not installed by the Brewfile"
-fi
-
-printf '\n==> Python %s via pyenv\n' "$PYTHON_VERSION"
-if have pyenv; then
-	if dry_run || ! pyenv versions --bare 2>/dev/null | grep -qx "$PYTHON_VERSION"; then
-		run pyenv install -s "$PYTHON_VERSION"
-	fi
-	if dry_run || [[ "$(pyenv global 2>/dev/null || true)" != "$PYTHON_VERSION" ]]; then
-		run pyenv global "$PYTHON_VERSION"
-	fi
-else
-	die "pyenv was not installed by the Brewfile"
+	die "mise was not installed by the Brewfile"
 fi
 
 printf '\n==> Rust via rustup\n'
@@ -310,7 +286,7 @@ if have npm; then
 		run npm install -g "${NPM_MISSING[@]}"
 	fi
 else
-	warn "npm is unavailable; re-run bootstrap after fnm activates Node $NODE_VERSION"
+	warn "npm is unavailable; re-run bootstrap after mise installs Node"
 fi
 
 printf '\n==> AI harness configuration\n'

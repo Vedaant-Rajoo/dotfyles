@@ -1,5 +1,6 @@
 # Verify with: brew bundle check --file=Brewfile
-# bin/bootstrap manages Node, Python, Rust, npm globals, and native CLI installers.
+# mise/mise.toml pins Node and Python; bin/bootstrap installs them with mise,
+# plus Rust, npm globals, and native CLI installers.
 
 # Taps
 tap "anomalyco/tap"
@@ -34,10 +35,8 @@ brew "ykman"
 cask "yubico-authenticator"
 
 # Toolchains and package managers
-brew "fnm"
 brew "go"
-brew "pyenv"
-brew "pyenv-virtualenv"
+brew "mise"
 brew "sccache"
 brew "bun"
 brew "cocoapods"

@@ -40,8 +40,7 @@ fish/conf.d/*
 !fish/conf.d/30-fzf.fish
 !fish/conf.d/35-herdr-sessionizer.fish
 !fish/conf.d/40-zoxide.fish
-!fish/conf.d/50-node.fish
-!fish/conf.d/55-python.fish
+!fish/conf.d/50-mise.fish
 !fish/conf.d/rustup.fish
 fish/completions/
 
