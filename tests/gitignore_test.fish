@@ -26,6 +26,8 @@ for path in \
         github-copilot/apps.json \
         monid/state.json \
         herdr/session.json \
+        herdr/herdr.sock.agent \
+        herdr/session-snapshots/session-1-1-0.json \
         legcord/Cookies \
         .local/docs/research.md
     assert_equal ignored (ignored $path) "$path stays out of commits"
@@ -36,6 +38,7 @@ for path in \
         fish/conf.d/10-env.fish \
         fish/conf.d/50-mise.fish \
         fish/functions/reload.fish \
+        herdr/config.toml \
         legcord/storage/settings.json \
         mise/mise.toml \
         agents/skill-lock.json
