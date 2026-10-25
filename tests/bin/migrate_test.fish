@@ -84,10 +84,15 @@ printf '%s\n' '#!/bin/sh' 'echo "brew $*" >>"'$calls'"' \
 # mise can run every command except those listed in the mise-lacks fixture.
 printf '%s\n' '#!/bin/sh' 'echo "mise $*" >>"'$calls'"' \
     '[ "$1" = which ] && grep -qx "$2" "$FIXTURES/mise-lacks" 2>/dev/null && exit 1' 'exit 0' >$stubs/mise
-chmod +x $stubs/brew $stubs/mise
+printf '%s\n' '#!/bin/sh' 'echo "npm $*" >>"'$calls'"' >$stubs/npm
+chmod +x $stubs/brew $stubs/mise $stubs/npm
 
 function uninstalled
     string match -rg '^brew uninstall (.*)' <$calls | string split ' ' | sort | string join ' '
+end
+
+function npm_calls
+    string match -r '^npm .*' <$calls
 end
 
 function shipped_pending
@@ -102,6 +107,7 @@ printf '%s\n' bat fish mise >$fixtures/brew-list
 run_migrate $repo_root/bin/migrate
 assert_equal 0 $migrate_status 'on a new machine every shipped migration succeeds'
 assert_equal '' "$(uninstalled)" 'on a new machine the migrations uninstall nothing'
+assert_equal '' "$(npm_calls)" 'on a new machine the migrations leave global npm packages alone'
 assert_equal 0 (shipped_pending) 'on a new machine every shipped migration is recorded as done'
 
 # An old machine whose mise cannot run Bun yet, as when `mise install` failed to
@@ -136,6 +142,15 @@ run_migrate $repo_root/bin/migrate
 assert_equal 1 $migrate_status 'retiring prettier waits until mise can run Node'
 assert_equal '' "$(uninstalled)" 'prettier is kept while mise cannot run Node'
 rm -f $fixtures/mise-lacks
+
+# bin/bootstrap stopped installing the Augment CLI.
+rm -rf $state
+printf '%s\n' mise >$fixtures/brew-list
+mkdir -p $home/.node_modules/lib/node_modules/@augmentcode/auggie
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with the Augment CLI finishes every shipped migration'
+assert_equal 'npm uninstall --global @augmentcode/auggie' "$(npm_calls)" \
+    'a machine with the Augment CLI loses it, and no other global npm package'
 
 # When Homebrew cannot report what is installed, nothing is assumed retired.
 rm -rf $state

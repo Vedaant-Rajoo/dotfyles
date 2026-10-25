@@ -235,7 +235,6 @@ printf '\n==> npm global tools\n'
 export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
-	"@augmentcode/auggie"
 	"localtunnel"
 )
 NPM_GLOBAL_ENTRIES=()
@@ -255,7 +254,7 @@ read_npm_globals() {
 
 # An entry satisfies a spec either exactly ("postplan@0.0.4") or by name alone,
 # for unpinned specs. ${entry%@*} strips the version and leaves scoped names
-# ("@augmentcode/auggie") intact.
+# ("@scope/name") intact.
 npm_global_present() {
 	local spec="$1" entry
 	if [[ ${#NPM_GLOBAL_ENTRIES[@]} -eq 0 ]]; then
