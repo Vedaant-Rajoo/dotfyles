@@ -37,9 +37,9 @@ optional tool is missing.
 ## Runtimes
 
 `conf.d/50-mise.fish` puts mise's shims first on `PATH` in every shell,
-interactive or not. Each shim picks the Node or Python version from the
-working directory when it runs, so a `cd` takes effect at once, and starting a
-shell runs no mise process. The defaults come from
+interactive or not. Each shim picks the runtime version from the working
+directory when it runs, so a `cd` takes effect at once, and starting a shell
+runs no mise process. The defaults come from
 [`mise/mise.toml`](../mise/mise.toml).
 
 `mise activate` is deliberately unused. It takes the shims off `PATH`, so a

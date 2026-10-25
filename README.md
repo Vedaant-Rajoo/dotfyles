@@ -52,9 +52,8 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
 2. **Packages** — the full [`Brewfile`](Brewfile): formulae, casks, and `mas` App Store entries.
 3. **Shell** — Homebrew Fish into `/etc/shells` and as the login shell, then Fisher and the
    [`fish/fish_plugins`](fish/fish_plugins) manifest.
-4. **Runtimes** — Node and Python via mise at the defaults in [`mise/mise.toml`](mise/mise.toml),
-   Rust via the official rustup installer, plus the npm tools this config needs, including
-   pinned `postplan`.
+4. **Runtimes** — the language runtimes in [`mise/mise.toml`](mise/mise.toml) via mise, Rust via
+   the official rustup installer, plus the npm tools this config needs, including pinned `postplan`.
 5. **Wiring** — native Claude installation, the shared agent skills listed in
    [`agents/skill-lock.json`](agents/skill-lock.json), Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
    LaunchAgent, repo hooks, and the optional
@@ -71,7 +70,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
-| `mise/` | Global mise config: the default Node and Python, and how projects override them |
+| `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
@@ -90,8 +89,8 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 |-------|-------|-------------|------------|
 | CLI tools, libraries, apps, fonts | Homebrew | `Brewfile` | `bin/u` |
 | Mac App Store apps | mas | `Brewfile` | `bin/u` |
-| Default Node and Python | mise | `mise/mise.toml` | editing the pin, then `mise install` |
-| A project's Node and Python | the project | its `.node-version`, `.python-version`, or `mise.toml` | the project |
+| Default Node, Python, Bun, Go, pnpm | mise | `mise/mise.toml`, as release lines | `bin/u` (`mise install`, `mise upgrade`) |
+| A project's runtime versions | the project | its `mise.toml`, `.nvmrc`, `.node-version`, or `.python-version` | the project |
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
 | Project dependencies | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
@@ -102,9 +101,9 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Credentials, sessions, caches | each machine | not tracked | |
 
-Homebrew also installs its own Node, Python, and Ruby as dependencies of formulae such as
-prettier, black, ykman, and CocoaPods. They belong to those formulae; mise's shims come first on
-`PATH`, so `node` and `python3` still resolve to mise. A machine can carry more global npm CLIs
+Homebrew also installs its own Go, Node, Python, and Ruby as dependencies of formulae such as
+gofumpt, prettier, black, ykman, and CocoaPods. They belong to those formulae; mise's shims come
+first on `PATH`, so `go`, `node`, and `python3` still resolve to mise. A machine can carry more global npm CLIs
 than `NPM_GLOBALS` restores; add one there before relying on it on a new machine.
 
 ## After bootstrap
@@ -135,8 +134,7 @@ only `AGENTS.md`.
 ```bash
 cd ~/.config
 git pull
-bin/u                              # the interactive machine update: nvim, brew, casks, mas, rustup, npm, agent skills, fisher
-mise install                       # after mise/mise.toml changes a default runtime
+bin/u                              # the interactive machine update: nvim, brew, casks, mas, mise, rustup, npm, agent skills, fisher
 rustup update                      # Rust toolchains; no Brewfile entry owns them
 fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
@@ -178,8 +176,8 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 2. Install Fish from the distro package manager; make it the login shell.
 3. Install compatible Brewfile formulae via Linuxbrew or native packages, skipping casks and `mas`.
 4. Install mise from the distro or [mise.jdx.dev](https://mise.jdx.dev), then run `mise install`
-   from `~` to install the default Node and Python from `mise/mise.toml`. Fish puts mise's shims on
-   `PATH` the same way on Linux.
+   from `~` to install the default runtimes from `mise/mise.toml`. Fish puts mise's shims on `PATH`
+   the same way on Linux.
 5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
 6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, `macos-*` Ghostty) with
    Linux equivalents.

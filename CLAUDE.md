@@ -16,8 +16,11 @@ T3's commit button, and the commit-msg hook enforces it.
 
 - Give every tool, runtime, and piece of state exactly one owner, and update the
   ownership table in the same change that moves one.
-- mise owns the default Node and Python. Move another tool to mise only when the
-  move retires a manager or fixes an observed failure.
+- mise owns the language runtimes that `mise/mise.toml` declares. Rust stays
+  with rustup, which already reads each project's `rust-toolchain.toml`. To give
+  mise a tool, find its registry shorthand with `mise registry <name>`, declare
+  a release line in `mise/mise.toml`, and retire its Brewfile entry; the
+  runtime-selection test covers every declared tool.
 - Homebrew's own Node, Python, and Ruby serve its formulae; leave them installed.
 - A machine's global npm CLIs can outnumber `NPM_GLOBALS` in `bin/bootstrap`.
   Account for every installed one before changing how they are installed.

@@ -2,7 +2,8 @@
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
 # Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
-# Store apps, the Rust toolchain, npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
+# Store apps, mise's language runtimes, the Rust toolchain, npm globals, agent
+# skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
 # upgraded, and reopened immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
@@ -602,6 +603,11 @@ function u_main
     end
 
     u_run_step "$log_file" mas "🍎 App Store apps" mas upgrade; or set final_status 1
+    # `mise upgrade` skips tools that were never installed, so runtimes newly
+    # declared in mise/mise.toml are installed first. Both run before npm, so
+    # npm globals upgrade under the patched Node.
+    u_run_step "$log_file" mise "🧰 mise install" mise install; or set final_status 1
+    u_run_step "$log_file" mise "🧰 mise upgrade" mise upgrade; or set final_status 1
     u_run_step "$log_file" rustup "🦀 rustup" rustup update; or set final_status 1
     u_npm_upgrade "$log_file"; or set final_status 1
     u_run_step "$log_file" skills "🧠 agent skills" $U_AGENT_SKILLS update; or set final_status 1

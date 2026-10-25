@@ -182,11 +182,12 @@ if dry_run || [[ "$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{pr
 	run chsh -s "$FISH_BIN"
 fi
 
-printf '\n==> Node and Python via mise\n'
+printf '\n==> Language runtimes via mise\n'
 # Once this repository is ~/.config, mise/mise.toml is mise's global config, so
 # `mise install` installs exactly the declared defaults and skips installed ones.
 if have mise; then
 	run mise install
+	# This bash never loaded Fish's shims; the npm steps below need mise's Node.
 	load_env mise env --shell bash
 else
 	die "mise was not installed by the Brewfile"

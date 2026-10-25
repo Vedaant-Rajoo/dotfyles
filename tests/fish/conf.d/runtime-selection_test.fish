@@ -1,6 +1,7 @@
 #!/usr/bin/env fish
-# Which Node, Python, and Rust answer in a configured Fish shell, interactive
-# or not. Run: fish tests/fish/conf.d/runtime-selection_test.fish
+# Which runtimes answer in a configured Fish shell, interactive or not: every
+# tool mise/mise.toml declares, project overrides of Node and Python, and the
+# rustup proxies. Run: fish tests/fish/conf.d/runtime-selection_test.fish
 #
 # Every case starts a real Fish, with a clean environment, against copies of
 # fish/ and mise/ in a sandboxed home, so the shell starts the way a login on a
@@ -27,13 +28,20 @@ mkdir -p $home/.config $home/.local/bin $home/.local/share $home/.cargo/bin $hom
 cp -R $repo_root/fish $repo_root/mise $home/.config/
 touch $mise_log
 
-# The machine defaults are whatever the tracked config declares.
-set -g default_node (string match -rg '^node = "(.+)"$' <$repo_root/mise/mise.toml)
-set -g default_python (string match -rg '^python = "(.+)"$' <$repo_root/mise/mise.toml)
 set -g project_node 22.1.0
 set -g project_python 3.12.1
 # A real release, so a regression that downloads it is caught, not masked.
 set -g missing_node 18.20.8
+
+function sandbox_env
+    env -i HOME=$home USER=$USER TERM=dumb PATH=/usr/bin:/bin:/usr/sbin:/sbin $argv
+end
+
+# Setup runs mise from the sandbox home, offline, so neither this machine's
+# config nor the network takes part.
+function in_home
+    sandbox_env MISE_OFFLINE=1 /bin/sh -c 'cd "$HOME" && exec "$@"' sh $argv
+end
 
 function stub --argument-names path output
     mkdir -p (path dirname $path)
@@ -41,12 +49,51 @@ function stub --argument-names path output
     chmod +x $path
 end
 
-for node_version in $default_node $project_node
-    stub $home/.local/share/mise/installs/node/$node_version/bin/node $node_version
+function command_name --argument-names tool
+    test "$tool" = python; and echo python3; or echo $tool
 end
-for python_version in $default_python $project_python
-    stub $home/.local/share/mise/installs/python/$python_version/bin/python3 $python_version
+
+# A stub install of a tool, at the directory where mise expects that backend's
+# binaries; pnpm's, for one, sit at the install root rather than in bin/.
+function stub_install --argument-names tool tool_version
+    mkdir -p $home/.local/share/mise/installs/$tool/$tool_version
+    set -l bin_dir (in_home $real_mise bin-paths $tool@$tool_version 2>/dev/null)[1]
+    test -n "$bin_dir"; or set bin_dir $home/.local/share/mise/installs/$tool/$tool_version/bin
+    stub $bin_dir/(command_name $tool) $tool_version
 end
+
+# The machine defaults are whatever [tools] in the tracked config declares. A
+# release line such as "24" gets an install inside it, and "latest" any version.
+set -g default_commands
+set -g default_versions
+set -l in_tools 0
+for line in (cat $repo_root/mise/mise.toml)
+    if string match -qr '^\[' -- $line
+        test "$line" = '[tools]'; and set in_tools 1; or set in_tools 0
+        continue
+    end
+    test $in_tools -eq 1; or continue
+    string match -qr '^\s*(#.*)?$' -- $line; and continue
+    set -l pair (string match -rg '^([a-z][a-z0-9-]*) = "(.+)"$' -- $line)
+    or begin
+        harness_fail 'every [tools] entry in mise/mise.toml has a form this suite checks' $line
+        continue
+    end
+    set -l parts (string split . -- $pair[2])
+    test "$pair[2]" = latest; and set parts 1
+    while test (count $parts) -lt 3
+        set -a parts 0
+    end
+    set -l tool_version (string join . -- $parts)
+    stub_install $pair[1] $tool_version
+    set -a default_commands (command_name $pair[1])
+    set -a default_versions $tool_version
+    set -g default_$pair[1] $tool_version
+end
+set -g defaults_probe "echo "(string join ' ' -- "("$default_commands")")
+
+stub_install node $project_node
+stub_install python $project_python
 
 # ~/.local/bin is where mise's own installer puts it, and it sits ahead of
 # Homebrew, so this logging wrapper is the mise every shell finds by name.
@@ -64,8 +111,10 @@ stub $home/.node_modules/bin/global-cli global-cli
 stub $home/.cargo/bin/rustc rustup-proxy
 stub $home/.local/bin/rustc shadowing-rustc
 
-mkdir -p $projects/plain $projects/pinned $projects/toml $projects/missing
+mkdir -p $projects/plain $projects/pinned $projects/nvmrc $projects/toml $projects/missing
 echo $project_node >$projects/pinned/.node-version
+# The form these projects actually use: a release line in .nvmrc.
+echo v(string split . -- $project_node)[1] >$projects/nvmrc/.nvmrc
 echo $project_python >$projects/pinned/.python-version
 printf '[tools]\nnode = "%s"\npython = "%s"\n' $project_node $project_python >$projects/toml/mise.toml
 echo $missing_node >$projects/missing/.node-version
@@ -77,11 +126,7 @@ cp -R $repo_root/mise $projects/worktree/
 string replace -r '^node = .*' "node = \"$project_node\"" <$repo_root/mise/mise.toml |
     string replace -r '^python = .*' "python = \"$project_python\"" >$projects/worktree/mise/mise.toml
 
-function sandbox_env
-    env -i HOME=$home USER=$USER TERM=dumb PATH=/usr/bin:/bin:/usr/sbin:/sbin $argv
-end
-
-sandbox_env $home/.local/bin/mise reshim
+in_home $home/.local/bin/mise reshim
 printf '' >$mise_log
 
 # Runs a script in a fresh Fish started in a directory, interactive or as a
@@ -94,10 +139,12 @@ function in_shell --argument-names mode dir script
 end
 
 for mode in interactive script
-    assert_equal "$default_node $default_python" "$(in_shell $mode $projects/plain 'echo (node) (python3)')" \
-        "$mode shell: outside a project the declared defaults answer"
+    assert_equal "$default_versions" "$(in_shell $mode $projects/plain $defaults_probe)" \
+        "$mode shell: outside a project, every runtime mise/mise.toml declares answers from mise"
     assert_equal "$project_node $project_python" "$(in_shell $mode $projects/pinned 'echo (node) (python3)')" \
         "$mode shell: .node-version and .python-version override the defaults"
+    assert_equal $project_node "$(in_shell $mode $projects/nvmrc 'node')" \
+        "$mode shell: a release line in .nvmrc selects an installed version in that line"
     assert_equal "$project_node $project_python" "$(in_shell $mode $projects/toml 'echo (node) (python3)')" \
         "$mode shell: a project mise.toml overrides the defaults"
     assert_equal "$default_node $default_python" "$(in_shell $mode $projects/worktree 'echo (node) (python3)')" \

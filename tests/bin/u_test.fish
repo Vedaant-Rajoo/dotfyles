@@ -486,6 +486,9 @@ u_test_mock nvim 'echo "cwd nvim $PWD" >>"$U_MOCK_LOG"'
 u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
 u_test_mock mas 'exit 0'
+u_test_mock mise 'echo "cwd mise $PWD" >>"$U_MOCK_LOG"
+test -e "$U_MOCK_DIR/exit-mise-$argv[1]"; and exit 1
+exit 0'
 u_test_mock rustup 'exit 0'
 u_test_mock agent-skills 'exit 0'
 u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
@@ -620,6 +623,10 @@ assert_equal 1 (u_test_calls '^brew doctor$') \
     'main still doctors Homebrew when nothing is outdated'
 assert_equal 1 (u_test_calls '^mas upgrade$') 'main upgrades App Store apps'
 assert_equal 1 (u_test_calls '^rustup update$') 'main updates the Rust toolchain'
+assert_call_before '^mise install$' '^mise upgrade$' \
+    'main installs newly declared runtimes before upgrading the rest'
+assert_call_before '^mise upgrade$' '^npm ' \
+    'main upgrades runtimes before npm globals, so they upgrade under the patched Node'
 assert_equal 1 (u_test_calls '^agent-skills update$') 'main updates the agent skills'
 assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
 assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
@@ -634,8 +641,8 @@ printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
 u_test_run_main pinned-project $pinned_project
 assert_equal 0 (u_test_calls "^cwd .* $pinned_project\$") \
     'main started in a pinned project runs no runtime from that project'
-assert_equal 2 (u_test_calls "^cwd \(npm\|nvim\) $HOME\$") \
-    'main runs npm and Neovim maintenance from the home directory'
+assert_equal 4 (u_test_calls "^cwd \(mise\|npm\|nvim\) $HOME\$") \
+    'main runs mise, npm, and Neovim maintenance from the home directory'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
@@ -653,6 +660,17 @@ u_test_run_main fisher-failure
 assert_equal 1 $u_test_main_status 'a failed updater produces an aggregate failure'
 assert_equal 1 (u_test_output_contains 'fisher update failed') \
     'main reports the failed updater in the final details'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/exit-mise-upgrade"
+u_test_run_main mise-failure
+rm -f "$U_MOCK_DIR/exit-mise-upgrade"
+assert_equal 1 $u_test_main_status 'a failed runtime upgrade produces an aggregate failure'
+assert_equal 1 (u_test_output_contains 'mise upgrade failed') \
+    'main reports the failed runtime upgrade in the final details'
+assert_equal 1 (u_test_calls '^fisher update$') \
+    'a failed runtime upgrade does not stop later maintenance'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"

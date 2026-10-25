@@ -1,6 +1,7 @@
 # Verify with: brew bundle check --file=Brewfile
-# mise/mise.toml pins Node and Python; bin/bootstrap installs them with mise,
-# plus Rust, npm globals, and native CLI installers.
+# mise/mise.toml owns the language runtimes; bin/bootstrap installs them with
+# mise, plus Rust, npm globals, and native CLI installers. Homebrew still
+# installs its own Go, Node, Python, or Ruby when a formula here depends on one.
 
 # Taps
 tap "anomalyco/tap"
@@ -35,14 +36,11 @@ brew "ykman"
 cask "yubico-authenticator"
 
 # Toolchains and package managers
-brew "go"
 brew "mise"
 brew "sccache"
-brew "bun"
 brew "cocoapods"
 brew "luarocks"
 brew "mas"
-brew "pnpm"
 brew "proton-pass-cli"
 
 # Formatters and linters
