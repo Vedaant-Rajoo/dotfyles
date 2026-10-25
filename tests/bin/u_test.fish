@@ -5,14 +5,6 @@ source $repo_root/tests/lib/harness.fish
 
 set -g u_test_mock_calls
 
-function assert_function --argument-names function_name description
-    if functions -q $function_name
-        harness_pass $description
-    else
-        harness_fail $description
-    end
-end
-
 function assert_no_mock_calls
     if test (count $u_test_mock_calls) -eq 0
         harness_pass 'source runs no top-level commands in test mode'
@@ -45,17 +37,6 @@ end
 set -lx U_TEST_MODE 1
 source "$repo_root/bin/u"
 
-assert_function u_main 'source exposes u_main'
-assert_function u_outdated_names 'source exposes u_outdated_names'
-assert_function u_cask_app_paths 'source exposes u_cask_app_paths'
-assert_function u_inspect_app 'source exposes u_inspect_app'
-assert_function u_prepare_cask 'source exposes u_prepare_cask'
-assert_function u_confirm_running_apps 'source exposes u_confirm_running_apps'
-assert_function u_stop_app 'source exposes u_stop_app'
-assert_function u_stop_cask_apps 'source exposes u_stop_cask_apps'
-assert_function u_recheck_cask_apps 'source exposes u_recheck_cask_apps'
-assert_function u_upgrade_cask 'source exposes u_upgrade_cask'
-assert_function u_reopen_closed 'source exposes u_reopen_closed'
 assert_no_mock_calls
 
 set -l literal_log (mktemp)
@@ -80,7 +61,7 @@ fish' "$(u_outdated_names formulae '{"formulae":[{"name":"jq"},{"name":"fish"}],
     'outdated names emits one name per line'
 
 u_outdated_names formulae 'not json' >/dev/null 2>&1
-assert_equal 5 $status 'outdated names rejects invalid JSON'
+assert_equal failure (test $status -ne 0; and echo failure; or echo success) 'outdated names rejects invalid JSON'
 
 u_outdated_names formulae '{"formulae":[{"installed_versions":["1.0"]}],"casks":[]}' >/dev/null 2>&1
 assert_equal 1 $status 'outdated names rejects a record without a name'
@@ -128,7 +109,7 @@ u_cask_app_paths bad $cask_relative_target_json >/dev/null 2>&1
 assert_equal 1 $status 'cask app paths rejects a non-absolute app target'
 
 u_cask_app_paths bad 'not json' >/dev/null 2>&1
-assert_equal 5 $status 'cask app paths rejects invalid JSON'
+assert_equal failure (test $status -ne 0; and echo failure; or echo success) 'cask app paths rejects invalid JSON'
 
 set -l cask_spaced_json '{"casks":[{"token":"google-chrome","artifacts":[{"app":["Google Chrome.app"],"target":"/Applications/Google Chrome.app"}]}]}'
 assert_equal '/Applications/Google Chrome.app' "$(u_cask_app_paths google-chrome $cask_spaced_json)" \

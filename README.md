@@ -4,6 +4,19 @@ Personal machine configuration for macOS, with Linux as a secondary target. Clon
 itself directly to `~/.config`, then run one bootstrap command to install the declared software,
 configure Fish, restore pinned runtimes, and connect tracked application settings.
 
+## Purpose
+
+1. **Control plane.** The checkout at `~/.config` is the one place where this system's
+   configuration is declared and changed.
+2. **Reproduction.** A new Mac reaches the same state with `bin/bootstrap`. Linux uses the same
+   configuration files through the [manual steps](#linux).
+3. **Ownership.** Packages, applications, runtime versions, project environments, and plugins
+   each have one declared owner, listed under [Ownership](#ownership).
+4. **Small scripts.** `bin/` holds short scripts that automate repeated work and run directly
+   from the checkout.
+5. **Agent universe.** The configured AI harnesses, their shared skills, and their routing are
+   restored from here. Credentials, sessions, and conversation history stay on each machine.
+
 Tracked documentation explains configuration, maintenance, and setup on a new machine.
 Keep personal research, comparisons, design drafts, machine snapshots, and one-off
 verification reports in the gitignored `.local/` directory.
@@ -71,6 +84,29 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
 | leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `rectangle-pro/` |
 
+## Ownership
+
+| State | Owner | Declared in | Updated by |
+|-------|-------|-------------|------------|
+| CLI tools, libraries, apps, fonts | Homebrew | `Brewfile` | `bin/u` |
+| Mac App Store apps | mas | `Brewfile` | `bin/u` |
+| Default Node and Python | mise | `mise/mise.toml` | editing the pin, then `mise install` |
+| A project's Node and Python | the project | its `.node-version`, `.python-version`, or `mise.toml` | the project |
+| Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
+| Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
+| Project dependencies | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
+| Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
+| Neovim plugins | lazy.nvim | `nvim/lazy-lock.json` | `bin/u` |
+| Neovim language servers | Mason | `nvim/lua/newedia/lazy/lsp.lua` | `bin/u` refreshes the registry; `:Mason` updates packages |
+| Shared agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
+| Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
+| Credentials, sessions, caches | each machine | not tracked | |
+
+Homebrew also installs its own Node, Python, and Ruby as dependencies of formulae such as
+prettier, black, ykman, and CocoaPods. They belong to those formulae; mise's shims come first on
+`PATH`, so `node` and `python3` still resolve to mise. A machine can carry more global npm CLIs
+than `NPM_GLOBALS` restores; add one there before relying on it on a new machine.
+
 ## After bootstrap
 
 A clone deliberately carries **no** credentials, account sessions, conversation history, caches,
@@ -88,8 +124,11 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
 Shared skills are restored through `bin/agent-skills`; see [agent skills](docs/setup.md#agent-skills).
-Bootstrap does not project shared rules, subagents, or harness hooks. The only agent instruction file is
-the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md).
+Bootstrap does not project shared rules, subagents, or harness hooks. Two agent instruction files apply
+to work in this repository: the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md)
+that T3's commit button reads, and [`CLAUDE.md`](CLAUDE.md), the working rules for this repository.
+Claude Code reads only `CLAUDE.md`, which imports the commit standard; Codex and OpenCode read
+only `AGENTS.md`.
 
 ## Updating
 
@@ -108,16 +147,26 @@ merely as a check — it may adopt externally installed applications into Homebr
 
 ## Tests
 
-Seven Fish suites emit TAP-style lines and have no aggregate runner; `u`, `u-cask-lifecycle`, `agent-skills`, `commit-msg`, and `runtime-selection` share [`tests/lib/harness.fish`](tests/lib/harness.fish); run one with `fish tests/<path>_test.fish`:
+The tests guard behavior that a person relies on: which runtime answers in which shell and
+directory, what a bootstrap dry run may touch, that an interrupted update still reopens the
+applications it closed, which harnesses receive skills, and what stays out of commits. Each suite
+runs the real scripts against a sandboxed home and stub commands, so it leaves the machine as it
+was. [`CLAUDE.md`](CLAUDE.md#tests) holds the rules for adding checks.
+
+The suites print one TAP-style line per check and have no aggregate runner. Run one with
+`fish tests/<path>_test.fish`:
 
 ```
-tests/bin/u_test.fish                    tests/bin/agent-skills_test.fish
-tests/bin/t3_awake_test.fish             tests/git/hooks/commit-msg_test.fish
-tests/bin/u-cask-lifecycle_test.fish     tests/fish/conf.d/init-cache_test.fish
-tests/fish/conf.d/runtime-selection_test.fish
+tests/bin/bootstrap_test.fish            tests/fish/conf.d/runtime-selection_test.fish
+tests/bin/u_test.fish                    tests/fish/conf.d/init-cache_test.fish
+tests/bin/u-cask-lifecycle_test.fish     tests/git/hooks/commit-msg_test.fish
+tests/bin/agent-skills_test.fish         tests/gitignore_test.fish
+tests/bin/t3_awake_test.fish
 ```
 
 `runtime-selection` needs mise on `PATH`, or `MISE_TEST_BIN` set to a mise binary.
+`u-cask-lifecycle` and `t3_awake` exercise macOS services. So far every suite has run on macOS
+only.
 
 ## Linux
 
@@ -138,6 +187,7 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 ## Documentation map
 
 - [docs/setup.md](docs/setup.md) — per-machine manual setup after bootstrap.
+- [CLAUDE.md](CLAUDE.md) — working rules for agents changing this repository.
 - [claude/README.md](claude/README.md) — why this repo *is* `~/.claude`.
 - [fish/README.md](fish/README.md) — Fish layout, plugins, and init cache.
 - [docs/t3-awake.md](docs/t3-awake.md) — the T3 Code activity wake hold.
