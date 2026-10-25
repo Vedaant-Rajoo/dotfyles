@@ -185,4 +185,11 @@ for mode in interactive script
         "$mode shell: startup runs no mise process, even with Homebrew's snippet"
 end
 
+# bin/u's shell starts before mise's first install creates the shims directory,
+# then runs npm under the Node that install provided.
+mv $home/.local/share/mise/shims $sandbox/shims-later
+assert_equal $default_node \
+    "$(in_shell script $projects/plain "mv $sandbox/shims-later $home/.local/share/mise/shims; node")" \
+    'a shell started before mise created its shims runs the runtimes installed later'
+
 harness_exit
