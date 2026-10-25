@@ -93,7 +93,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | A project's runtime versions | the project | its `mise.toml`, `.nvmrc`, `.node-version`, or `.python-version` | the project |
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
-| Project dependencies | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
+| Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
 | Neovim plugins | lazy.nvim | `nvim/lazy-lock.json` | `bin/u` |
 | Neovim language servers | Mason | `nvim/lua/newedia/lazy/lsp.lua` | `bin/u` refreshes the registry; `:Mason` updates packages |
@@ -101,9 +101,9 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Credentials, sessions, caches | each machine | not tracked | |
 
-Homebrew also installs its own Go, Node, Python, and Ruby as dependencies of formulae such as
-gofumpt, prettier, black, ykman, and CocoaPods. They belong to those formulae; mise's shims come
-first on `PATH`, so `go`, `node`, and `python3` still resolve to mise. A machine can carry more global npm CLIs
+Homebrew also installs its own Go, Python, and Ruby as dependencies of gofumpt and goimports,
+black and ykman, and CocoaPods. They belong to those formulae; mise's shims come first on `PATH`,
+so `go` and `python3` still resolve to mise. A machine can carry more global npm CLIs
 than `NPM_GLOBALS` restores; add one there before relying on it on a new machine.
 
 ## After bootstrap

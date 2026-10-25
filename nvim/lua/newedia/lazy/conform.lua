@@ -7,6 +7,10 @@ return {
 				timeout_ms = 5000,
 				lsp_format = "fallback",
 			},
+			-- prettier comes from each project's node_modules, so a file outside a
+			-- project often has no formatter. This silences the notice for every
+			-- filetype, so a missing stylua or shfmt goes unreported too.
+			notify_no_formatters = false,
 			formatters_by_ft = {
 				lua = { "stylua" },
 				go = { "goimports", "gofmt", stop_after_first = true },
@@ -14,10 +18,10 @@ return {
 				rust = { "rustfmt" },
 				sh = { "shfmt" },
 				bash = { "shfmt" },
-				javascript = { "prettierd", "prettier", stop_after_first = true },
-				typescript = { "prettierd", "prettier", stop_after_first = true },
-				typescriptreact = { "prettierd", "prettier", stop_after_first = true },
-				javascriptreact = { "prettierd", "prettier", stop_after_first = true },
+				javascript = { "prettier" },
+				typescript = { "prettier" },
+				typescriptreact = { "prettier" },
+				javascriptreact = { "prettier" },
 				html = { "prettier" },
 				css = { "prettier" },
 				json = { "prettier" },

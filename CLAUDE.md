@@ -21,7 +21,8 @@ T3's commit button, and the commit-msg hook enforces it.
   mise a tool, find its registry shorthand with `mise registry <name>`, declare
   a release line in `mise/mise.toml`, and retire its Brewfile entry; the
   runtime-selection test covers every declared tool.
-- Homebrew's own Node, Python, and Ruby serve its formulae; leave them installed.
+- Homebrew's own Go, Python, and Ruby serve its formulae (gofumpt and goimports,
+  black and ykman, CocoaPods); leave them installed.
 - A machine's global npm CLIs can outnumber `NPM_GLOBALS` in `bin/bootstrap`.
   Account for every installed one before changing how they are installed.
 

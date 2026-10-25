@@ -1,8 +1,8 @@
 # Shared PATH setup for interactive and non-interactive Fish sessions.
 #
 # Order matters: each `fish_add_path -gPm` prepends, so later entries win.
-# 1. Homebrew — `go` and `gofmt`, formatters (stylua, ruff, prettier, shfmt, …),
-#    and other CLI tools
+# 1. Homebrew — formatters (stylua, ruff, shfmt, …) and other CLI tools; the
+#    language runtimes come from mise's shims, which 50-mise.fish puts first
 # 2. `go install` output ($GOPATH/bin, default ~/go/bin) — above Homebrew so a
 #    deliberately installed tool wins, below the hand-written scripts further down
 #
