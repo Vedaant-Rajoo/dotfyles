@@ -73,7 +73,6 @@ cask "t3-code@nightly"
 # Productivity and desktop UI
 cask "alcove"
 cask "karabiner-elements"
-cask "linearmouse"
 cask "raycast"
 cask "rectangle-pro"
 cask "shottr"

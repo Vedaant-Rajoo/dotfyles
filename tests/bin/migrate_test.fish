@@ -177,6 +177,15 @@ assert_equal 'brew uninstall --cask bartender dockdoor hyperkey macs-fan-control
     "$(string match -r '^brew uninstall .*' <$calls)" \
     'a machine loses the retired casks, and keeps Alcove and Vorssaint'
 
+# The Brewfile stopped installing LinearMouse, which Vorssaint replaces.
+rm -rf $state
+printf '%s\n' linearmouse raycast vorssaint >$fixtures/brew-list
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with LinearMouse finishes every shipped migration'
+assert_equal 'brew uninstall --cask linearmouse' \
+    "$(string match -r '^brew uninstall .*' <$calls)" \
+    'a machine loses LinearMouse, and keeps Raycast and Vorssaint'
+
 # When Homebrew cannot report what is installed, nothing is assumed retired.
 rm -rf $state
 touch $fixtures/brew-list-fails

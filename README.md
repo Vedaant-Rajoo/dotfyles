@@ -82,7 +82,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `karabiner/`, `linearmouse/`, `rectangle-pro/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `karabiner/`, `rectangle-pro/` |
 
 ## Ownership
 
@@ -182,7 +182,7 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
    from `~` to install the default runtimes from `mise/mise.toml`. Fish puts mise's shims on `PATH`
    the same way on Linux.
 5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
-6. Replace macOS-only integrations (OrbStack, LinearMouse, Vorssaint, `macos-*` Ghostty) with
+6. Replace macOS-only integrations (OrbStack, Vorssaint, `macos-*` Ghostty) with
    Linux equivalents.
 7. `bin/u` is macOS-only. After `git pull`, run `mise install && mise upgrade` from `~`, then
    `bin/migrate`.
