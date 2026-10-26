@@ -28,6 +28,7 @@ for path in \
         herdr/session.json \
         herdr/herdr.sock.agent \
         herdr/session-snapshots/session-1-1-0.json \
+        karabiner/automatic_backups/karabiner_20261026.json \
         legcord/Cookies \
         .local/docs/research.md
     assert_equal ignored (ignored $path) "$path stays out of commits"
@@ -39,6 +40,7 @@ for path in \
         fish/conf.d/50-mise.fish \
         fish/functions/reload.fish \
         herdr/config.toml \
+        karabiner/karabiner.json \
         legcord/storage/settings.json \
         mise/mise.toml \
         agents/skill-lock.json

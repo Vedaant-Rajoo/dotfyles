@@ -20,6 +20,7 @@ brew "fzf"
 brew "gnu-tar"
 brew "gum"
 brew "jq"
+brew "mole"
 brew "ripgrep"
 brew "tlrc"
 brew "trash"
@@ -71,13 +72,12 @@ cask "t3-code@nightly"
 
 # Productivity and desktop UI
 cask "alcove"
-cask "bartender"
-cask "dockdoor"
-cask "hyperkey"
+cask "karabiner-elements"
 cask "linearmouse"
 cask "raycast"
 cask "rectangle-pro"
 cask "shottr"
+cask "vorssaint"
 cask "wallspace"
 cask "wispr-flow"
 
@@ -91,7 +91,6 @@ cask "tailscale-app"
 
 # Hardware and system utilities
 cask "logitech-g-hub"
-cask "macs-fan-control"
 cask "music-presence"
 cask "wakatime"
 
@@ -101,12 +100,10 @@ cask "league-of-legends"
 # bin/bootstrap installs the universal bootstrapper via i1rr/steam-arm64-mac.
 
 # Mac App Store apps (requires App Store sign-in)
-mas "Amphetamine", id: 937984704
 mas "Hush", id: 1544743900
 mas "Proton Pass for Safari", id: 6502835663
 mas "Tampermonkey", id: 6738342400
 # NepTunes (App Store 1006739057) runs as a TestFlight beta; mas cannot see beta installs, so join it in TestFlight.
 mas "TestFlight", id: 899247664
-mas "TrashMe 3", id: 1490879410
 mas "Wipr", id: 1662217862
 mas "Xcode", id: 497799835

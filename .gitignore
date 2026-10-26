@@ -64,6 +64,11 @@ legcord/storage/*
 .cache/
 __pycache__/
 
+# --- Karabiner-Elements: only karabiner.json is tracked; the app also writes
+#     automatic_backups/ and downloaded rule assets here. ---
+karabiner/*
+!karabiner/karabiner.json
+
 # --- Herdr: only config.toml is tracked; the rest is runtime state. ---
 herdr/*
 !herdr/config.toml

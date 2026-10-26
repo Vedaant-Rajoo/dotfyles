@@ -82,7 +82,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `linearmouse/`, `rectangle-pro/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `karabiner/`, `linearmouse/`, `rectangle-pro/` |
 
 ## Ownership
 
@@ -120,7 +120,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
 - Native app auth — [OpenCode](docs/setup.md#opencode),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
-  [Cursor, Codex, DockDoor, Raycast](docs/setup.md#cursor-codex-dockdoor-and-raycast).
+  [Cursor, Codex, Raycast](docs/setup.md#cursor-codex-and-raycast).
 
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
@@ -182,7 +182,7 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
    from `~` to install the default runtimes from `mise/mise.toml`. Fish puts mise's shims on `PATH`
    the same way on Linux.
 5. Run `fish -c 'fisher update'` and authenticate each AI harness natively.
-6. Replace macOS-only integrations (OrbStack, LinearMouse, DockDoor, `macos-*` Ghostty) with
+6. Replace macOS-only integrations (OrbStack, LinearMouse, Vorssaint, `macos-*` Ghostty) with
    Linux equivalents.
 7. `bin/u` is macOS-only. After `git pull`, run `mise install && mise upgrade` from `~`, then
    `bin/migrate`.

@@ -85,7 +85,9 @@ printf '%s\n' '#!/bin/sh' 'echo "brew $*" >>"'$calls'"' \
 printf '%s\n' '#!/bin/sh' 'echo "mise $*" >>"'$calls'"' \
     '[ "$1" = which ] && grep -qx "$2" "$FIXTURES/mise-lacks" 2>/dev/null && exit 1' 'exit 0' >$stubs/mise
 printf '%s\n' '#!/bin/sh' 'echo "npm $*" >>"'$calls'"' >$stubs/npm
-chmod +x $stubs/brew $stubs/mise $stubs/npm
+printf '%s\n' '#!/bin/sh' '[ "$1" = list ] && cat "$FIXTURES/mas-list" 2>/dev/null' 'exit 0' >$stubs/mas
+printf '%s\n' '#!/bin/sh' 'echo "sudo $*" >>"'$calls'"' >$stubs/sudo
+chmod +x $stubs/brew $stubs/mise $stubs/npm $stubs/mas $stubs/sudo
 
 function uninstalled
     string match -rg '^brew uninstall (.*)' <$calls | string split ' ' | sort | string join ' '
@@ -93,6 +95,10 @@ end
 
 function npm_calls
     string match -r '^npm .*' <$calls
+end
+
+function sudo_calls
+    string match -r '^sudo .*' <$calls
 end
 
 function shipped_pending
@@ -108,6 +114,7 @@ run_migrate $repo_root/bin/migrate
 assert_equal 0 $migrate_status 'on a new machine every shipped migration succeeds'
 assert_equal '' "$(uninstalled)" 'on a new machine the migrations uninstall nothing'
 assert_equal '' "$(npm_calls)" 'on a new machine the migrations leave global npm packages alone'
+assert_equal '' "$(sudo_calls)" 'on a new machine the migrations remove no App Store apps'
 assert_equal 0 (shipped_pending) 'on a new machine every shipped migration is recorded as done'
 
 # An old machine whose mise cannot run Bun yet, as when `mise install` failed to
@@ -151,6 +158,24 @@ run_migrate $repo_root/bin/migrate
 assert_equal 0 $migrate_status 'a machine with the Augment CLI finishes every shipped migration'
 assert_equal 'npm uninstall --global @augmentcode/auggie' "$(npm_calls)" \
     'a machine with the Augment CLI loses it, and no other global npm package'
+
+# The Brewfile stopped installing Amphetamine and TrashMe 3.
+rm -rf $state
+printf '%s\n' '937984704  Amphetamine  (5.3.2)' '1490879410  TrashMe 3  (3.8)' '497799835  Xcode  (26.0)' >$fixtures/mas-list
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with Amphetamine and TrashMe 3 finishes every shipped migration'
+assert_equal 'sudo mas uninstall 937984704 1490879410' "$(sudo_calls)" \
+    'a machine loses Amphetamine and TrashMe 3, and no other App Store app'
+rm -f $fixtures/mas-list
+
+# The Brewfile stopped installing the apps Vorssaint replaces, and Bartender.
+rm -rf $state
+printf '%s\n' alcove bartender dockdoor hyperkey macs-fan-control vorssaint >$fixtures/brew-list
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with the retired casks finishes every shipped migration'
+assert_equal 'brew uninstall --cask bartender dockdoor hyperkey macs-fan-control' \
+    "$(string match -r '^brew uninstall .*' <$calls)" \
+    'a machine loses the retired casks, and keeps Alcove and Vorssaint'
 
 # When Homebrew cannot report what is installed, nothing is assumed retired.
 rm -rf $state

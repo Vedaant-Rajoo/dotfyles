@@ -93,4 +93,4 @@ been verified:
 2. Move the legacy app bundle to Trash.
 3. Delete the inert `t3-busy` trigger from Amphetamine.
 
-Amphetamine itself remains installed for manual or unrelated use.
+Amphetamine is no longer installed; a migration removes it.

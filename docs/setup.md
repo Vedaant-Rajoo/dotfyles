@@ -137,9 +137,9 @@ stay machine-local. On Linux no link is needed — Electron's config directory f
 Legcord is `~/.config/legcord` itself — and the tracked `.gitignore` rules keep
 everything except `storage/settings.json` out of version control there.
 
-## Cursor, Codex, DockDoor, and Raycast
+## Cursor, Codex, and Raycast
 
-The Brewfile installs Cursor, Codex, DockDoor, and Raycast. Install Cursor Agent
+The Brewfile installs Cursor, Codex, and Raycast. Install Cursor Agent
 separately if needed, then authenticate it with `cursor-agent login`. Sign in
 to other harnesses using their native flows. Mutable native settings remain
 deliberately untracked:
@@ -148,11 +148,28 @@ deliberately untracked:
   account-backed user rules;
 - Codex `~/.codex/config.toml`, authentication, memories, plugins, and session
   state;
-- DockDoor plist preferences;
 - Raycast Beta preferences, databases, and downloaded extensions.
 
 Sign in and configure the native state manually. Select Raycast's Beta channel
 inside the application if desired; the Brewfile installs the `raycast` cask.
+
+## Karabiner-Elements
+
+The Brewfile installs Karabiner-Elements, and its rules live in the tracked
+`karabiner/karabiner.json`. On first launch, allow its driver extension in
+System Settings > General > Login Items & Extensions, then grant Input Monitoring
+to each Karabiner process that macOS asks about. Held Caps Lock is hyper
+(⌃⌥⇧⌘) and tapped Caps Lock toggles Caps Lock; hyper with h, j, k, or l sends
+the arrow keys.
+
+## Vorssaint
+
+The Brewfile installs Vorssaint, which replaces DockDoor, Hyperkey, and Macs Fan
+Control. Its features install one by one from Settings > Features:
+add Dock Preview, App switcher, and Fan Control, then grant the permissions
+that setup asks for. Leave its Super key off: Karabiner owns Caps Lock, and
+Vorssaint would add its modifiers to Karabiner's arrow keys. Its settings stay machine-local; move them to
+another Mac with Vorssaint's own export.
 
 ## OrbStack and Docker
 

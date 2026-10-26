@@ -3,8 +3,10 @@
 #
 # Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
 # Store apps, mise's language runtimes, pending migrations, the Rust toolchain,
-# npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
-# upgraded, and reopened immediately. Lifecycle state lives in fish variables:
+# npm globals, agent skills, and Fisher plugins. Name sections to run only
+# those (`u brew mas`); no arguments run every section. A cask whose app is
+# running is gracefully quit (force-quit on request), upgraded, and reopened
+# immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
 
@@ -42,8 +44,17 @@ function u_run_brew_upgrade
     return $upgrade_status
 end
 
-# Runs one non-Homebrew updater. A failure is recorded and the run continues.
+set -g U_SECTION_NAMES nvim brew mas mise migrations rustup npm skills fisher
+
+# True when the run selected this section; no selection means every section.
+function u_want --argument-names section
+    test (count $U_SECTIONS) -eq 0; or contains -- $section $U_SECTIONS
+end
+
+# Runs one non-Homebrew updater, named by its section. A failure is recorded and
+# the run continues.
 function u_run_step --argument-names log_file category title
+    u_want $category; or return 0
     u_run_logged "$log_file" gum spin --spinner globe --title "$title" --show-output -- $argv[4..-1]
     if test $status -eq 0
         u_log "$log_file" ""
@@ -56,6 +67,7 @@ end
 
 # Upgrades every outdated npm global except postplan, which bin/bootstrap pins.
 function u_npm_upgrade --argument-names log_file
+    u_want npm; or return 0
     set -l names (npm outdated -g --json 2>/dev/null | jq -r 'keys[] | select(. != "postplan")')
     or begin
         u_record_failure npm all 'npm outdated -g --json was unreadable'
@@ -449,6 +461,14 @@ function u_main
     # get the machine defaults, not the pins of whatever project u started in.
     cd $HOME; or return 1
 
+    for section in $argv
+        if not contains -- $section $U_SECTION_NAMES
+            echo "u: unknown section '$section'; choose from: $U_SECTION_NAMES" >&2
+            return 2
+        end
+    end
+    set -g U_SECTIONS $argv
+
     # Include Raycast and Tailscale even though their casks advertise in-app
     # updates. Tailscale's pkg quits and relaunches the app itself.
     set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast tailscale-app)
@@ -480,132 +500,149 @@ function u_main
         exit 1
     end
 
-    u_run_logged "$log_file" gum spin --spinner globe --title "💤 nvim maintaining (lazy, mason, treesitter)..." -- nvim --headless "+Lazy! sync" "+MasonUpdate" "+TSUpdate" +qa; or exit $status
-    u_log "$log_file" ""
-    echo "✅ 💤 nvim maintained (lazy, mason, treesitter)"
-
-    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update; or exit $status
-    u_log "$log_file" ""
-    echo "✅ 🍻 brew updated"
-
-    set -l outdated_json (brew outdated --json=v2)
-    set -l outdated_status $status
-    if test $outdated_status -ne 0
-        return $outdated_status
-    end
-    u_log "$log_file" "$outdated_json"
-
-    set -l formulae (u_outdated_names formulae $outdated_json)
-    set -l formulae_status $status
-    if test $formulae_status -ne 0
-        return $formulae_status
-    end
-
-    set -l casks (u_outdated_names casks $outdated_json)
-    set -l casks_status $status
-    if test $casks_status -ne 0
-        return $casks_status
-    end
-
+    # Declared here because the brew section's block would scope them away from
+    # the summary.
+    set -l casks
     set -l upgraded_casks
     set -l skipped_casks
     set -l failed_casks
     set -l final_status 0
 
-    if test (count $formulae) -eq 0; and test (count $casks) -eq 0
-        u_log "$log_file" "No outdated brew packages"
-    else
-        # no spinner here: upgrades can prompt for sudo, and gum spin swallows the prompt
-        echo "🍻 brew upgrading..."
+    if u_want nvim
+        u_run_logged "$log_file" gum spin --spinner globe --title "💤 nvim maintaining (lazy, mason, treesitter)..." -- nvim --headless "+Lazy! sync" "+MasonUpdate" "+TSUpdate" +qa; or exit $status
+        u_log "$log_file" ""
+        echo "✅ 💤 nvim maintained (lazy, mason, treesitter)"
+    end
 
-        # Formulae are one fail-fast phase. No application has been stopped yet.
-        if test (count $formulae) -gt 0
-            u_run_brew_upgrade "$log_file" --formula $formulae
-            set -l formula_status $status
-            if test $formula_status -ne 0
-                return $formula_status
-            end
+    if u_want brew
+        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew updating" --show-output -- brew update; or exit $status
+        u_log "$log_file" ""
+        echo "✅ 🍻 brew updated"
+
+        set -l outdated_json (brew outdated --json=v2)
+        set -l outdated_status $status
+        if test $outdated_status -ne 0
+            return $outdated_status
+        end
+        u_log "$log_file" "$outdated_json"
+
+        set -l formulae (u_outdated_names formulae $outdated_json)
+        set -l formulae_status $status
+        if test $formulae_status -ne 0
+            return $formulae_status
         end
 
-        if test (count $casks) -gt 0
-            # One batched metadata call for every outdated cask. Tokens come
-            # straight from brew outdated, so brew failing here means no cask
-            # has trustworthy app metadata.
-            set -l cask_json (brew info --cask --json=v2 $casks)
-            set -l info_status $status
-            if test $info_status -ne 0
-                u_record_failure cask-metadata all 'brew info --cask --json=v2 failed'
-                set failed_casks $casks
-            else
+        set casks (u_outdated_names casks $outdated_json)
+        set -l casks_status $status
+        if test $casks_status -ne 0
+            return $casks_status
+        end
+
+        if test (count $formulae) -eq 0; and test (count $casks) -eq 0
+            u_log "$log_file" "No outdated brew packages"
+        else
+            # no spinner here: upgrades can prompt for sudo, and gum spin swallows the prompt
+            echo "🍻 brew upgrading..."
+
+            # Formulae are one fail-fast phase. No application has been stopped yet.
+            if test (count $formulae) -gt 0
+                u_run_brew_upgrade "$log_file" --formula $formulae
+                set -l formula_status $status
+                if test $formula_status -ne 0
+                    return $formula_status
+                end
+            end
+
+            if test (count $casks) -gt 0
+                # One batched metadata call for every outdated cask. Tokens come
+                # straight from brew outdated, so brew failing here means no cask
+                # has trustworthy app metadata.
+                set -l cask_json (brew info --cask --json=v2 $casks)
+                set -l info_status $status
+                if test $info_status -ne 0
+                    u_record_failure cask-metadata all 'brew info --cask --json=v2 failed'
+                    set failed_casks $casks
+                else
+                    for token in $casks
+                        if not u_prepare_cask "$token" $cask_json
+                            contains -- "$token" $failed_casks; or set -a failed_casks "$token"
+                        end
+                    end
+                    u_confirm_running_apps
+                end
+
                 for token in $casks
-                    if not u_prepare_cask "$token" $cask_json
-                        contains -- "$token" $failed_casks; or set -a failed_casks "$token"
+                    if contains -- "$token" $failed_casks
+                        continue
+                    end
+                    if u_token_skipped "$token"
+                        contains -- "$token" $skipped_casks; or set -a skipped_casks "$token"
+                        continue
+                    end
+
+                    u_upgrade_cask "$log_file" "$token"
+                    set -l cask_status $status
+                    switch $cask_status
+                        case 0
+                            set -a upgraded_casks "$token"
+                        case 2
+                            contains -- "$token" $skipped_casks; or set -a skipped_casks "$token"
+                        case '*'
+                            contains -- "$token" $failed_casks; or set -a failed_casks "$token"
                     end
                 end
-                u_confirm_running_apps
             end
 
-            for token in $casks
-                if contains -- "$token" $failed_casks
-                    continue
-                end
-                if u_token_skipped "$token"
-                    contains -- "$token" $skipped_casks; or set -a skipped_casks "$token"
-                    continue
-                end
+            u_log "$log_file" ""
+            if test (count $failed_casks) -gt 0
+                set -l phase_message '⚠️ 🍻 brew upgrade phase completed with failures'
+                echo "$phase_message"
+                u_log "$log_file" "$phase_message"
+            else if test (count $skipped_casks) -gt 0
+                set -l phase_message '🍻 brew upgrade phase completed with skipped casks'
+                echo "$phase_message"
+                u_log "$log_file" "$phase_message"
+            else
+                echo "✅ 🍻 brew upgraded"
+            end
 
-                u_upgrade_cask "$log_file" "$token"
-                set -l cask_status $status
-                switch $cask_status
-                    case 0
-                        set -a upgraded_casks "$token"
-                    case 2
-                        contains -- "$token" $skipped_casks; or set -a skipped_casks "$token"
-                    case '*'
-                        contains -- "$token" $failed_casks; or set -a failed_casks "$token"
-                end
+            u_reopen_closed
+            if test $status -ne 0
+                u_record_failure lifecycle-cleanup all 'unable to restore every tracked application'
+                set final_status 1
+            end
+
+            u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all
+            if test $status -eq 0
+                u_log "$log_file" ""
+                echo "✅ 🍻 brew cleaned up"
+            else
+                u_record_failure brew-cleanup all 'brew cleanup --prune=all failed'
+                set final_status 1
             end
         end
 
-        u_log "$log_file" ""
-        if test (count $failed_casks) -gt 0
-            set -l phase_message '⚠️ 🍻 brew upgrade phase completed with failures'
-            echo "$phase_message"
-            u_log "$log_file" "$phase_message"
-        else if test (count $skipped_casks) -gt 0
-            set -l phase_message '🍻 brew upgrade phase completed with skipped casks'
-            echo "$phase_message"
-            u_log "$log_file" "$phase_message"
-        else
-            echo "✅ 🍻 brew upgraded"
-        end
-
-        u_reopen_closed
-        if test $status -ne 0
-            u_record_failure lifecycle-cleanup all 'unable to restore every tracked application'
-            set final_status 1
-        end
-
-        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew cleaning up" --show-output -- brew cleanup --prune=all
+        u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor
         if test $status -eq 0
             u_log "$log_file" ""
-            echo "✅ 🍻 brew cleaned up"
+            echo "✅ 🍻 brew doctored"
         else
-            u_record_failure brew-cleanup all 'brew cleanup --prune=all failed'
+            u_record_failure brew-doctor all 'brew doctor failed'
             set final_status 1
         end
     end
 
-    u_run_logged "$log_file" gum spin --spinner globe --title "🍻 brew doctoring" --show-output -- brew doctor
-    if test $status -eq 0
-        u_log "$log_file" ""
-        echo "✅ 🍻 brew doctored"
-    else
-        u_record_failure brew-doctor all 'brew doctor failed'
-        set final_status 1
+    # no spinner: mas needs root, and gum spin swallows the sudo password prompt
+    if u_want mas
+        echo "🍎 App Store apps updating..."
+        if u_run_logged "$log_file" sudo mas upgrade
+            u_log "$log_file" ""
+            echo "✅ 🍎 App Store apps"
+        else
+            u_record_failure mas all 'sudo mas upgrade failed'
+            set final_status 1
+        end
     end
-
-    u_run_step "$log_file" mas "🍎 App Store apps" mas upgrade; or set final_status 1
     # `mise upgrade` skips tools that were never installed, so runtimes newly
     # declared in mise/mise.toml are installed first. Both run before npm, so
     # npm globals upgrade under the patched Node.
@@ -618,13 +655,15 @@ function u_main
     u_run_step "$log_file" skills "🧠 agent skills" $U_AGENT_SKILLS update; or set final_status 1
 
     # Fisher is a fish function, which gum spin cannot run.
-    echo "🐟 fisher updating..."
-    if u_run_logged "$log_file" fisher update
-        u_log "$log_file" ""
-        echo "✅ 🐟 fisher updated"
-    else
-        u_record_failure fisher all 'fisher update failed'
-        set final_status 1
+    if u_want fisher
+        echo "🐟 fisher updating..."
+        if u_run_logged "$log_file" fisher update
+            u_log "$log_file" ""
+            echo "✅ 🐟 fisher updated"
+        else
+            u_record_failure fisher all 'fisher update failed'
+            set final_status 1
+        end
     end
 
     if test (count $casks) -gt 0

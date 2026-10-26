@@ -487,6 +487,7 @@ u_test_mock nvim 'echo "cwd nvim $PWD" >>"$U_MOCK_LOG"'
 u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
 u_test_mock mas 'exit 0'
+u_test_mock sudo 'exec $argv'
 u_test_mock mise 'echo "cwd mise $PWD" >>"$U_MOCK_LOG"
 test -e "$U_MOCK_DIR/exit-mise-$argv[1]"; and exit 1
 exit 0'
@@ -572,12 +573,13 @@ function u_test_output_contains --argument-names needle
     end
 end
 
+# Arguments after start_dir pass through to u_main as section names.
 function u_test_run_main --argument-names case_name start_dir
     set -l output_file "$u_mock_root/$case_name.out"
     test -n "$start_dir"; or set start_dir $PWD
     cd $start_dir
     env U_TEST_MODE=1 U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
-        U_AGENT_SKILLS="$u_mock_bin/agent-skills" U_MIGRATE="$u_mock_bin/migrate" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
+        U_AGENT_SKILLS="$u_mock_bin/agent-skills" U_MIGRATE="$u_mock_bin/migrate" fish --no-config -c 'source "$argv[1]"; u_main $argv[2..-1]' "$repo_root/bin/u" $argv[3..-1] >"$output_file" 2>&1
     set -g u_test_main_status $status
     cd $repo_root
     set -g u_test_main_output (string collect <"$output_file")
@@ -623,7 +625,7 @@ assert_equal 0 (u_test_calls '^brew cleanup ') \
     'main preserves the no-outdated path without cleanup'
 assert_equal 1 (u_test_calls '^brew doctor$') \
     'main still doctors Homebrew when nothing is outdated'
-assert_equal 1 (u_test_calls '^mas upgrade$') 'main upgrades App Store apps'
+assert_equal 1 (u_test_calls '^sudo mas upgrade$') 'main upgrades App Store apps as root'
 assert_equal 1 (u_test_calls '^rustup update$') 'main updates the Rust toolchain'
 assert_call_before '^mise install$' '^mise upgrade$' \
     'main installs newly declared runtimes before upgrading the rest'
@@ -936,5 +938,20 @@ for case in INT:130 TERM:143
     assert_equal 0 (u_test_calls '^brew upgrade --cask calm$') \
         "SIG$signal stops the run before the next cask"
 end
+
+# Named sections run alone; an unknown name stops before any work.
+u_test_reset
+u_test_run_main sections-selected $PWD mas fisher
+assert_equal 0 $u_test_main_status 'a run limited to named sections succeeds'
+assert_equal 1 (u_test_calls '^sudo mas upgrade$') 'a named section runs'
+assert_equal 1 (u_test_calls '^fisher update$') 'every named section runs'
+assert_equal 0 (u_test_calls '^brew ') 'an unnamed section is skipped'
+assert_equal 0 (u_test_calls '^nvim ') 'an unnamed section before the named ones is skipped'
+assert_equal 0 (u_test_calls '^npm ') 'an unnamed step section is skipped'
+
+u_test_reset
+u_test_run_main sections-unknown $PWD brw
+assert_equal 2 $u_test_main_status 'an unknown section name is rejected'
+assert_equal 0 (u_test_calls '^nvim ') 'an unknown section name stops before any work'
 
 harness_exit
