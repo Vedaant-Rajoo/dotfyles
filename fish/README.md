@@ -34,22 +34,34 @@ Command-line tools come from the [Brewfile](../Brewfile) and plugins from
 `fish_plugins`. Each module is guarded so Fish still starts cleanly when an
 optional tool is missing.
 
-## Startup caches
+## Runtimes
 
-`pyenv init` and `zoxide init` are the two slowest startup calls, so their
-output is cached in `~/.cache/fish` (`pyenv-init-<escaped PYENV_ROOT>.fish`,
-`zoxide-init.fish`) and regenerated only when the tool's binary is newer than
-the cache. A failed regeneration keeps the last good cache. The pyenv cache is
-keyed by `PYENV_ROOT` because the generated init hard-codes that root's shim
-path, so a shell with a custom root gets its own cache instead of the default
-root's Python.
+`conf.d/50-mise.fish` puts mise's shims first on `PATH` in every shell,
+interactive or not. Each shim picks the runtime version from the working
+directory when it runs, so a `cd` takes effect at once, and starting a shell
+runs no mise process. The defaults come from
+[`mise/mise.toml`](../mise/mise.toml).
+
+`mise activate` is deliberately unused. It takes the shims off `PATH`, so a
+project pinning a version that is not installed would quietly run Homebrew's
+dependency Node or Python instead of failing. The module also disables the
+activation snippet that Homebrew's mise installs into Fish.
 
 Consequences worth knowing:
 
-- There is no automatic pyenv virtualenv activation and no per-prompt hook.
-  Activate manually with `pyenv activate <name>`.
-- Shims are not rehashed on startup. Run `pyenv rehash` after pip-installing a
-  command-line tool.
-- If a cache ever goes stale — say a Homebrew bottle installs with an older
-  mtime than the cache — rebuild it with
-  `rm ~/.cache/fish/pyenv-init-*.fish ~/.cache/fish/zoxide-init.fish; reload`.
+- There is no per-prompt hook and no automatic virtualenv activation. Activate
+  a project's environment with `source .venv/bin/activate.fish`.
+- A command-line tool pip-installed into a mise Python appears on `PATH` only
+  after `mise reshim`.
+- A tool that mise installs for one project, with no default in
+  `mise/mise.toml`, fails in every other directory instead of running the
+  Homebrew copy. Give it a default with `mise use -g`, which makes mise its
+  owner, and retire its Brewfile entry.
+
+## Startup cache
+
+`zoxide init` is the slowest startup call, so its output is cached in
+`~/.cache/fish/zoxide-init.fish` and regenerated only when the zoxide binary is
+newer than the cache. A failed regeneration keeps the last good cache. If the
+cache ever goes stale (say a Homebrew bottle installs with an older mtime than
+the cache), rebuild it with `rm ~/.cache/fish/zoxide-init.fish; reload`.

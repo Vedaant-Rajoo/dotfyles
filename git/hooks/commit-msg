@@ -7,7 +7,7 @@
 #
 # ~/.config enables it through core.hooksPath (bin/bootstrap); other repos opt
 # in with a hook.scoped-commits config entry (docs/setup.md). The interpreter is
-# the system python3 on purpose: a pyenv shim would read an opted-in repo's
+# the system python3 on purpose: a mise shim would read an opted-in repo's
 # .python-version, and a version missing there would block every commit.
 import re
 import subprocess

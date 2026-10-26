@@ -2,7 +2,8 @@
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
 # Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
-# Store apps, the Rust toolchain, npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
+# Store apps, mise's language runtimes, pending migrations, the Rust toolchain,
+# npm globals, agent skills, and Fisher plugins. A cask whose app is running is gracefully quit (force-quit on request),
 # upgraded, and reopened immediately. Lifecycle state lives in fish variables:
 # the signal/exit handlers reopen anything still closed, and a hard kill at
 # worst leaves an app to reopen from the Dock.
@@ -15,6 +16,9 @@ if not set -q U_LIFECYCLE_HELPER
 end
 if not set -q U_AGENT_SKILLS
     set -g U_AGENT_SKILLS (dirname (path resolve (status filename)))/agent-skills
+end
+if not set -q U_MIGRATE
+    set -g U_MIGRATE (dirname (path resolve (status filename)))/migrate
 end
 
 # In-memory lifecycle state, tab-joined rows:
@@ -346,14 +350,19 @@ function u_cleanup_on_exit --on-event fish_exit
     return $exit_status
 end
 
+# `exit` inside a signal handler ends fish with status 0, which would report an
+# interrupted run as a success. Remove the handler and re-raise the signal so
+# the caller sees the interruption.
 function u_cleanup_on_sigint --on-signal SIGINT
     u_reopen_closed
-    exit 130
+    functions -e u_cleanup_on_sigint
+    kill -s INT $fish_pid
 end
 
 function u_cleanup_on_sigterm --on-signal SIGTERM
     u_reopen_closed
-    exit 143
+    functions -e u_cleanup_on_sigterm
+    kill -s TERM $fish_pid
 end
 
 function u_report_cask_group --argument-names log_file label
@@ -436,6 +445,10 @@ function u_upgrade_cask --argument-names log_file token
 end
 
 function u_main
+    # mise selects runtimes from the working directory. Machine maintenance must
+    # get the machine defaults, not the pins of whatever project u started in.
+    cd $HOME; or return 1
+
     # Include Raycast and Tailscale even though their casks advertise in-app
     # updates. Tailscale's pkg quits and relaunches the app itself.
     set -lx HOMEBREW_UPGRADE_GREEDY_CASKS (string join ' ' -- $HOMEBREW_UPGRADE_GREEDY_CASKS raycast tailscale-app)
@@ -593,6 +606,13 @@ function u_main
     end
 
     u_run_step "$log_file" mas "🍎 App Store apps" mas upgrade; or set final_status 1
+    # `mise upgrade` skips tools that were never installed, so runtimes newly
+    # declared in mise/mise.toml are installed first. Both run before npm, so
+    # npm globals upgrade under the patched Node.
+    u_run_step "$log_file" mise "🧰 mise install" mise install; or set final_status 1
+    u_run_step "$log_file" mise "🧰 mise upgrade" mise upgrade; or set final_status 1
+    # After the runtimes, because a migration may retire what they replace.
+    u_run_step "$log_file" migrations "🧳 migrations" $U_MIGRATE; or set final_status 1
     u_run_step "$log_file" rustup "🦀 rustup" rustup update; or set final_status 1
     u_npm_upgrade "$log_file"; or set final_status 1
     u_run_step "$log_file" skills "🧠 agent skills" $U_AGENT_SKILLS update; or set final_status 1

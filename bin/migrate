@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# migrate — apply this repository's one-time machine migrations.
+#
+# A migration brings an existing machine in line with the current
+# configuration, for example by uninstalling a package manager it retired.
+# bin/bootstrap and bin/u run this. Each file in migrations/ runs once per
+# machine, in name order, under `bash -euo pipefail`; a migration that fails
+# stays pending and stops the queue, so no later one runs against state the
+# failed one did not establish. migrations/README.md has the authoring rules.
+#
+# Usage:
+#   migrate             Run every pending migration.
+#   migrate --pending   List pending migrations; exit 0 only if there are any.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+export REPO_ROOT
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfyles/migrations"
+
+pending() {
+	local file
+	for file in "$REPO_ROOT"/migrations/*.sh; do
+		[[ -f $file ]] || continue
+		[[ -e $STATE_DIR/${file##*/} ]] || printf '%s\n' "${file##*/}"
+	done
+}
+
+case "${1:-}" in
+--pending)
+	names="$(pending)"
+	[[ -n $names ]] || exit 1
+	printf '%s\n' "$names"
+	;;
+"")
+	# mise selects runtimes from the working directory; migrations act on the
+	# machine defaults, not on the pins of the directory this started in.
+	cd "$HOME"
+	mkdir -p "$STATE_DIR"
+	# shortcut: no lock, so two concurrent runs can both apply a pending
+	# migration; idempotent migrations make that harmless. Add one if they stop being so.
+	for name in $(pending); do
+		printf '==> migration %s\n' "$name"
+		if ! bash -euo pipefail "$REPO_ROOT/migrations/$name"; then
+			printf 'migrate: %s did not finish; it stays pending, and later migrations wait for it\n' "$name" >&2
+			exit 1
+		fi
+		touch "$STATE_DIR/$name"
+	done
+	;;
+*)
+	echo 'usage: migrate [--pending]' >&2
+	exit 64
+	;;
+esac

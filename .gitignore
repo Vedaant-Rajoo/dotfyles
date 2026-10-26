@@ -40,8 +40,7 @@ fish/conf.d/*
 !fish/conf.d/30-fzf.fish
 !fish/conf.d/35-herdr-sessionizer.fish
 !fish/conf.d/40-zoxide.fish
-!fish/conf.d/50-node.fish
-!fish/conf.d/55-python.fish
+!fish/conf.d/50-mise.fish
 !fish/conf.d/rustup.fish
 fish/completions/
 
@@ -65,12 +64,9 @@ legcord/storage/*
 .cache/
 __pycache__/
 
-# --- Herdr runtime (keep config.toml) ---
-herdr/*.sock
-herdr/.plugins.lock
-herdr/session.json
-herdr/session-history.json
-herdr/release-notes.json
+# --- Herdr: only config.toml is tracked; the rest is runtime state. ---
+herdr/*
+!herdr/config.toml
 
 # --- Claude Code, project-local: generated plan pages. The sensitive
 #     **/.claude runtime paths (projects, sessions, credentials, …) are NOT

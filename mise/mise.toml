@@ -1,0 +1,39 @@
+# Global mise config, read as ~/.config/mise/mise.toml. It owns the machine's
+# default language runtimes; a project's .node-version, .nvmrc,
+# .python-version, or mise.toml overrides them inside that project.
+# `mise use -g` edits this file, bin/bootstrap installs what it lists, and
+# bin/u installs new entries and upgrades the rest. Rust stays with rustup.
+#
+# Defaults follow release lines rather than exact versions, so `mise upgrade`
+# brings security fixes. Node stays on 24.x and Python on 3.14.x, which keeps
+# the ABI that compiled npm modules and virtualenvs were built against; the
+# other tools follow their latest release.
+#
+# Keep this file name. mise treats a mise/config.toml found in any directory as
+# that directory's project config, so every worktree of this repository would
+# carry an untrusted copy, and mise refuses to run in a directory whose project
+# config has untrusted [settings]. A worktree's mise/mise.toml is ignored unless
+# the working directory is that worktree's mise/ folder itself.
+
+[tools]
+node = "24"
+python = "3.14"
+bun = "latest"
+go = "latest"
+pnpm = "latest"
+
+[settings]
+# mise reads .node-version, .nvmrc, and .python-version only for tools listed here.
+idiomatic_version_file_enable_tools = ["node", "python"]
+# A pinned version that is not installed fails and names `mise install`. By
+# default mise would download it because a cloned repository asked for it, or
+# quietly run the next one on PATH, such as Homebrew's dependency Python.
+# The cost: a tool that mise installs for one project, with no default here,
+# fails outside that project instead of running Homebrew's copy. Give it a
+# default here and retire its Brewfile entry.
+auto_install = false
+not_found_system_fallback = false
+# Keep the version an upgrade replaced: removing it would pull the runtime out
+# from under running processes and virtualenvs built on it. Remove old
+# versions on purpose with `mise prune`.
+upgrade.auto_prune = false

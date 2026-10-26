@@ -49,6 +49,33 @@ Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also
 requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal
 authentication flow and never commit its API key.
 
+## Moving an existing machine to mise
+
+On a machine bootstrapped before mise owned the language runtimes, run
+`brew install mise` first: `bin/u` upgrades what Homebrew has but installs no
+new Brewfile entries. The next `bin/u` then installs the mise defaults and runs
+the migrations that uninstall fnm, pyenv, pyenv-virtualenv, and Homebrew's Bun,
+pnpm, prettier, and prettierd; Homebrew removes its Node with them unless
+another formula still needs it. A migration waits, and says so, until mise can
+run every replacement. Open a new shell afterwards and check:
+
+```bash
+command -s node python3 bun go pnpm   # all in ~/.local/share/mise/shims
+npm ls -g --depth=0                   # globals stay in ~/.node_modules
+```
+
+The migrations keep `~/.pyenv` and `~/.local/share/fnm`. mise's Python is a
+prebuilt python-build-standalone interpreter rather than pyenv's local build,
+so recreate any virtualenv that points into `~/.pyenv/versions`, then delete
+both directories by hand. Global npm modules with compiled parts need
+`npm rebuild -g` only when the default Node major version changes.
+
+A project that pins a version mise has not installed fails with a message
+naming `mise install`; run it in that project. JavaScript projects list
+prettier as a dev dependency (`bun add -d prettier` or `npm i -D prettier`).
+Neovim formats with that copy; outside a project, JavaScript and TypeScript
+fall back to the language server, and JSON, HTML, and CSS stay as written.
+
 ## Postplan
 
 `bin/bootstrap` installs the standalone `postplan@0.0.4` CLI. If needed,
@@ -211,5 +238,6 @@ when the standard changes.
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
 | `nvim/tmp/`, caches and logs | Generated state |
+| `~/.local/share/mise/`, `~/.local/state/mise/`, mise's cache | Installed runtimes, shims, trust records, and downloads; `mise install` recreates them from `mise/mise.toml` |
 | `~/.rustup/`, `~/.cargo/` | Rust toolchains, downloaded crates, and build caches; `bin/bootstrap` installs them with the official rustup installer rather than copying them from a clone |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

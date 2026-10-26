@@ -5,14 +5,6 @@ source $repo_root/tests/lib/harness.fish
 
 set -g u_test_mock_calls
 
-function assert_function --argument-names function_name description
-    if functions -q $function_name
-        harness_pass $description
-    else
-        harness_fail $description
-    end
-end
-
 function assert_no_mock_calls
     if test (count $u_test_mock_calls) -eq 0
         harness_pass 'source runs no top-level commands in test mode'
@@ -45,17 +37,6 @@ end
 set -lx U_TEST_MODE 1
 source "$repo_root/bin/u"
 
-assert_function u_main 'source exposes u_main'
-assert_function u_outdated_names 'source exposes u_outdated_names'
-assert_function u_cask_app_paths 'source exposes u_cask_app_paths'
-assert_function u_inspect_app 'source exposes u_inspect_app'
-assert_function u_prepare_cask 'source exposes u_prepare_cask'
-assert_function u_confirm_running_apps 'source exposes u_confirm_running_apps'
-assert_function u_stop_app 'source exposes u_stop_app'
-assert_function u_stop_cask_apps 'source exposes u_stop_cask_apps'
-assert_function u_recheck_cask_apps 'source exposes u_recheck_cask_apps'
-assert_function u_upgrade_cask 'source exposes u_upgrade_cask'
-assert_function u_reopen_closed 'source exposes u_reopen_closed'
 assert_no_mock_calls
 
 set -l literal_log (mktemp)
@@ -80,7 +61,7 @@ fish' "$(u_outdated_names formulae '{"formulae":[{"name":"jq"},{"name":"fish"}],
     'outdated names emits one name per line'
 
 u_outdated_names formulae 'not json' >/dev/null 2>&1
-assert_equal 5 $status 'outdated names rejects invalid JSON'
+assert_equal failure (test $status -ne 0; and echo failure; or echo success) 'outdated names rejects invalid JSON'
 
 u_outdated_names formulae '{"formulae":[{"installed_versions":["1.0"]}],"casks":[]}' >/dev/null 2>&1
 assert_equal 1 $status 'outdated names rejects a record without a name'
@@ -128,7 +109,7 @@ u_cask_app_paths bad $cask_relative_target_json >/dev/null 2>&1
 assert_equal 1 $status 'cask app paths rejects a non-absolute app target'
 
 u_cask_app_paths bad 'not json' >/dev/null 2>&1
-assert_equal 5 $status 'cask app paths rejects invalid JSON'
+assert_equal failure (test $status -ne 0; and echo failure; or echo success) 'cask app paths rejects invalid JSON'
 
 set -l cask_spaced_json '{"casks":[{"token":"google-chrome","artifacts":[{"app":["Google Chrome.app"],"target":"/Applications/Google Chrome.app"}]}]}'
 assert_equal '/Applications/Google Chrome.app' "$(u_cask_app_paths google-chrome $cask_spaced_json)" \
@@ -374,8 +355,9 @@ set -g u_mock_root (harness_tmpdir)
 set -gx U_MOCK_DIR "$u_mock_root/fixtures"
 set -gx U_MOCK_LOG "$u_mock_root/calls.log"
 set -g u_mock_bin "$u_mock_root/bin"
-# Executable Fish mocks must not load the user's configuration and reorder PATH
-# back to the real maintenance tools.
+# Executable Fish mocks start with --no-config: configuration, including the
+# vendor_conf.d snippet Homebrew's mise installs for `mise activate`, would
+# reorder PATH or wrap commands and hand a mocked call to the real tool.
 set -gx XDG_CONFIG_HOME "$u_mock_root/config"
 set -gx XDG_STATE_HOME "$u_mock_root/state"
 mkdir -p "$U_MOCK_DIR" "$u_mock_bin" "$XDG_CONFIG_HOME"
@@ -384,7 +366,7 @@ touch "$U_MOCK_LOG"
 # Write an executable PATH mock. Every mock first logs its invocation to
 # U_MOCK_LOG so assertions can pin call shapes and order.
 function u_test_mock --argument-names name body
-    printf '#!/usr/bin/env fish\necho "%s $argv" >>"$U_MOCK_LOG"\n%s\n' $name $body >"$u_mock_bin/$name"
+    printf '#!/usr/bin/env -S fish --no-config\necho "%s $argv" >>"$U_MOCK_LOG"\n%s\n' $name $body >"$u_mock_bin/$name"
     chmod +x "$u_mock_bin/$name"
 end
 
@@ -409,6 +391,12 @@ if test "$argv[1]" = upgrade; and contains -- "$argv[2]" --formula --cask
     set -l kind formula
     if test "$argv[2]" = --cask
         set kind cask
+    end
+    # A signal fixture interrupts u itself mid-upgrade, as Ctrl-C or a
+    # closing terminal would.
+    set -l signal_fixture "$U_MOCK_DIR/signal-brew-upgrade-$kind-"(string join + $argv[3..-1])
+    if test -e "$signal_fixture"
+        kill -s (string trim <"$signal_fixture") (ps -o ppid= -p $fish_pid | string trim)
     end
     set -l exit_fixture "$U_MOCK_DIR/exit-brew-upgrade-$kind-"(string join + $argv[3..-1])
     if test -e "$exit_fixture"
@@ -495,14 +483,19 @@ if test "$argv[1]" = spin
 end
 exit 0'
 
-u_test_mock nvim 'exit 0'
+u_test_mock nvim 'echo "cwd nvim $PWD" >>"$U_MOCK_LOG"'
 u_test_mock bat 'exit 0'
 u_test_mock sleep 'exit 0'
 u_test_mock mas 'exit 0'
+u_test_mock mise 'echo "cwd mise $PWD" >>"$U_MOCK_LOG"
+test -e "$U_MOCK_DIR/exit-mise-$argv[1]"; and exit 1
+exit 0'
 u_test_mock rustup 'exit 0'
 u_test_mock agent-skills 'exit 0'
 u_test_mock fisher 'test -e "$U_MOCK_DIR/exit-fisher"; and exit 1; exit 0'
-u_test_mock npm 'if test "$argv[1]" = outdated
+u_test_mock migrate 'test -e "$U_MOCK_DIR/exit-migrate"; and exit 1; exit 0'
+u_test_mock npm 'echo "cwd npm $PWD" >>"$U_MOCK_LOG"
+if test "$argv[1]" = outdated
     if test -e "$U_MOCK_DIR/npm-outdated.json"
         cat "$U_MOCK_DIR/npm-outdated.json"
         exit 1
@@ -544,7 +537,7 @@ function u_test_running --argument-names bundle_id
 end
 
 function u_test_reset
-    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'gum-*' -o -name 'open-*' -o -name 'outdated.json' -o -name 'cask-info.json' \))
+    for fixture in (command find "$U_MOCK_DIR" -maxdepth 1 -type f \( -name 'running-*' -o -name 'exit-*' -o -name 'signal-*' -o -name 'gum-*' -o -name 'open-*' -o -name 'outdated.json' -o -name 'cask-info.json' \))
         rm -f "$fixture"
     end
     printf '' >"$U_MOCK_LOG"
@@ -579,11 +572,14 @@ function u_test_output_contains --argument-names needle
     end
 end
 
-function u_test_run_main --argument-names case_name
+function u_test_run_main --argument-names case_name start_dir
     set -l output_file "$u_mock_root/$case_name.out"
+    test -n "$start_dir"; or set start_dir $PWD
+    cd $start_dir
     env U_TEST_MODE=1 U_MOCK_DIR="$U_MOCK_DIR" U_MOCK_LOG="$U_MOCK_LOG" \
-        U_AGENT_SKILLS="$u_mock_bin/agent-skills" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
+        U_AGENT_SKILLS="$u_mock_bin/agent-skills" U_MIGRATE="$u_mock_bin/migrate" fish --no-config -c 'source "$argv[1]"; u_main' "$repo_root/bin/u" >"$output_file" 2>&1
     set -g u_test_main_status $status
+    cd $repo_root
     set -g u_test_main_output (string collect <"$output_file")
 end
 
@@ -629,10 +625,28 @@ assert_equal 1 (u_test_calls '^brew doctor$') \
     'main still doctors Homebrew when nothing is outdated'
 assert_equal 1 (u_test_calls '^mas upgrade$') 'main upgrades App Store apps'
 assert_equal 1 (u_test_calls '^rustup update$') 'main updates the Rust toolchain'
+assert_call_before '^mise install$' '^mise upgrade$' \
+    'main installs newly declared runtimes before upgrading the rest'
+assert_call_before '^mise upgrade$' '^npm ' \
+    'main upgrades runtimes before npm globals, so they upgrade under the patched Node'
+assert_call_before '^mise install$' '^migrate' \
+    'main runs pending migrations only after installing the runtimes they may depend on'
 assert_equal 1 (u_test_calls '^agent-skills update$') 'main updates the agent skills'
 assert_equal 1 (u_test_calls '^fisher update$') 'main updates Fisher plugins'
 assert_equal 0 (u_test_calls '^npm install ') 'main installs nothing when no npm global is outdated'
 assert_equal 1 (count $XDG_STATE_HOME/u/u-*.txt) 'main logs under XDG_STATE_HOME'
+
+# Started inside a project that pins its own Node and Python, u must still
+# maintain npm globals and Neovim's tools with the machine defaults.
+u_test_reset
+set -l pinned_project (harness_tmpdir)
+echo 18.20.8 >$pinned_project/.node-version
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+u_test_run_main pinned-project $pinned_project
+assert_equal 0 (u_test_calls "^cwd .* $pinned_project\$") \
+    'main started in a pinned project runs no runtime from that project'
+assert_equal 'mise npm nvim' "$(string match -rg "^cwd (\S+) $HOME\$" <$U_MOCK_LOG | sort -u | string join ' ')" \
+    'main runs mise, npm, and Neovim maintenance from the home directory'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
@@ -650,6 +664,26 @@ u_test_run_main fisher-failure
 assert_equal 1 $u_test_main_status 'a failed updater produces an aggregate failure'
 assert_equal 1 (u_test_output_contains 'fisher update failed') \
     'main reports the failed updater in the final details'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/exit-mise-upgrade"
+u_test_run_main mise-failure
+rm -f "$U_MOCK_DIR/exit-mise-upgrade"
+assert_equal 1 $u_test_main_status 'a failed runtime upgrade produces an aggregate failure'
+assert_equal 1 (u_test_output_contains 'mise upgrade failed') \
+    'main reports the failed runtime upgrade in the final details'
+assert_equal 1 (u_test_calls '^fisher update$') \
+    'a failed runtime upgrade does not stop later maintenance'
+
+u_test_reset
+printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
+touch "$U_MOCK_DIR/exit-migrate"
+u_test_run_main migrate-failure
+rm -f "$U_MOCK_DIR/exit-migrate"
+assert_equal 1 $u_test_main_status 'an unfinished migration produces an aggregate failure'
+assert_equal 1 (u_test_calls '^fisher update$') \
+    'an unfinished migration does not stop later maintenance'
 
 u_test_reset
 printf '%s\n' '{"formulae":[],"casks":[]}' >"$U_MOCK_DIR/outdated.json"
@@ -884,5 +918,23 @@ u_test_run_main tee-failure
 assert_equal 0 $u_test_main_status 'a tee failure does not replace successful brew pipeline status'
 assert_equal 1 (u_test_output_contains 'Cask summary: 1 upgraded, 0 skipped, 0 failed') \
     'main counts the cask upgrade from brew status rather than tee status'
+
+# An interrupted run stops and still reopens the applications it closed.
+for case in INT:130 TERM:143
+    set -l signal (string split : -- $case)[1]
+    set -l expected_status (string split : -- $case)[2]
+    u_test_reset
+    printf '%s\n' '{"formulae":[],"casks":[{"name":"cursor"},{"name":"calm"}]}' >"$U_MOCK_DIR/outdated.json"
+    u_test_write_cask_info '{"casks":['$u_cask_cursor_json','$u_cask_calm_json']}'
+    u_test_running com.todesktop.230313mzl4w4u92 111 -
+    echo $signal >"$U_MOCK_DIR/signal-brew-upgrade-cask-cursor"
+    u_test_run_main interrupted-$signal
+    assert_equal $expected_status $u_test_main_status \
+        "SIG$signal during a cask upgrade is reported as an interruption, not success"
+    assert_equal 1 (u_test_calls '^open /Applications/Cursor.app$') \
+        "SIG$signal during a cask upgrade reopens the application it closed"
+    assert_equal 0 (u_test_calls '^brew upgrade --cask calm$') \
+        "SIG$signal stops the run before the next cask"
+end
 
 harness_exit

@@ -1,0 +1,25 @@
+#!/usr/bin/env fish
+# Runs every test suite, or the ones named, and prints each suite's last line.
+# Exits non-zero when any suite fails. Usage: tests/run [tests/<path>_test.fish ...]
+
+set -l root (path resolve (status dirname)/..)
+set -l fish_bin (status fish-path)
+set -l suites $argv
+test (count $suites) -gt 0; or set suites (path sort $root/tests/**_test.fish)
+
+set -l failed 0
+for suite in $suites
+    set -l output ($fish_bin $suite </dev/null 2>&1)
+    set -l suite_status $status
+    printf '%-50s %s\n' (string replace "$root/" '' -- (path resolve $suite)) "$output[-1]"
+    if test $suite_status -ne 0
+        set failed (math $failed + 1)
+        printf '    %s\n' (string match -r '^(?:not ok|FAIL) .*' -- $output)
+    end
+end
+
+if test $failed -gt 0
+    printf '%d of %d suites failed\n' $failed (count $suites)
+    exit 1
+end
+printf 'all %d suites passed\n' (count $suites)
