@@ -1,0 +1,51 @@
+config-version = 2
+start-at-login = true
+auto-reload-config = true
+persistent-workspaces = ['Main', 'Code', 'Web', 'Chat']
+
+on-window-detected = [
+    { if = 'test %{app-bundle-id} = com.mitchellh.ghostty', run = 'move-node-to-workspace Code' },
+    { if = 'test %{app-bundle-id} = com.todesktop.230313mzl4w4u92', run = 'move-node-to-workspace Code' },
+    { if = 'test %{app-bundle-id} = com.t3tools.t3code', run = 'move-node-to-workspace Code' },
+    { if = 'test %{app-bundle-id} = com.officecommun.search', run = 'move-node-to-workspace Web' },
+    { if = 'test %{app-bundle-id} = app.legcord.Legcord', run = 'move-node-to-workspace Chat' },
+]
+
+# Ctrl+Cmd leaves Herdr's Ctrl+Alt and Karabiner's hyper arrows available.
+[mode.main.binding]
+ctrl-cmd-h = 'focus left'
+ctrl-cmd-j = 'focus down'
+ctrl-cmd-k = 'focus up'
+ctrl-cmd-l = 'focus right'
+ctrl-cmd-shift-h = 'move left'
+ctrl-cmd-shift-j = 'move down'
+ctrl-cmd-shift-k = 'move up'
+ctrl-cmd-shift-l = 'move right'
+
+ctrl-cmd-1 = 'workspace Main'
+ctrl-cmd-2 = 'workspace Code'
+ctrl-cmd-3 = 'workspace Web'
+ctrl-cmd-4 = 'workspace Chat'
+ctrl-cmd-shift-1 = 'move-node-to-workspace Main'
+ctrl-cmd-shift-2 = 'move-node-to-workspace Code'
+ctrl-cmd-shift-3 = 'move-node-to-workspace Web'
+ctrl-cmd-shift-4 = 'move-node-to-workspace Chat'
+ctrl-cmd-tab = 'workspace-back-and-forth'
+ctrl-cmd-left = 'workspace --wrap-around prev'
+ctrl-cmd-right = 'workspace --wrap-around next'
+
+ctrl-cmd-z = 'enable toggle'
+ctrl-cmd-f = 'fullscreen'
+ctrl-cmd-shift-space = 'layout floating tiling'
+ctrl-cmd-slash = 'layout tiles horizontal vertical'
+ctrl-cmd-comma = 'layout accordion horizontal vertical'
+ctrl-cmd-equal = 'balance-sizes'
+ctrl-cmd-r = 'mode resize'
+
+[mode.resize.binding]
+h = 'resize width -50'
+j = 'resize height +50'
+k = 'resize height -50'
+l = 'resize width +50'
+esc = 'mode main'
+enter = 'mode main'

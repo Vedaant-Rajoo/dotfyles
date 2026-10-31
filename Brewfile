@@ -7,6 +7,7 @@
 tap "anomalyco/tap"
 tap "driceroland/tap"
 tap "nguyenphutrong/tap"
+tap "nikitabobko/tap"
 
 # Shell
 brew "fish"
@@ -71,6 +72,7 @@ cask "nguyenphutrong/tap/quotio"
 cask "t3-code@nightly"
 
 # Productivity and desktop UI
+cask "nikitabobko/tap/aerospace", trusted: true
 cask "alcove"
 cask "karabiner-elements"
 cask "raycast"

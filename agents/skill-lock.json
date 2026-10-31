@@ -289,6 +289,87 @@
       "pluginName": "humanizer",
       "installedAt": "2026-10-22T03:46:22.064Z",
       "updatedAt": "2026-10-22T03:50:56.023Z"
+    },
+    "babysit-pr": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/babysit-pr/SKILL.md",
+      "skillFolderHash": "7b4e3e4e0f8b53a1fd049d6a27d5f998395ace52",
+      "installedAt": "2026-10-31T16:35:57.965Z",
+      "updatedAt": "2026-10-31T16:35:57.965Z"
+    },
+    "council": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/council/SKILL.md",
+      "skillFolderHash": "ed352dce7c3f58076bdd0723927a308e284c3031",
+      "installedAt": "2026-10-31T16:35:57.968Z",
+      "updatedAt": "2026-10-31T16:35:57.968Z"
+    },
+    "file-pr": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/file-pr/SKILL.md",
+      "skillFolderHash": "04b5dff2274053132e131912257c82c4d8141dd0",
+      "installedAt": "2026-10-31T16:35:57.968Z",
+      "updatedAt": "2026-10-31T16:35:57.968Z"
+    },
+    "full-send": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/full-send/SKILL.md",
+      "skillFolderHash": "de21961fbb3f6892ab4ea1fb2b58e0f95debec87",
+      "installedAt": "2026-10-31T16:35:57.968Z",
+      "updatedAt": "2026-10-31T16:35:57.968Z"
+    },
+    "full-stop": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/full-stop/SKILL.md",
+      "skillFolderHash": "16f14dba1ab91a1f7fbcce387b6b96cdd15fc4f5",
+      "installedAt": "2026-10-31T16:35:57.969Z",
+      "updatedAt": "2026-10-31T16:35:57.969Z"
+    },
+    "leaving-pr-comments": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/leaving-pr-comments/SKILL.md",
+      "skillFolderHash": "3905d758fb70b4e660038456f86ac02343a3dedf",
+      "installedAt": "2026-10-31T16:35:57.969Z",
+      "updatedAt": "2026-10-31T16:35:57.969Z"
+    },
+    "modernize": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/modernize/SKILL.md",
+      "skillFolderHash": "149f54a0835d2da770b564eb8624f1e3618a33a7",
+      "installedAt": "2026-10-31T16:35:57.970Z",
+      "updatedAt": "2026-10-31T16:35:57.970Z"
+    },
+    "sol-loop": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/sol-loop/SKILL.md",
+      "skillFolderHash": "9d2b1c1b00bf54e1b4e6e6243aec6d39037ce624",
+      "installedAt": "2026-10-31T16:35:57.970Z",
+      "updatedAt": "2026-10-31T16:35:57.970Z"
+    },
+    "takeover": {
+      "source": "t3dotgg/tstack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/t3dotgg/tstack.git",
+      "skillPath": "skills/takeover/SKILL.md",
+      "skillFolderHash": "54cfa8d25b9a356cc826daa964979e8cdce377ad",
+      "installedAt": "2026-10-31T16:35:57.971Z",
+      "updatedAt": "2026-10-31T16:35:57.971Z"
     }
   },
   "dismissed": {}

@@ -79,6 +79,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
 | [`quotio/`](quotio/README.md) | Quotio routing and prompt-rule notes |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
+| [`aerospace/`](aerospace/README.md) | Window tiling, virtual workspaces, app routing, and keyboard controls |
 | `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
