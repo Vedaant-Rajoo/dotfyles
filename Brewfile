@@ -6,6 +6,7 @@
 # Taps
 tap "anomalyco/tap"
 tap "driceroland/tap"
+tap "mantrakp04/tap"
 tap "nguyenphutrong/tap"
 tap "nikitabobko/tap"
 
@@ -83,6 +84,7 @@ cask "wallspace"
 cask "wispr-flow"
 
 # Browsers, communication, and networking
+cask "mantrakp04/tap/ardia", trusted: true
 cask "driceroland/tap/search"
 cask "firefox"
 cask "google-chrome"
