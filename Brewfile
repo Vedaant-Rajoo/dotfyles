@@ -66,6 +66,7 @@ brew "anomalyco/tap/opencode-v2", trusted: true
 cask "codex"
 cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
+cask "font-maple-mono-nf"
 cask "ghostty"
 cask "orbstack"
 cask "nguyenphutrong/tap/quotio"
