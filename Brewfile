@@ -73,7 +73,6 @@ cask "nguyenphutrong/tap/quotio"
 cask "t3-code@nightly"
 
 # Productivity and desktop UI
-cask "nikitabobko/tap/aerospace", trusted: true
 cask "alcove"
 cask "karabiner-elements"
 cask "raycast"

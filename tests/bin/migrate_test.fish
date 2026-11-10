@@ -80,6 +80,7 @@ rm -rf $state
 printf '%s\n' '#!/bin/sh' 'echo "brew $*" >>"'$calls'"' \
     'case "$1" in' \
     'list) [ -e "$FIXTURES/brew-list-fails" ] && exit 1; cat "$FIXTURES/brew-list" 2>/dev/null ;;' \
+    'tap) cat "$FIXTURES/brew-tap" 2>/dev/null ;;' \
     'esac' 'exit 0' >$stubs/brew
 # mise can run every command except those listed in the mise-lacks fixture.
 printf '%s\n' '#!/bin/sh' 'echo "mise $*" >>"'$calls'"' \
@@ -185,6 +186,17 @@ assert_equal 0 $migrate_status 'a machine with LinearMouse finishes every shippe
 assert_equal 'brew uninstall --cask linearmouse' \
     "$(string match -r '^brew uninstall .*' <$calls)" \
     'a machine loses LinearMouse, and keeps Raycast and Vorssaint'
+
+# The Brewfile stopped installing AeroSpace, the only cask from its tap.
+rm -rf $state
+printf '%s\n' aerospace raycast >$fixtures/brew-list
+printf '%s\n' mantrakp04/tap nikitabobko/tap >$fixtures/brew-tap
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with AeroSpace finishes every shipped migration'
+assert_equal 'brew uninstall --cask aerospace
+brew untap nikitabobko/tap' "$(string match -r '^brew (?:uninstall|untap) .*' <$calls)" \
+    'a machine loses AeroSpace and its tap, and keeps Raycast and other taps'
+rm -f $fixtures/brew-tap
 
 # When Homebrew cannot report what is installed, nothing is assumed retired.
 rm -rf $state
