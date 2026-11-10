@@ -40,7 +40,6 @@ hide_tab_bar_when_single_tab = true
 agent_panel_sort = "priority"
 pane_borders = true
 pane_gaps = false
-accent = "#c4a7e7"
 
 # Expanded agent-sidebar rows (0.7.4). Tokens: state_icon, state_text,
 # workspace, tab, pane, agent, terminal_title, terminal_title_stripped;
