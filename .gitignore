@@ -87,3 +87,4 @@ herdr/*
 claude/*
 !claude/README.md
 !claude/settings.json
+nvim-pack-lock.json

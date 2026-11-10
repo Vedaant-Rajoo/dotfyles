@@ -28,6 +28,7 @@ abbr --add -g gd 'git diff'
 abbr --add -g gs 'git status --short --branch'
 
 alias claudeyolo 'claude --dangerously-skip-permissions'
+alias icloud 'cd ~/Library/Mobile\\ Documents/com~apple~CloudDocs'
 
 if command -q lazygit
     abbr --add -g lg lazygit
