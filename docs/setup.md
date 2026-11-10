@@ -39,15 +39,9 @@ migration, `git config --global ...` writes to the tracked file; review
 
 ## Neovim and WakaTime
 
-Open Neovim once so lazy.nvim installs the pinned plugins:
-
-```bash
-nvim
-```
-
-Use `:Lazy sync` to verify plugin state. The tracked WakaTime plugin also
-requires a machine-local `~/.wakatime.cfg`; create it through WakaTime's normal
-authentication flow and never commit its API key.
+`nvim/` holds the Neovim config. WakaTime requires a machine-local
+`~/.wakatime.cfg`; create it through WakaTime's normal authentication flow and
+never commit its API key.
 
 ## Moving an existing machine to mise
 
@@ -73,8 +67,6 @@ both directories by hand. Global npm modules with compiled parts need
 A project that pins a version mise has not installed fails with a message
 naming `mise install`; run it in that project. JavaScript projects list
 prettier as a dev dependency (`bun add -d prettier` or `npm i -D prettier`).
-Neovim formats with that copy; outside a project, JavaScript and TypeScript
-fall back to the language server, and JSON, HTML, and CSS stay as written.
 
 ## Postplan
 
@@ -254,7 +246,6 @@ when the standard changes.
 | `raycast/` | Downloaded extensions and app data |
 | `legcord/` except `storage/settings.json` | Discord session, caches, and window state (Linux Legcord writes them into this directory) |
 | `herdr/*.sock`, logs, sessions, `.plugins.lock` | Runtime state |
-| `nvim/tmp/`, caches and logs | Generated state |
 | `~/.local/share/mise/`, `~/.local/state/mise/`, mise's cache | Installed runtimes, shims, trust records, and downloads; `mise install` recreates them from `mise/mise.toml` |
 | `~/.rustup/`, `~/.cargo/` | Rust toolchains, downloaded crates, and build caches; `bin/bootstrap` installs them with the official rustup installer rather than copying them from a clone |
 | `~/.ssh/`, `~/.docker/`, `~/.orbstack/` | Keys, credential-store selection, and local runtime settings |

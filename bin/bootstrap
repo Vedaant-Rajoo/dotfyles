@@ -366,7 +366,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
   - Set up Quotio and the Caveman proxy: caveman/README.md#fresh-machine.
-  - Run `postplan login` and open Neovim once to install plugins.
+  - Run `postplan login`.
 
 See README.md and docs/setup.md for the complete setup checklist.
 EOF

@@ -198,6 +198,26 @@ brew untap nikitabobko/tap' "$(string match -r '^brew (?:uninstall|untap) .*' <$
     'a machine loses AeroSpace and its tap, and keeps Raycast and other taps'
 rm -f $fixtures/brew-tap
 
+# The lazy.nvim config was retired; what it installed goes, the user's history stays.
+rm -rf $state
+printf '%s\n' raycast >$fixtures/brew-list
+mkdir -p $home/.local/share/nvim/lazy/lazy.nvim $home/.local/share/nvim/mason/bin \
+    $home/.local/share/nvim/site/parser $home/.local/share/nvim/site/pack/core/opt/kept.nvim \
+    $home/.local/share/nvim/harpoon $home/.local/state/nvim/lazy $home/.local/state/nvim/shada \
+    $home/.cache/nvim/luac $home/.vim/undodir
+run_migrate $repo_root/bin/migrate
+assert_equal 0 $migrate_status 'a machine with the old Neovim config finishes every shipped migration'
+assert_equal 'gone gone gone gone gone' \
+    "$(for p in .local/share/nvim/lazy .local/share/nvim/mason .local/share/nvim/site/parser .local/state/nvim/lazy .cache/nvim
+        test -e $home/$p; and echo kept; or echo gone
+    end | string join ' ')" \
+    'the old plugins, language servers, parsers, and caches are removed'
+assert_equal 'kept kept kept kept' \
+    "$(for p in .local/share/nvim/site/pack/core/opt/kept.nvim .local/share/nvim/harpoon .local/state/nvim/shada .vim/undodir
+        test -e $home/$p; and echo kept; or echo gone
+    end | string join ' ')" \
+    'marks, editing and undo history, and built-in vim.pack plugins are kept'
+
 # When Homebrew cannot report what is installed, nothing is assumed retired.
 rm -rf $state
 touch $fixtures/brew-list-fails
