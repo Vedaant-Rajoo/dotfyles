@@ -8,7 +8,6 @@ tap "anomalyco/tap"
 tap "driceroland/tap"
 tap "mantrakp04/tap"
 tap "nguyenphutrong/tap"
-tap "nikitabobko/tap"
 
 # Shell
 brew "fish"
@@ -75,6 +74,7 @@ cask "t3-code@nightly"
 # Productivity and desktop UI
 cask "alcove"
 cask "karabiner-elements"
+cask "markedit"
 cask "raycast"
 cask "rectangle-pro"
 cask "shottr"
