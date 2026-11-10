@@ -21,6 +21,12 @@ split_vertical = ["prefix+v", "ctrl+alt+d"]
 split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
 zoom = ["prefix+z", "ctrl+alt+z"]
 
+# Workspace navigation: ( ) as in tmux sessions, shift+j/k for the vertical
+# sidebar list, and numbered jumps alongside switch_tab and focus_agent.
+previous_workspace = ["prefix+(", "ctrl+alt+shift+k"]
+next_workspace = ["prefix+)", "ctrl+alt+shift+j"]
+switch_workspace = ["prefix+shift+1..9", "ctrl+alt+1..9"]
+
 # Agent keyboard navigation over the sidebar agent rows.
 # agent_panel_sort (below) decides their order; these move through them.
 previous_agent = "prefix+shift+k" # up the agent list
