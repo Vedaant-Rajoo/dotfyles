@@ -93,6 +93,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Default Node, Python, Bun, Go, pnpm | mise | `mise/mise.toml`, as release lines | `bin/u` (`mise install`, `mise upgrade`) |
 | A project's runtime versions | the project | its `mise.toml`, `.nvmrc`, `.node-version`, or `.python-version` | the project |
 | Rust toolchains and rust-analyzer | rustup | `bin/bootstrap` installs the stable toolchain and rust-analyzer | `bin/u` |
+| Neovim's language servers and formatters, except stylua, shfmt, and rust-analyzer | Mason, through mason-tool-installer | `nvim/lua/newedia/plugins/lsp.lua` | `:MasonToolsUpdate` in Neovim, by hand |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
