@@ -13,6 +13,7 @@ vim.pack.add({
 	"https://github.com/neovim/nvim-lspconfig",
 	{ src = "https://github.com/saghen/blink.cmp", version = vim.version.range("^1") },
 	"https://github.com/nvim-mini/mini.pairs",
+	"https://github.com/stevearc/conform.nvim",
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 
@@ -21,4 +22,5 @@ require("newedia.plugins.navigation")
 require("newedia.plugins.syntax")
 require("newedia.plugins.lsp")
 require("newedia.plugins.completion")
+require("newedia.plugins.formatting")
 require("newedia.plugins.keymaps")
