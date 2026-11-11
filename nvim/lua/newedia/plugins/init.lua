@@ -18,6 +18,7 @@ vim.pack.add({
 	{ src = "https://github.com/craftzdog/mini.diff", version = "feat/grouping" },
 	"https://github.com/esmuellert/codediff.nvim",
 	"https://github.com/linrongbin16/gitlinker.nvim",
+	{ src = "https://github.com/folke/which-key.nvim", version = vim.version.range("^3") },
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 
@@ -28,4 +29,5 @@ require("newedia.plugins.lsp")
 require("newedia.plugins.completion")
 require("newedia.plugins.formatting")
 require("newedia.plugins.git")
+require("newedia.plugins.helpers")
 require("newedia.plugins.keymaps")
