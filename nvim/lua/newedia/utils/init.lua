@@ -1,1 +1,3 @@
-return {}
+return {
+	tabline = require("newedia.utils.tabline"),
+}
