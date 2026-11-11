@@ -47,6 +47,7 @@ assert_equal 'brew --prefix' "$bootstrap_calls" 'a dry run invokes nothing but t
 assert_equal '' "$(find $home -mindepth 1)" 'a dry run leaves the home directory untouched'
 assert_equal 1 (plans 'mise install$') 'a dry run plans installing the declared runtimes'
 assert_equal 1 (plans '.*bin/migrate$') 'a dry run plans running pending migrations'
+assert_equal 1 (plans 'rustup component add rust-analyzer$') 'a dry run plans installing rust-analyzer'
 assert_equal 0 (plans '.*macdefaults') 'macOS defaults are not planned unless requested'
 assert_equal 0 (plans 'brew services start herdr') 'the Herdr service is not planned unless requested'
 
