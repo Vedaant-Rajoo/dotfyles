@@ -62,3 +62,12 @@ vim.api.nvim_create_autocmd("PackChanged", {
 		end
 	end,
 })
+
+require("todo-comments").setup()
+
+require("nvim-highlight-colors").setup({
+	render = "background",
+	enable_tailwind = false,
+})
+-- nvim-highlight-colors paints colors; the LSP's document colors would double them.
+vim.lsp.document_color.enable(false)

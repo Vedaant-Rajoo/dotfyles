@@ -6,6 +6,8 @@ vim.pack.add({
 	"https://github.com/folke/snacks.nvim",
 	"https://github.com/stevearc/oil.nvim",
 	{ src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" },
+	"https://github.com/folke/todo-comments.nvim",
+	"https://github.com/brenoprata10/nvim-highlight-colors",
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 
