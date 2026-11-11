@@ -6,70 +6,113 @@ onboarding = false
 name = "catppuccin"
 
 auto_switch = false
+
+[ui]
+pane_gaps = false
+hide_tab_bar_when_single_tab = true
+tab_bar_position = "bottom"
+copy_on_select = false
+# No left sidebar by default; toggle with prefix+b.
+sidebar_start_collapsed = true
+sidebar_width = 20
+window_title = "{workspace}: {terminal_title}"
+
+# Show Claude's session summary (its terminal title) instead of the agent name.
+[ui.sidebar.agents.rows_by_agent]
+claude = [["state_icon", "machine", "workspace", "tab"], ["terminal_title_stripped"]]
+
+[ui.sound.agents]
+claude = "off"
+
+[terminal]
+new_cwd = "follow"
+
 [keys]
-# ctrl+a prefix; pane/tab/zoom actions also get direct ctrl+alt chords so
-# they work without the prefix. prefix+? shows the live keymap.
-prefix = "ctrl+a"
-focus_pane_left = ["prefix+h", "ctrl+alt+h"]
-focus_pane_down = ["prefix+j", "ctrl+alt+j"]
-focus_pane_up = ["prefix+k", "ctrl+alt+k"]
-focus_pane_right = ["prefix+l", "ctrl+alt+l"]
-previous_tab = ["prefix+p", "ctrl+alt+["]
-next_tab = ["prefix+n", "ctrl+alt+]"]
-new_tab = ["prefix+c", "ctrl+alt+c"]
-split_vertical = ["prefix+v", "ctrl+alt+d"]
-split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
-zoom = ["prefix+z", "ctrl+alt+z"]
+# ctrl+t prefix, so Neovim keeps ctrl+a. prefix+? shows the live keymap.
+prefix = "ctrl+t"
 
-# Workspace navigation: ( ) as in tmux sessions, shift+j/k for the vertical
-# sidebar list, and numbered jumps alongside switch_tab and focus_agent.
-previous_workspace = ["prefix+(", "ctrl+alt+shift+k"]
-next_workspace = ["prefix+)", "ctrl+alt+shift+j"]
+reload_config = "prefix+r"
+resize_mode = "prefix+shift+r"
+
+detach = "prefix+d"
+rename_tab = "prefix+comma"
+close_tab = "prefix+&"
+move_tab_previous = "ctrl+shift+left"
+move_tab_next = "ctrl+shift+right"
+copy_mode = "prefix+["
+last_pane = "prefix+;"
+
+focus_pane_left = ["prefix+h", "ctrl+shift+h"]
+focus_pane_down = ["prefix+j", "ctrl+shift+j"]
+focus_pane_up = ["prefix+k", "ctrl+shift+k"]
+focus_pane_right = ["prefix+l", "ctrl+shift+l"]
+
+previous_workspace = ["ctrl+shift+[", "ctrl+{"]
+next_workspace = ["ctrl+shift+]", "ctrl+}"]
+
+# Numbered jumps alongside the default switch_tab (prefix+1..9).
 switch_workspace = ["prefix+shift+1..9", "ctrl+alt+1..9"]
+focus_agent = "prefix+alt+1..9"
 
-# Agent keyboard navigation over the sidebar agent rows.
-# agent_panel_sort (below) decides their order; these move through them.
-previous_agent = "prefix+shift+k" # up the agent list
-next_agent = "prefix+shift+j"     # down the agent list
-focus_agent = "prefix+alt+1..9"   # jump straight to agent N
+split_vertical = ["prefix+|", "prefix+%", "prefix+backslash"]
+split_horizontal = ["prefix+minus", 'prefix+"', "prefix+_"]
 
-# Fuzzy project → workspace jumper. Prefix-only inside Herdr (prefix+f);
-# also reachable from Fish (Ctrl-o), Ghostty (cmd+s), and the CLI.
+goto = "prefix+u"
+open_notification_target = "prefix+shift+o"
+
+# Fuzzy project → workspace jumper. Also reachable from Fish (Ctrl-o),
+# Ghostty (cmd+s), and the CLI.
 [[keys.command]]
 key = "prefix+f"
 type = "pane"
 command = "$HOME/.config/bin/herdr-sessionizer"
 description = "sessionizer"
 
-[ui]
-hide_tab_bar_when_single_tab = true
-tab_bar_position = "bottom"
-agent_panel_sort = "priority"
-pane_borders = true
-pane_gaps = false
+[[keys.command]]
+key = "prefix+o"
+type = "shell"
+command = 'open "$HERDR_ACTIVE_PANE_CWD"'
+description = "open folder in Finder"
 
-# Expanded agent-sidebar rows (0.7.4). Tokens: state_icon, state_text,
-# workspace, tab, pane, agent, terminal_title, terminal_title_stripped;
-# pane metadata as $name. Packed (row_gap = 0) keeps the attention queue tight.
-show_agent_labels_on_pane_borders = true
-status_indicators = "symbols"
-[ui.sidebar.agents]
-row_gap = 0
-rows = [["state_icon", "workspace", "tab"], ["agent", "state_text"]]
+[[keys.command]]
+key = "prefix+e"
+type = "shell"
+command = '''herdr pane list | jq -r --arg t "$HERDR_ACTIVE_TAB_ID" --arg p "$HERDR_ACTIVE_PANE_ID" '.result.panes[] | select(.tab_id == $t and .pane_id != $p) | .pane_id' | xargs -n1 herdr pane close'''
+description = "close other panes in tab"
 
-# Per-agent override: give Claude panes a third row with the stripped
-# terminal title so the current turn/task is visible in the sidebar.
-[ui.sidebar.agents.rows_by_agent]
-claude = [["state_icon", "workspace", "tab"], ["terminal_title_stripped"], ["agent"]]
+# Pane commands run under plain `sh -c` with the brew service's launchd PATH,
+# which lacks /opt/homebrew/bin; /etc/profile adds it via path_helper. Fish's
+# env isn't loaded either, so LG_CONFIG_FILE (fish/conf.d/10-env.fish) is set here.
+[[keys.command]]
+key = "prefix+g"
+type = "pane"
+command = '. /etc/profile; cd "$HERDR_ACTIVE_PANE_CWD" && LG_CONFIG_FILE="$HOME/.config/lazygit/config.yml" exec lazygit'
+description = "lazygit"
 
-# Expanded space-sidebar rows (0.7.4). Tokens: state_icon, state_text,
-# workspace, branch, git_status; workspace metadata as $name. row_gap = 1
-# adds a blank line between spaces (independent from the agents setting above).
-[ui.sidebar.spaces]
-row_gap = 1
-rows = [["state_icon", "workspace"], ["branch", "git_status"]]
+# One-step pane resizing, as in tmux-pain-control.
+[[keys.command]]
+key = "prefix+shift+h"
+type = "shell"
+command = 'herdr pane resize --direction left --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize left"
 
-[ui.toast]
-# Ghostty supports terminal notifications over the local client.
-delivery = "herdr"
-delay_seconds = 1
+[[keys.command]]
+key = "prefix+shift+j"
+type = "shell"
+command = 'herdr pane resize --direction down --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize down"
+
+[[keys.command]]
+key = "prefix+shift+k"
+type = "shell"
+command = 'herdr pane resize --direction up --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize up"
+
+[[keys.command]]
+key = "prefix+shift+l"
+type = "shell"
+command = 'herdr pane resize --direction right --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize right"
+
+[experimental]
+pane_history = true
