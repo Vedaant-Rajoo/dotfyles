@@ -16,3 +16,5 @@ require("codediff").setup({
 		line_stats = { enabled = true },
 	},
 })
+
+require("gitlinker").setup()
