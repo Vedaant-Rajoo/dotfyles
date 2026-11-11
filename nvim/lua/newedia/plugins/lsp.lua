@@ -20,18 +20,14 @@ require("mason-tool-installer").setup({
 	auto_update = false,
 })
 
--- File renames (e.g. from oil) let servers update imports.
+-- File renames (e.g. from oil) let servers update imports. Per-server
+-- settings live in after/lsp/<name>.lua.
 vim.lsp.config("*", {
 	capabilities = {
 		workspace = {
 			fileOperations = { didRename = true, willRename = true },
 		},
 	},
-})
-
--- Use the project's TypeScript when it has one, so errors match its tsc build.
-vim.lsp.config("vtsls", {
-	settings = { vtsls = { autoUseWorkspaceTsdk = true } },
 })
 
 vim.lsp.enable({ "eslint", "oxlint", "lua_ls", "cssls", "vtsls", "tailwindcss", "rust_analyzer" })
