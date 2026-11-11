@@ -24,3 +24,14 @@ map("n", "sl", "<C-w>l", { desc = "Window right" })
 
 map("n", "<leader>o", "o<Esc>^Da", { desc = "Open line below without comment" })
 map("n", "<leader>O", "O<Esc>^Da", { desc = "Open line above without comment" })
+
+map("n", "<leader>bd", function()
+	local closed = 0
+	for _, buf in ipairs(vim.fn.getbufinfo({ buflisted = 1 })) do
+		-- pcall skips buffers :bdelete refuses, like terminals with a running job.
+		if #buf.windows == 0 and buf.changed == 0 and pcall(vim.cmd.bdelete, buf.bufnr) then
+			closed = closed + 1
+		end
+	end
+	vim.notify(("Closed %d hidden buffer(s)"):format(closed))
+end, { desc = "Close hidden buffers" })
