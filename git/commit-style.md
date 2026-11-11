@@ -6,8 +6,6 @@ Commits use scoped subjects, as in Linux, Git, Go, and nixpkgs:
 
     Optional body: why the change was made.
 
-    Co-Authored-By: Name <email>
-
 - The scope names the area the change touches: a directory or file that exists
   in the repository, at any depth, without extension, and always lowercase,
   even when the file name is not (`fish`, `nvim`, `bootstrap` for
