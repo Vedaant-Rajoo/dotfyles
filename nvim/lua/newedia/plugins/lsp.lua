@@ -31,3 +31,4 @@ vim.lsp.config("*", {
 })
 
 vim.lsp.enable({ "eslint", "oxlint", "lua_ls", "cssls", "vtsls", "tailwindcss", "rust_analyzer" })
+vim.lsp.inlay_hint.enable()
