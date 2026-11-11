@@ -370,6 +370,15 @@
       "skillFolderHash": "54cfa8d25b9a356cc826daa964979e8cdce377ad",
       "installedAt": "2026-10-31T16:35:57.971Z",
       "updatedAt": "2026-10-31T16:35:57.971Z"
+    },
+    "vcommit": {
+      "source": "Vedaant-Rajoo/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/Vedaant-Rajoo/skills.git",
+      "skillPath": "vcommit/SKILL.md",
+      "skillFolderHash": "6fedfa5957c9152a0c8a3782388e849ac99e5628",
+      "installedAt": "2026-11-11T04:20:32.947Z",
+      "updatedAt": "2026-11-11T04:20:32.947Z"
     }
   },
   "dismissed": {}
