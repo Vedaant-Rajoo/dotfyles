@@ -43,6 +43,7 @@ description = "sessionizer"
 
 [ui]
 hide_tab_bar_when_single_tab = true
+tab_bar_position = "bottom"
 agent_panel_sort = "priority"
 pane_borders = true
 pane_gaps = false
