@@ -20,6 +20,7 @@ vim.pack.add({
 	"https://github.com/linrongbin16/gitlinker.nvim",
 	{ src = "https://github.com/folke/which-key.nvim", version = vim.version.range("^3") },
 	"https://github.com/kamegoro/tobira.nvim",
+	"https://github.com/wakatime/vim-wakatime",
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 

@@ -21,3 +21,8 @@ require("which-key").setup({
 -- Suggests one better command for an inefficient pattern once idle. It has no
 -- releases, so vim.pack tracks main.
 require("tobira").setup()
+
+-- vim-wakatime runs its own setup() when it loads; calling it again re-applies
+-- options. It reuses ~/.wakatime.cfg and ~/.wakatime/wakatime-cli. The status
+-- bar would add today's time to lualine's x section.
+require("wakatime").setup({ status_bar_enabled = false })
