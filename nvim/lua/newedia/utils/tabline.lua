@@ -29,6 +29,14 @@ local function label(tab)
 	if vim.bo[buf].buftype == "terminal" then
 		return modified .. "[Terminal]"
 	end
+	if vim.bo[buf].filetype == "oil" then
+		local dir = vim.fn.fnamemodify(require("oil").get_current_dir(buf) or "", ":~"):gsub("(.)/$", "%1")
+		local len = vim.fn.strchars(dir)
+		if len > 20 then
+			dir = "..." .. vim.fn.strcharpart(dir, len - 17)
+		end
+		return modified .. dir
+	end
 	local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":t")
 	if name == "" then
 		return modified .. "[No Name]"

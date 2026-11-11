@@ -4,8 +4,10 @@ vim.pack.add({
 	"https://github.com/nvim-lualine/lualine.nvim",
 	"https://github.com/b0o/incline.nvim",
 	"https://github.com/folke/snacks.nvim",
+	"https://github.com/stevearc/oil.nvim",
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 
 require("newedia.plugins.ui")
+require("newedia.plugins.navigation")
 require("newedia.plugins.keymaps")
