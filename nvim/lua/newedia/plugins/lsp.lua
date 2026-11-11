@@ -20,14 +20,14 @@ require("mason-tool-installer").setup({
 	auto_update = false,
 })
 
--- File renames (e.g. from oil) let servers update imports. Per-server
--- settings live in after/lsp/<name>.lua.
+-- blink.cmp's completion capabilities, plus file renames (e.g. from oil) so
+-- servers update imports. Per-server settings live in after/lsp/<name>.lua.
 vim.lsp.config("*", {
-	capabilities = {
+	capabilities = require("blink.cmp").get_lsp_capabilities({
 		workspace = {
 			fileOperations = { didRename = true, willRename = true },
 		},
-	},
+	}),
 })
 
 vim.lsp.enable({ "eslint", "oxlint", "lua_ls", "cssls", "vtsls", "tailwindcss", "rust_analyzer" })
