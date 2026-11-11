@@ -1,5 +1,5 @@
--- Mason owns these tools; rust-analyzer comes from rustup (see the ownership
--- table in README.md).
+-- Mason owns every language server and formatter (see the ownership table in
+-- README.md).
 require("mason").setup()
 require("mason-tool-installer").setup({
 	ensure_installed = {
@@ -9,6 +9,7 @@ require("mason-tool-installer").setup({
 		"oxlint",
 		"tailwindcss-language-server",
 		"css-lsp",
+		"rust-analyzer",
 		"prettier",
 		"prettierd",
 		"oxfmt",
