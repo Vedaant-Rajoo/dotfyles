@@ -41,6 +41,7 @@ for path in \
         fish/functions/reload.fish \
         herdr/config.toml \
         karabiner/karabiner.json \
+        lazygit/config.yml \
         legcord/storage/settings.json \
         mise/mise.toml \
         agents/skill-lock.json

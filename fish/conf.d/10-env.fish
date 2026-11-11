@@ -19,6 +19,10 @@ end
 set -q EDITOR
 and set -gx VISUAL $EDITOR
 
+# lazygit reads ~/Library/Application Support/lazygit on macOS unless
+# XDG_CONFIG_HOME is set; point it at the tracked config instead.
+set -gx LG_CONFIG_FILE $HOME/.config/lazygit/config.yml
+
 # fish 4.1+ queries the terminal (DA1) at startup. Harness ptys (Claude Code,
 # T3 Code) never answer, so every spawn stalls 10s and warns. The flag is read
 # at startup, so it must be universal; this makes the setting idempotent.

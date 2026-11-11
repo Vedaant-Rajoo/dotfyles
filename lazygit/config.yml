@@ -1,0 +1,42 @@
+# Read through LG_CONFIG_FILE, set in fish/conf.d/10-env.fish; lazygit keeps
+# its state.yml in its own macOS config directory.
+gui:
+  nerdFontsVersion: "3"
+  # Catppuccin Mocha (blue accent), matching the Ghostty theme;
+  # from github.com/catppuccin/lazygit themes-mergable/mocha/blue.yml.
+  theme:
+    activeBorderColor:
+      - '#89b4fa'
+      - bold
+    inactiveBorderColor:
+      - '#a6adc8'
+    searchingActiveBorderColor:
+      - '#f9e2af'
+    optionsTextColor:
+      - '#89b4fa'
+    selectedLineBgColor:
+      - '#313244'
+    inactiveViewSelectedLineBgColor:
+      - '#6c7086'
+    cherryPickedCommitFgColor:
+      - '#89b4fa'
+    cherryPickedCommitBgColor:
+      - '#45475a'
+    markedBaseCommitFgColor:
+      - '#89b4fa'
+    markedBaseCommitBgColor:
+      - '#f9e2af'
+    unstagedChangesColor:
+      - '#f38ba8'
+    defaultFgColor:
+      - '#cdd6f4'
+    authorColors:
+      '*': '#b4befe'
+git:
+  # Delta takes its syntax theme and line numbers from git/config; side by side
+  # only when the diff view is wide enough. Press | to cycle to git's raw diff.
+  diffRenderers:
+    - command: delta --{{colorScheme}} --paging=never {{if gt .width 160}}--side-by-side{{end}}
+      name: delta
+    - type: rawGit
+      name: default

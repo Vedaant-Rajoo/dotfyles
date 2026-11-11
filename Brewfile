@@ -30,6 +30,7 @@ brew "zoxide"
 
 # Git and repository tooling
 brew "gh"
+brew "git-delta"
 brew "gitleaks"
 brew "lazygit"
 
