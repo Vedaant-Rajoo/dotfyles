@@ -2,6 +2,7 @@
 # its state.yml in its own macOS config directory.
 gui:
   nerdFontsVersion: "3"
+  mouseEvents: false
   # Catppuccin Mocha (blue accent), matching the Ghostty theme;
   # from github.com/catppuccin/lazygit themes-mergable/mocha/blue.yml.
   theme:
