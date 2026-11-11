@@ -52,8 +52,6 @@ brew "gofumpt"
 brew "goimports"
 brew "ruff"
 brew "shellcheck"
-brew "shfmt"
-brew "stylua"
 
 # Editors and terminal workflow
 brew "herdr"

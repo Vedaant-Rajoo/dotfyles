@@ -1,5 +1,5 @@
--- Mason owns these tools; stylua and shfmt come from Homebrew, rust-analyzer
--- from rustup (see the ownership table in README.md).
+-- Mason owns these tools; rust-analyzer comes from rustup (see the ownership
+-- table in README.md).
 require("mason").setup()
 require("mason-tool-installer").setup({
 	ensure_installed = {
@@ -12,6 +12,8 @@ require("mason-tool-installer").setup({
 		"prettier",
 		"prettierd",
 		"oxfmt",
+		"stylua",
+		"shfmt",
 	},
 	run_on_start = true,
 	auto_update = false,
