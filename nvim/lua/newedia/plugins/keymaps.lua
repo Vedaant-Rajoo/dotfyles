@@ -181,3 +181,18 @@ map("n", "[c", function()
 		MiniDiff.goto_hunk("prev")
 	end
 end, { desc = "Previous hunk" })
+
+-- Git: diff view
+map("n", "<leader>dv", function()
+	-- shortcut: codediff exposes no public "is open" API, so this uses its
+	-- lifecycle module; revisit if an update moves it.
+	local lifecycle = require("codediff.ui.lifecycle")
+	local tab = vim.api.nvim_get_current_tabpage()
+	if lifecycle.get_session(tab) then
+		lifecycle.close(tab)
+	else
+		vim.cmd("CodeDiff")
+	end
+end, { desc = "Toggle diff view" })
+map("n", "<leader>dh", "<cmd>CodeDiff history %<cr>", { desc = "File history" })
+map("n", "<leader>dH", "<cmd>CodeDiff history<cr>", { desc = "Repo history" })
