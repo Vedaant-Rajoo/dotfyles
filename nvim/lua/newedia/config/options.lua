@@ -51,6 +51,22 @@ opt.foldmethod = "expr"
 opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
 opt.foldlevel = 99
 
+local diagnostic_icons = Newedia.icons.diagnostics
+vim.diagnostic.config({
+	underline = true,
+	update_in_insert = false,
+	severity_sort = true,
+	virtual_text = { prefix = "●", source = "if_many" },
+	signs = {
+		text = {
+			[vim.diagnostic.severity.ERROR] = diagnostic_icons.ERROR,
+			[vim.diagnostic.severity.WARN] = diagnostic_icons.WARN,
+			[vim.diagnostic.severity.INFO] = diagnostic_icons.INFO,
+			[vim.diagnostic.severity.HINT] = diagnostic_icons.HINT,
+		},
+	},
+})
+
 -- Experimental 0.12 message UI. Typed commands answer in the cmdline; a typed
 -- trigger wins over the message kind.
 require("vim._core.ui2").enable({
