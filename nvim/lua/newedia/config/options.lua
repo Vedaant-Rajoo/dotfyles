@@ -30,3 +30,15 @@ opt.showmatch = true
 opt.matchtime = 2
 opt.title = true
 opt.fillchars:append({ diff = "╱" })
+
+opt.ignorecase = true
+opt.smartcase = true
+opt.path:append("**")
+opt.wildmode = "longest:full,full"
+opt.wildignore:append({ "*/node_modules/*", "*.o", "*.obj", "*.pyc", "*.class", "*.jar" })
+opt.swapfile = false
+opt.writebackup = false
+opt.undofile = true
+opt.updatetime = 300
+opt.timeoutlen = 500
+opt.ttimeoutlen = 0
