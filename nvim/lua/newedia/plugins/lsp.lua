@@ -29,4 +29,9 @@ vim.lsp.config("*", {
 	},
 })
 
+-- Use the project's TypeScript when it has one, so errors match its tsc build.
+vim.lsp.config("vtsls", {
+	settings = { vtsls = { autoUseWorkspaceTsdk = true } },
+})
+
 vim.lsp.enable({ "eslint", "oxlint", "lua_ls", "cssls", "vtsls", "tailwindcss", "rust_analyzer" })
