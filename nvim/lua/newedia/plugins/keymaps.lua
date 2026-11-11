@@ -104,3 +104,61 @@ map("n", "<leader>f", function()
 	require("conform").format({ lsp_format = "fallback" })
 end, { desc = "Format buffer" })
 map("n", "<leader>cl", "<cmd>checkhealth vim.lsp<cr>", { desc = "LSP info" })
+
+-- Git: signs and blame
+local gitsigns = require("gitsigns")
+
+-- The popup's own `q` only works inside it, so while it is open `q` in the
+-- source buffer closes it too, then the mapping removes itself.
+map("n", "<leader>gb", function()
+	local buf = vim.api.nvim_get_current_buf()
+	gitsigns.blame_line(nil, function()
+		vim.schedule(function()
+			for _, win in ipairs(vim.api.nvim_list_wins()) do
+				if vim.w[win].gitsigns_preview == "blame" then
+					map("n", "q", function()
+						pcall(vim.api.nvim_win_close, win, true)
+					end, { buffer = buf, nowait = true, desc = "Close blame popup" })
+					vim.api.nvim_create_autocmd("WinClosed", {
+						pattern = tostring(win),
+						once = true,
+						callback = function()
+							pcall(vim.keymap.del, "n", "q", { buffer = buf })
+						end,
+					})
+				end
+			end
+		end)
+	end)
+end, { desc = "Blame line" })
+map("n", "<leader>gB", gitsigns.blame, { desc = "Blame buffer" })
+map("n", "<leader>go", function()
+	local file = vim.api.nvim_buf_get_name(0)
+	local lnum = vim.fn.line(".")
+	local out = vim.system(
+		{ "git", "blame", "--porcelain", "-L", lnum .. "," .. lnum, "--", file },
+		{ cwd = vim.fs.dirname(file), text = true }
+	):wait()
+	local sha, orig_lnum = (out.stdout or ""):match("^(%x+) (%d+)")
+	if out.code ~= 0 or not sha then
+		vim.notify("git blame failed: " .. vim.trim(out.stderr or ""), vim.log.levels.WARN)
+		return
+	end
+	if sha:match("^0+$") then
+		vim.notify("This line isn't committed yet", vim.log.levels.INFO)
+		return
+	end
+	gitsigns.show(sha .. ":%", { open = "tabnew" }, function()
+		vim.schedule(function()
+			pcall(vim.api.nvim_win_set_cursor, 0, { tonumber(orig_lnum), 0 })
+		end)
+	end)
+end, { desc = "Open file at the line's last commit" })
+map("n", "<leader>gs", function()
+	if #(gitsigns.get_hunks() or {}) > 0 then
+		gitsigns.stage_buffer()
+	else
+		gitsigns.reset_buffer_index()
+	end
+end, { desc = "Stage or unstage buffer" })
+map("n", "<leader>gh", gitsigns.stage_hunk, { desc = "Stage or unstage hunk" })
