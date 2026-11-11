@@ -61,3 +61,20 @@ require("lualine").setup({
 		lualine_z = { "location" },
 	},
 })
+
+require("incline").setup({
+	hide = { cursorline = true },
+	render = function(props)
+		local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(props.buf), ":t")
+		if name == "" then
+			name = "[No Name]"
+		end
+		local icon, icon_hl = require("mini.icons").get("file", name)
+		return {
+			{ icon, group = icon_hl },
+			" ",
+			name,
+			vim.bo[props.buf].modified and " [+]" or "",
+		}
+	end,
+})
