@@ -80,7 +80,9 @@ require("incline").setup({
 })
 
 require("snacks").setup({
-	notifier = { enabled = true },
+	-- Hide DEBUG/TRACE, such as tobira's "is remapped" message for every
+	-- custom keymap at startup.
+	notifier = { enabled = true, level = vim.log.levels.INFO },
 	indent = { enabled = true },
 	statuscolumn = { enabled = true },
 	words = { enabled = true },
