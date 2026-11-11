@@ -17,3 +17,7 @@ require("which-key").setup({
 		{ "s", group = "splits" },
 	},
 })
+
+-- Suggests one better command for an inefficient pattern once idle. It has no
+-- releases, so vim.pack tracks main.
+require("tobira").setup()
