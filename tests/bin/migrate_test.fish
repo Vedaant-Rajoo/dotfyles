@@ -1,7 +1,6 @@
 #!/usr/bin/env fish
-# Contracts for bin/migrate and the migrations it ships: each runs once, in
-# order; a failure stays pending and holds back later ones; a new machine is
-# left untouched; an old one loses only what this configuration retired.
+# Contracts for bin/migrate: each migration runs once, in order; a failure
+# stays pending and holds back later ones; an empty queue succeeds.
 # Run: fish tests/bin/migrate_test.fish
 
 set -g repo_root (path resolve (dirname (status filename))/../..)
@@ -76,154 +75,12 @@ assert_equal 64 $migrate_status 'a mistyped option fails with a usage error'
 
 # --- the shipped migrations ------------------------------------------------------
 
+# None ship while the configuration lives on a single machine; bootstrap and
+# bin/u still call the runner, so an empty queue must succeed.
 rm -rf $state
-printf '%s\n' '#!/bin/sh' 'echo "brew $*" >>"'$calls'"' \
-    'case "$1" in' \
-    'list) [ -e "$FIXTURES/brew-list-fails" ] && exit 1; cat "$FIXTURES/brew-list" 2>/dev/null ;;' \
-    'tap) cat "$FIXTURES/brew-tap" 2>/dev/null ;;' \
-    'esac' 'exit 0' >$stubs/brew
-# mise can run every command except those listed in the mise-lacks fixture.
-printf '%s\n' '#!/bin/sh' 'echo "mise $*" >>"'$calls'"' \
-    '[ "$1" = which ] && grep -qx "$2" "$FIXTURES/mise-lacks" 2>/dev/null && exit 1' 'exit 0' >$stubs/mise
-printf '%s\n' '#!/bin/sh' 'echo "npm $*" >>"'$calls'"' >$stubs/npm
-printf '%s\n' '#!/bin/sh' '[ "$1" = list ] && cat "$FIXTURES/mas-list" 2>/dev/null' 'exit 0' >$stubs/mas
-printf '%s\n' '#!/bin/sh' 'echo "sudo $*" >>"'$calls'"' >$stubs/sudo
-chmod +x $stubs/brew $stubs/mise $stubs/npm $stubs/mas $stubs/sudo
-
-function uninstalled
-    string match -rg '^brew uninstall (.*)' <$calls | string split ' ' | sort | string join ' '
-end
-
-function npm_calls
-    string match -r '^npm .*' <$calls
-end
-
-function sudo_calls
-    string match -r '^sudo .*' <$calls
-end
-
-function shipped_pending
-    run_migrate $repo_root/bin/migrate --pending
-    count $migrate_output
-end
-
-set -g shipped (count $repo_root/migrations/*.sh)
-
-# A new machine: none of the retired formulae are installed.
-printf '%s\n' bat fish mise >$fixtures/brew-list
 run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'on a new machine every shipped migration succeeds'
-assert_equal '' "$(uninstalled)" 'on a new machine the migrations uninstall nothing'
-assert_equal '' "$(npm_calls)" 'on a new machine the migrations leave global npm packages alone'
-assert_equal '' "$(sudo_calls)" 'on a new machine the migrations remove no App Store apps'
-assert_equal 0 (shipped_pending) 'on a new machine every shipped migration is recorded as done'
-
-# An old machine whose mise cannot run Bun yet, as when `mise install` failed to
-# resolve bun@latest; mise lists nothing as missing then.
-rm -rf $state
-printf '%s\n' bat bun fnm mise node pnpm prettier prettierd pyenv pyenv-virtualenv >$fixtures/brew-list
-echo bun >$fixtures/mise-lacks
-run_migrate $repo_root/bin/migrate
-assert_equal 1 $migrate_status 'retiring the old managers waits until mise can run every replacement'
-assert_equal '' "$(uninstalled)" 'nothing is uninstalled while a replacement is missing'
-assert_equal $shipped (shipped_pending) 'the waiting migration and every later one stay pending'
-
-# The same machine once mise has the defaults.
-rm -f $fixtures/mise-lacks
-mkdir -p $home/.pyenv/versions/3.14.4 $home/.config/fish/completions
-touch $home/.config/fish/completions/pyenv.fish
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'an old machine finishes every shipped migration once mise is ready'
-assert_equal 'bun fnm pnpm prettier prettierd pyenv pyenv-virtualenv' "$(uninstalled)" \
-    'an old machine loses the retired managers and global prettier, and Homebrew decides about its Node'
-test -d $home/.pyenv/versions/3.14.4
-assert_equal 0 $status 'old Python installs are kept for virtualenvs that point into them'
-test -e $home/.config/fish/completions/pyenv.fish
-assert_equal 1 $status 'the generated pyenv completions are removed'
-
-# Homebrew autoremoves the Node it installed for prettier, so prettier stays
-# until mise can run Node, even where nothing else needs retiring.
-rm -rf $state
-printf '%s\n' node prettier >$fixtures/brew-list
-echo node >$fixtures/mise-lacks
-run_migrate $repo_root/bin/migrate
-assert_equal 1 $migrate_status 'retiring prettier waits until mise can run Node'
-assert_equal '' "$(uninstalled)" 'prettier is kept while mise cannot run Node'
-rm -f $fixtures/mise-lacks
-
-# bin/bootstrap stopped installing the Augment CLI.
-rm -rf $state
-printf '%s\n' mise >$fixtures/brew-list
-mkdir -p $home/.node_modules/lib/node_modules/@augmentcode/auggie
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with the Augment CLI finishes every shipped migration'
-assert_equal 'npm uninstall --global @augmentcode/auggie' "$(npm_calls)" \
-    'a machine with the Augment CLI loses it, and no other global npm package'
-
-# The Brewfile stopped installing Amphetamine and TrashMe 3.
-rm -rf $state
-printf '%s\n' '937984704  Amphetamine  (5.3.2)' '1490879410  TrashMe 3  (3.8)' '497799835  Xcode  (26.0)' >$fixtures/mas-list
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with Amphetamine and TrashMe 3 finishes every shipped migration'
-assert_equal 'sudo mas uninstall 937984704 1490879410' "$(sudo_calls)" \
-    'a machine loses Amphetamine and TrashMe 3, and no other App Store app'
-rm -f $fixtures/mas-list
-
-# The Brewfile stopped installing the apps Vorssaint replaces, and Bartender.
-rm -rf $state
-printf '%s\n' alcove bartender dockdoor hyperkey macs-fan-control vorssaint >$fixtures/brew-list
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with the retired casks finishes every shipped migration'
-assert_equal 'brew uninstall --cask bartender dockdoor hyperkey macs-fan-control' \
-    "$(string match -r '^brew uninstall .*' <$calls)" \
-    'a machine loses the retired casks, and keeps Alcove and Vorssaint'
-
-# The Brewfile stopped installing LinearMouse, which Vorssaint replaces.
-rm -rf $state
-printf '%s\n' linearmouse raycast vorssaint >$fixtures/brew-list
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with LinearMouse finishes every shipped migration'
-assert_equal 'brew uninstall --cask linearmouse' \
-    "$(string match -r '^brew uninstall .*' <$calls)" \
-    'a machine loses LinearMouse, and keeps Raycast and Vorssaint'
-
-# The Brewfile stopped installing AeroSpace, the only cask from its tap.
-rm -rf $state
-printf '%s\n' aerospace raycast >$fixtures/brew-list
-printf '%s\n' mantrakp04/tap nikitabobko/tap >$fixtures/brew-tap
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with AeroSpace finishes every shipped migration'
-assert_equal 'brew uninstall --cask aerospace
-brew untap nikitabobko/tap' "$(string match -r '^brew (?:uninstall|untap) .*' <$calls)" \
-    'a machine loses AeroSpace and its tap, and keeps Raycast and other taps'
-rm -f $fixtures/brew-tap
-
-# The lazy.nvim config was retired; what it installed goes, the user's history stays.
-rm -rf $state
-printf '%s\n' raycast >$fixtures/brew-list
-mkdir -p $home/.local/share/nvim/lazy/lazy.nvim $home/.local/share/nvim/mason/bin \
-    $home/.local/share/nvim/site/parser $home/.local/share/nvim/site/pack/core/opt/kept.nvim \
-    $home/.local/share/nvim/harpoon $home/.local/state/nvim/lazy $home/.local/state/nvim/shada \
-    $home/.cache/nvim/luac $home/.vim/undodir
-run_migrate $repo_root/bin/migrate
-assert_equal 0 $migrate_status 'a machine with the old Neovim config finishes every shipped migration'
-assert_equal 'gone gone gone gone gone' \
-    "$(for p in .local/share/nvim/lazy .local/share/nvim/mason .local/share/nvim/site/parser .local/state/nvim/lazy .cache/nvim
-        test -e $home/$p; and echo kept; or echo gone
-    end | string join ' ')" \
-    'the old plugins, language servers, parsers, and caches are removed'
-assert_equal 'kept kept kept kept' \
-    "$(for p in .local/share/nvim/site/pack/core/opt/kept.nvim .local/share/nvim/harpoon .local/state/nvim/shada .vim/undodir
-        test -e $home/$p; and echo kept; or echo gone
-    end | string join ' ')" \
-    'marks, editing and undo history, and built-in vim.pack plugins are kept'
-
-# When Homebrew cannot report what is installed, nothing is assumed retired.
-rm -rf $state
-touch $fixtures/brew-list-fails
-run_migrate $repo_root/bin/migrate
-assert_equal 1 $migrate_status 'an unreadable Homebrew inventory fails the migration'
-assert_equal $shipped (shipped_pending) 'a migration that could not read Homebrew stays pending'
-rm -f $fixtures/brew-list-fails
+assert_equal 0 $migrate_status 'with no migrations shipped, a run succeeds'
+run_migrate $repo_root/bin/migrate --pending
+assert_equal 1 $migrate_status 'with no migrations shipped, nothing is pending'
 
 harness_exit
