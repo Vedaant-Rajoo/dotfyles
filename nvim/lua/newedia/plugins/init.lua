@@ -1,3 +1,6 @@
--- vim.pack.add({ ... }) installs every plugin here; group files are required below.
+vim.pack.add({
+	"https://github.com/rachartier/tiny-cmdline.nvim",
+})
 
+require("newedia.plugins.ui")
 require("newedia.plugins.keymaps")
