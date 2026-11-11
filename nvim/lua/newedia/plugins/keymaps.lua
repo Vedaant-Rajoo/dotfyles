@@ -196,3 +196,8 @@ map("n", "<leader>dv", function()
 end, { desc = "Toggle diff view" })
 map("n", "<leader>dh", "<cmd>CodeDiff history %<cr>", { desc = "File history" })
 map("n", "<leader>dH", "<cmd>CodeDiff history<cr>", { desc = "Repo history" })
+
+-- Git: lazygit
+map("n", ";g", function()
+	Newedia.lazygit.open()
+end, { desc = "Lazygit" })

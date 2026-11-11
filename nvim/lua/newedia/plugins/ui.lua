@@ -86,4 +86,7 @@ require("snacks").setup({
 	words = { enabled = true },
 	scroll = { enabled = false },
 	picker = { enabled = true },
+	lazygit = {
+		theme = { activeBorderColor = { fg = "WarningMsg", bold = true } },
+	},
 })
