@@ -15,6 +15,7 @@ vim.pack.add({
 	"https://github.com/nvim-mini/mini.pairs",
 	"https://github.com/stevearc/conform.nvim",
 	"https://github.com/lewis6991/gitsigns.nvim",
+	{ src = "https://github.com/craftzdog/mini.diff", version = "feat/grouping" },
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 

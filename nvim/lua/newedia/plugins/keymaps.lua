@@ -162,3 +162,22 @@ map("n", "<leader>gs", function()
 	end
 end, { desc = "Stage or unstage buffer" })
 map("n", "<leader>gh", gitsigns.stage_hunk, { desc = "Stage or unstage hunk" })
+
+-- Git: diff overlay. In diff mode ]c/[c keep their built-in meaning.
+map("n", "<leader>gd", function()
+	MiniDiff.toggle_overlay()
+end, { desc = "Toggle diff overlay" })
+map("n", "]c", function()
+	if vim.wo.diff then
+		vim.cmd.normal({ "]c", bang = true })
+	else
+		MiniDiff.goto_hunk("next")
+	end
+end, { desc = "Next hunk" })
+map("n", "[c", function()
+	if vim.wo.diff then
+		vim.cmd.normal({ "[c", bang = true })
+	else
+		MiniDiff.goto_hunk("prev")
+	end
+end, { desc = "Previous hunk" })
