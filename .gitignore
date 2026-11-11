@@ -31,6 +31,7 @@ fish/fish_variables
 fish/themes/
 fish/functions/*
 !fish/functions/reload.fish
+!fish/functions/q.fish
 fish/conf.d/*
 !fish/conf.d/00-paths.fish
 !fish/conf.d/10-env.fish

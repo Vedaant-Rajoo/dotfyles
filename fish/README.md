@@ -8,6 +8,8 @@ startup modules. For the repository as a whole, see [../README.md](../README.md)
 - `config.fish`: minimal entrypoint
 - `conf.d/`: startup behavior split by concern
 - `functions/`: custom autoloaded functions
+- `q-prompt.md`: system prompt for `q`, which asks Claude (or Codex with `-x`)
+  for a terminal command
 - `fish_plugins`: curated Fisher plugin manifest — the only tracked record of
   which plugins this config uses
 

@@ -39,6 +39,8 @@ for path in \
         fish/conf.d/10-env.fish \
         fish/conf.d/50-mise.fish \
         fish/functions/reload.fish \
+        fish/functions/q.fish \
+        fish/q-prompt.md \
         herdr/config.toml \
         karabiner/karabiner.json \
         lazygit/config.yml \
