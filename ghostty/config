@@ -1,12 +1,6 @@
 # Fonts, underlines
-# font-family = SFMono Nerd Font
-# font-style-italic = Regular Italic
-# font-family = Lilex Nerd Font
-font-family = JetBrainsMono Nerd Font
-font-family-bold = JetBrainsMono Nerd Font
-font-family-italic = JetBrainsMono Nerd Font
-font-family-bold-italic = JetBrainsMono Nerd Font
-font-size = 14
+font-family = Maple Mono NF
+font-size = 16
 font-feature = -calt, -liga, -dlig
 adjust-cell-height = -1
 cursor-style = block

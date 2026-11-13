@@ -73,7 +73,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `migrations/` | One-time scripts that bring an existing machine in line, run by `bin/migrate` |
 | `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
-| `nvim/` | Neovim Lua config with lazy.nvim and pinned plugins |
+| `nvim/` | Neovim config |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
 | [`claude/`](claude/README.md) | Claude settings routed through Caveman; private runtime state is ignored |
 | [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
@@ -82,7 +82,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
 | `legcord/` | Legcord settings, connected by `bin/legcord_link` |
-| leaf configs | `bat/`, `gh/`, `ghostty/`, `karabiner/`, `rectangle-pro/` |
+| leaf configs | `bat/`, `gh/`, `ghostty/`, `karabiner/`, `lazygit/`, `rectangle-pro/` |
 
 ## Ownership
 
@@ -93,11 +93,10 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Default Node, Python, Bun, Go, pnpm | mise | `mise/mise.toml`, as release lines | `bin/u` (`mise install`, `mise upgrade`) |
 | A project's runtime versions | the project | its `mise.toml`, `.nvmrc`, `.node-version`, or `.python-version` | the project |
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
+| Neovim's language servers and formatters | Mason, through mason-tool-installer | `nvim/lua/newedia/plugins/lsp.lua` | `:MasonToolsUpdate` in Neovim, by hand |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
-| Neovim plugins | lazy.nvim | `nvim/lazy-lock.json` | `bin/u` |
-| Neovim language servers | Mason | `nvim/lua/newedia/lazy/lsp.lua` | `bin/u` refreshes the registry; `:Mason` updates packages |
 | Shared agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Leftovers of retired setups on existing machines | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
@@ -115,7 +114,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 
 - [SSH and GitHub](docs/setup.md#ssh-and-github) — key, `gh auth login`, remote.
 - [Git identity](docs/setup.md#git-identity-migration) — retire a shadowing `~/.gitconfig`.
-- [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — first `nvim` run, `~/.wakatime.cfg`.
+- [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — `~/.wakatime.cfg`.
 - [Postplan](docs/setup.md#postplan) — optional `postplan login`.
 - [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
 - Native app auth — [OpenCode](docs/setup.md#opencode),
@@ -142,8 +141,7 @@ fisher update                      # after fish_plugins changes
 brew bundle check --file=Brewfile  # validate the manifest
 ```
 
-Open Neovim and run `:Lazy sync` after `nvim/lazy-lock.json` changes. Never run `brew bundle install`
-merely as a check — it may adopt externally installed applications into Homebrew ownership.
+Never run `brew bundle install` merely as a check — it may adopt externally installed applications into Homebrew ownership.
 
 ## Tests
 

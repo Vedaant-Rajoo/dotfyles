@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 # Taken from: https://github.com/joshmedeski/dotfiles/blob/main/.config/bin/u
 #
-# Whole-machine maintenance: Neovim plugins, Homebrew formulae and casks, App
+# Whole-machine maintenance: Neovim's built-in plugin updates, Homebrew formulae and casks, App
 # Store apps, mise's language runtimes, pending migrations, the Rust toolchain,
 # npm globals, agent skills, and Fisher plugins. Name sections to run only
 # those (`u brew mas`); no arguments run every section. A cask whose app is
@@ -509,9 +509,9 @@ function u_main
     set -l final_status 0
 
     if u_want nvim
-        u_run_logged "$log_file" gum spin --spinner globe --title "💤 nvim maintaining (lazy, mason, treesitter)..." -- nvim --headless "+Lazy! sync" "+MasonUpdate" "+TSUpdate" +qa; or exit $status
+        u_run_logged "$log_file" gum spin --spinner globe --title "💤 nvim updating plugins..." -- nvim --headless "+lua vim.pack.update(nil, { force = true })" +qa; or exit $status
         u_log "$log_file" ""
-        echo "✅ 💤 nvim maintained (lazy, mason, treesitter)"
+        echo "✅ 💤 nvim plugins updated"
     end
 
     if u_want brew

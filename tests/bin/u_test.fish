@@ -613,7 +613,7 @@ u_test_run_main no-outdated
 assert_equal 0 $u_test_main_status 'main succeeds when no packages are outdated'
 assert_equal 1 (u_test_calls '^nvim ') \
     'main performs all Neovim maintenance in one invocation'
-assert_equal 1 (u_test_calls '^nvim --headless +Lazy! sync +MasonUpdate +TSUpdate +qa$') \
+assert_equal 1 (u_test_calls '^nvim --headless +lua vim\.pack\.update(nil, { force = true }) +qa$') \
     'the Neovim invocation carries every maintenance command'
 assert_equal 1 (u_test_calls '^brew update$') \
     'main end-to-end cases use the Homebrew update mock'

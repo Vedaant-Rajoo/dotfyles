@@ -8,7 +8,6 @@ tap "anomalyco/tap"
 tap "driceroland/tap"
 tap "mantrakp04/tap"
 tap "nguyenphutrong/tap"
-tap "nikitabobko/tap"
 
 # Shell
 brew "fish"
@@ -31,6 +30,7 @@ brew "zoxide"
 
 # Git and repository tooling
 brew "gh"
+brew "git-delta"
 brew "gitleaks"
 brew "lazygit"
 
@@ -52,8 +52,6 @@ brew "gofumpt"
 brew "goimports"
 brew "ruff"
 brew "shellcheck"
-brew "shfmt"
-brew "stylua"
 
 # Editors and terminal workflow
 brew "herdr"
@@ -67,6 +65,7 @@ brew "anomalyco/tap/opencode-v2", trusted: true
 cask "codex"
 cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
+cask "font-maple-mono-nf"
 cask "ghostty"
 cask "orbstack"
 cask "nguyenphutrong/tap/quotio"
@@ -75,6 +74,7 @@ cask "t3-code@nightly"
 # Productivity and desktop UI
 cask "alcove"
 cask "karabiner-elements"
+cask "markedit"
 cask "raycast"
 cask "rectangle-pro"
 cask "shottr"

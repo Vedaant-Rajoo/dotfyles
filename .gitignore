@@ -9,7 +9,6 @@ Thumbs.db
 *.backup
 *.orig
 *.tmp
-.99.debug
 
 # --- Backup directories ---
 *-backup*/
@@ -26,13 +25,13 @@ opencode/agents/
 
 # --- Machine-local runtime state ---
 fish/fish_variables
-nvim/tmp/
 
 # --- Fish plugins: Fisher installs into this repo, so ignore its output and
 #     whitelist hand-written config on purpose; see fish/README.md. ---
 fish/themes/
 fish/functions/*
 !fish/functions/reload.fish
+!fish/functions/q.fish
 fish/conf.d/*
 !fish/conf.d/00-paths.fish
 !fish/conf.d/10-env.fish
@@ -89,3 +88,4 @@ herdr/*
 claude/*
 !claude/README.md
 !claude/settings.json
+nvim-pack-lock.json

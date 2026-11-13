@@ -1,0 +1,53 @@
+# Read through LG_CONFIG_FILE, set in fish/conf.d/10-env.fish; lazygit keeps
+# its state.yml in its own macOS config directory.
+gui:
+  nerdFontsVersion: "3"
+  mouseEvents: false
+  # Catppuccin Mocha (blue accent), matching the Ghostty theme;
+  # from github.com/catppuccin/lazygit themes-mergable/mocha/blue.yml.
+  theme:
+    activeBorderColor:
+      - '#89b4fa'
+      - bold
+    inactiveBorderColor:
+      - '#a6adc8'
+    searchingActiveBorderColor:
+      - '#f9e2af'
+    optionsTextColor:
+      - '#89b4fa'
+    selectedLineBgColor:
+      - '#313244'
+    inactiveViewSelectedLineBgColor:
+      - '#6c7086'
+    cherryPickedCommitFgColor:
+      - '#89b4fa'
+    cherryPickedCommitBgColor:
+      - '#45475a'
+    markedBaseCommitFgColor:
+      - '#89b4fa'
+    markedBaseCommitBgColor:
+      - '#f9e2af'
+    unstagedChangesColor:
+      - '#f38ba8'
+    defaultFgColor:
+      - '#cdd6f4'
+    authorColors:
+      '*': '#b4befe'
+git:
+  autoFetch: false
+  # Catppuccin Mocha matches the Neovim colorscheme and the Ghostty theme; delta
+  # 0.20 ships it built in. Press | to cycle to git's raw diff.
+  diffRenderers:
+    - command: delta --dark --paging=never --syntax-theme="Catppuccin Mocha"
+      name: delta
+    - type: rawGit
+      name: default
+os:
+  # Inside Neovim (snacks' lazygit float), `e` quits lazygit, focuses the window
+  # ;g was pressed in, and opens the file there; outside Neovim it runs nvim.
+  # The nvim-remote preset keeps lazygit from suspending only inside Neovim.
+  editPreset: nvim-remote
+  edit: >-
+    begin; if test -z "$NVIM"; nvim -- {{filename}};
+    else; nvim --server "$NVIM" --remote-send "q<Cmd>lua Newedia.lazygit.focus_origin()<CR>";
+    nvim --server "$NVIM" --remote {{filename}}; end; end
