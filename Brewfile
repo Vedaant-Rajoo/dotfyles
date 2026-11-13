@@ -81,7 +81,6 @@ cask "shottr"
 cask "vorssaint"
 cask "wallspace"
 cask "wispr-flow"
-cask "writer"
 
 # Browsers, communication, and networking
 cask "mantrakp04/tap/ardia", trusted: true
