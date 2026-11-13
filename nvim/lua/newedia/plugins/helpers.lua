@@ -8,7 +8,6 @@ require("which-key").setup({
 		{ "s", mode = "n" },
 	},
 	spec = {
-		{ "<leader>a", group = "ai" },
 		{ "<leader>b", group = "buffers" },
 		{ "<leader>c", group = "code" },
 		{ "<leader>d", group = "diff" },

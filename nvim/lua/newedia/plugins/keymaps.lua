@@ -201,3 +201,17 @@ map("n", "<leader>dH", "<cmd>CodeDiff history<cr>", { desc = "Repo history" })
 map("n", ";g", function()
 	Newedia.lazygit.open()
 end, { desc = "Lazygit" })
+
+-- AI: Copilot suggestions. The <M-…> keys need Option as Alt (Ghostty's
+-- macos-option-as-alt = left).
+local function copilot(action)
+	return function()
+		require("copilot.suggestion")[action]()
+	end
+end
+map("i", "<C-l>", copilot("accept"), { desc = "Accept Copilot suggestion" })
+map("i", "<M-l>", copilot("accept_word"), { desc = "Accept Copilot word" })
+map("i", "<M-L>", copilot("accept_line"), { desc = "Accept Copilot line" })
+map("i", "<M-]>", copilot("next"), { desc = "Next Copilot suggestion" })
+map("i", "<M-[>", copilot("prev"), { desc = "Previous Copilot suggestion" })
+map("i", "<C-]>", copilot("dismiss"), { desc = "Dismiss Copilot suggestion" })

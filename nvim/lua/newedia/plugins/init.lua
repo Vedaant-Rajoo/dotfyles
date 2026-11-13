@@ -21,6 +21,7 @@ vim.pack.add({
 	{ src = "https://github.com/folke/which-key.nvim", version = vim.version.range("^3") },
 	"https://github.com/kamegoro/tobira.nvim",
 	"https://github.com/wakatime/vim-wakatime",
+	"https://github.com/zbirenbaum/copilot.lua",
 	"https://github.com/rachartier/tiny-cmdline.nvim",
 })
 
@@ -32,4 +33,5 @@ require("newedia.plugins.completion")
 require("newedia.plugins.formatting")
 require("newedia.plugins.git")
 require("newedia.plugins.helpers")
+require("newedia.plugins.ai")
 require("newedia.plugins.keymaps")
