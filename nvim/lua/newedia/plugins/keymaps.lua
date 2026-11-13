@@ -226,3 +226,24 @@ local function copy_path(modifier)
 end
 map("n", "<leader>yf", copy_path("."), { desc = "Copy relative path with line" })
 map("n", "<leader>yp", copy_path("p"), { desc = "Copy absolute path with line" })
+
+local short_lang = { typescriptreact = "tsx", javascriptreact = "jsx", typescript = "ts", javascript = "js" }
+map("x", "<leader>cc", function()
+	local lines = vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos("."), { type = vim.fn.mode() })
+	local first = math.min(vim.fn.line("v"), vim.fn.line("."))
+	local lang = short_lang[vim.bo.filetype] or vim.bo.filetype
+	local header = ('```%s filename="%s" line=%d'):format(lang, vim.fn.expand("%:."), first)
+	vim.fn.setreg("+", table.concat({ header, table.concat(lines, "\n"), "```" }, "\n"))
+	vim.cmd("normal! \27")
+	vim.notify(("Copied %d line(s) as a code block"):format(#lines))
+end, { desc = "Copy as Markdown code block" })
+
+map("n", "<leader>j", function()
+	local root = vim.fs.root(0, "package.json")
+	if not root then
+		return vim.notify("No package.json found", vim.log.levels.WARN)
+	end
+	local buf = vim.fn.bufadd(root .. "/package.json")
+	vim.fn.bufload(buf)
+	Snacks.win({ buf = buf, width = 0.8, height = 0.8, border = true, keys = { q = "close", ["<Esc>"] = "close" } })
+end, { desc = "Open package.json" })
