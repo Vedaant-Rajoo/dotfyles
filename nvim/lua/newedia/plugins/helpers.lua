@@ -12,6 +12,7 @@ require("which-key").setup({
 		{ "<leader>c", group = "code" },
 		{ "<leader>d", group = "diff" },
 		{ "<leader>g", group = "git" },
+		{ "<leader>y", group = "copy paths" },
 		{ ";", group = "picker" },
 		{ "s", group = "splits" },
 	},

@@ -215,3 +215,14 @@ map("i", "<M-L>", copilot("accept_line"), { desc = "Accept Copilot line" })
 map("i", "<M-]>", copilot("next"), { desc = "Next Copilot suggestion" })
 map("i", "<M-[>", copilot("prev"), { desc = "Previous Copilot suggestion" })
 map("i", "<C-]>", copilot("dismiss"), { desc = "Dismiss Copilot suggestion" })
+
+-- Agents: paths that point an agent at the exact line.
+local function copy_path(modifier)
+	return function()
+		local text = ("%s#L%d"):format(vim.fn.expand("%:" .. modifier), vim.fn.line("."))
+		vim.fn.setreg("+", text)
+		vim.notify("Copied " .. text)
+	end
+end
+map("n", "<leader>yf", copy_path("."), { desc = "Copy relative path with line" })
+map("n", "<leader>yp", copy_path("p"), { desc = "Copy absolute path with line" })
