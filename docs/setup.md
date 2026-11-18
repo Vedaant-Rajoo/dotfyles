@@ -45,24 +45,26 @@ never commit its API key.
 
 ## Moving an existing machine to mise
 
-On a machine bootstrapped before mise owned the language runtimes, run
-`brew install mise` first: `bin/u` upgrades what Homebrew has but installs no
-new Brewfile entries. The next `bin/u` then installs the mise defaults and runs
-the migrations that uninstall fnm, pyenv, pyenv-virtualenv, and Homebrew's Bun,
-pnpm, prettier, and prettierd; Homebrew removes its Node with them unless
-another formula still needs it. A migration waits, and says so, until mise can
-run every replacement. Open a new shell afterwards and check:
+The current machine already uses mise. On an older setup, run `brew install mise` first:
+`bin/u` upgrades existing Homebrew packages but installs no new Brewfile entries.
+It installs mise's declared defaults, but the old retirement migrations no longer
+ship. Before removing an old runtime manager, snapshot its state and verify every
+replacement. Remove only retired packages this repository managed, preserving
+Homebrew's dependency runtimes. Open a new Fish shell and check:
 
 ```bash
 command -s node python3 bun go pnpm   # all in ~/.local/share/mise/shims
 npm ls -g --depth=0                   # globals stay in ~/.node_modules
 ```
 
-The migrations keep `~/.pyenv` and `~/.local/share/fnm`. mise's Python is a
-prebuilt python-build-standalone interpreter rather than pyenv's local build,
-so recreate any virtualenv that points into `~/.pyenv/versions`, then delete
-both directories by hand. Global npm modules with compiled parts need
-`npm rebuild -g` only when the default Node major version changes.
+Keep `~/.pyenv` and `~/.local/share/fnm` while projects still depend on them.
+mise's Python uses python-build-standalone; recreate virtualenvs that point into
+`~/.pyenv/versions` before removing their old interpreter. Remove old runtime
+directories only after verifying they are unused. Global npm modules with
+compiled parts need `npm rebuild -g` when the default Node major version changes.
+
+No migrations ship while this configuration runs on one machine. See the
+[migration policy](../migrations/README.md) before adding any.
 
 A project that pins a version mise has not installed fails with a message
 naming `mise install`; run it in that project. JavaScript projects list
@@ -203,13 +205,13 @@ git config core.hooksPath ~/.config/git/hooks
 
 Two hooks run from there: `pre-commit` scans staged changes with
 `gitleaks protect --staged -v`, and `commit-msg` enforces the scoped commit
-standard in [`git/commit-style.md`](../git/commit-style.md) —
-`<scope>: <description>`, where the scope names a path in the repository — for
-every author, human or agent. That file is the only copy of the rule: the
-repo-root `AGENTS.md` links to it, and the hook prints it with every rejection.
-T3's commit button reads `AGENTS.md` because its writing style stays on
-`repo_conventions`. Before commits that affect credential-adjacent config, also
-run:
+standard in [`git/commit-style.md`](../git/commit-style.md):
+`<scope>: <description>`, where the scope names a path in the repository, for
+every author, human or agent. The standard lives in that file; the hook prints
+it with every rejection. [`AGENTS.md`](../AGENTS.md) directs agents to read it
+and includes a short subject-format summary for T3's commit button, which does
+not expand links. [`CLAUDE.md`](../CLAUDE.md) imports `AGENTS.md`. Before commits
+that affect credential-adjacent config, also run:
 
 ```bash
 gitleaks detect --source . -v

@@ -2,8 +2,8 @@
 # commit-msg — vet every commit message, whoever wrote it, against the scoped
 # commit standard in git/commit-style.md: "<scope>: <description>", where each
 # scope names a path in the repository. The standard's text lives only in that
-# file (AGENTS.md links to it); this hook prints it with every rejection so the
-# author, human or agent, can rewrite the message and retry.
+# file; AGENTS.md directs agents to read it. This hook prints it on rejection
+# so the author, human or agent, can rewrite the message and retry.
 #
 # ~/.config enables it through core.hooksPath (bin/bootstrap); other repos opt
 # in with a hook.scoped-commits config entry (docs/setup.md). The interpreter is

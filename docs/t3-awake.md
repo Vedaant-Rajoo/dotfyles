@@ -93,4 +93,5 @@ been verified:
 2. Move the legacy app bundle to Trash.
 3. Delete the inert `t3-busy` trigger from Amphetamine.
 
-Amphetamine is no longer installed; a migration removes it.
+Amphetamine is no longer in the Brewfile. No removal migration ships with this
+repository.

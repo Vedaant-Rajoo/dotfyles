@@ -71,7 +71,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
 | `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
-| `migrations/` | One-time scripts that bring an existing machine in line, run by `bin/migrate` |
+| `migrations/` | Migration guide; no scripts ship while this setup runs on one machine |
 | `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim config |
@@ -101,8 +101,12 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Upstream agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
 | Ardia browser and computer-use skills | Ardia CLI, through `bin/agent-skills` | Ardia cask in `Brewfile`; bundle in `bin/agent-skills` | Ardia updates and `bin/u` |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
-| Leftovers of retired setups on existing machines | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
+| Migrations for additional machines (none ship yet) | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
 | Credentials, sessions, caches | each machine | not tracked | |
+
+While this setup runs on one machine, snapshot and clean up retired managed state
+directly. Resume migrations only after a second machine is bootstrapped; see
+[migrations/README.md](migrations/README.md).
 
 Homebrew also installs its own Go, Python, and Ruby as dependencies of gofumpt and goimports,
 black and ykman, and CocoaPods. They belong to those formulae; mise's shims come first on `PATH`,
@@ -126,11 +130,11 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
 Shared skills are restored through `bin/agent-skills`; see [agent skills](docs/setup.md#agent-skills).
-Bootstrap does not project shared rules, subagents, or harness hooks. Two agent instruction files apply
-to work in this repository: the repo-root `AGENTS.md`, a link to the [commit standard](git/commit-style.md)
-that T3's commit button reads, and [`CLAUDE.md`](CLAUDE.md), the working rules for this repository.
-Claude Code reads only `CLAUDE.md`, which imports the commit standard; Codex and OpenCode read
-only `AGENTS.md`.
+Bootstrap does not project shared rules, subagents, or harness hooks.
+[`AGENTS.md`](AGENTS.md) holds this repository's working rules and directs agents to the
+[commit standard](git/commit-style.md). It also carries a short subject-format summary
+for T3's commit button, which does not expand links. [`CLAUDE.md`](CLAUDE.md) contains
+only `@AGENTS.md` so Claude Code imports the same rules.
 
 ## Updating
 
@@ -152,7 +156,7 @@ directory, what a bootstrap dry run may touch, that an interrupted update still 
 applications it closed, that a migration runs once and waits for what it needs, which harnesses
 receive skills, and what stays out of commits. Each suite
 runs the real scripts against a sandboxed home and stub commands, so it leaves the machine as it
-was. [`CLAUDE.md`](CLAUDE.md#tests) holds the rules for adding checks.
+was. [`AGENTS.md`](AGENTS.md#tests) holds the rules for adding checks.
 
 The suites print one TAP-style line per check. `tests/run` runs them all and exits non-zero if
 any fails; `tests/run tests/<path>_test.fish` runs only the named ones:
@@ -190,7 +194,7 @@ guards most optional commands; the Brewfile itself is Mac-first by design. For L
 ## Documentation map
 
 - [docs/setup.md](docs/setup.md) — per-machine manual setup after bootstrap.
-- [CLAUDE.md](CLAUDE.md) — working rules for agents changing this repository.
+- [AGENTS.md](AGENTS.md) — working rules for agents changing this repository.
 - [claude/README.md](claude/README.md) — why this repo *is* `~/.claude`.
 - [fish/README.md](fish/README.md) — Fish layout, plugins, and init cache.
 - [docs/t3-awake.md](docs/t3-awake.md) — the T3 Code activity wake hold.
