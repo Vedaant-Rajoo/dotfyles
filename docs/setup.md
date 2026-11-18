@@ -90,10 +90,20 @@ or their launch agent, so the harnesses cannot reach a model until you follow
 
 ## Agent skills
 
-The [skills lock](../agents/skill-lock.json) records the shared skills restored
+The [skills lock](../agents/skill-lock.json) records upstream skills restored
 by bootstrap. Skill files remain machine-local in `~/.agents/skills`.
 `bin/agent-skills` connects the CLI's lock paths to the tracked lock, installs
 missing skills, and links them for the configured agents.
+
+Ardia owns the `ardia` and `cua-driver` skills because their instructions match
+its installed browser and computer-use tools. When the Ardia CLI is available,
+`bin/agent-skills restore` and `update` install that bundle only in
+`~/.agents/skills`, then link Claude Code and OpenCode to those copies.
+Antigravity uses the same shared files. Identical Ardia-managed copies become
+links; modified or unmanaged copies stop the operation for manual reconciliation.
+Ardia's installer preserves these links during app updates. Keep this bundle
+out of the skills CLI lock and install it through `bin/agent-skills`.
+After Ardia first installs its CLI, run `bin/agent-skills restore` to apply this wiring.
 
 To restore skills or add one:
 

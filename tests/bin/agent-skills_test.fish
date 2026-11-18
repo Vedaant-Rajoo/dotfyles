@@ -10,11 +10,12 @@ set -gx MOCK_LOG $root/calls.log
 set -gx MOCK_DIR $root/fixtures
 mkdir -p $HOME $MOCK_DIR $root/bin
 
-# npx and gh are replaced by executables first in PATH; gh serves one tree
+# Installers are replaced by executables first in PATH; gh serves one tree
 # fixture per repository and fails for any repository without one.
 printf '#!/bin/sh\necho "npx $*" >>"$MOCK_LOG"\n' >$root/bin/npx
 printf '#!/bin/sh\necho "gh $*" >>"$MOCK_LOG"\nf="$MOCK_DIR/tree-$(echo "$2" | cut -d/ -f2-3 | tr / _).json"\ntest -e "$f" || exit 1\ncat "$f"\n' >$root/bin/gh
-chmod +x $root/bin/npx $root/bin/gh
+printf '#!/bin/sh\necho "ardia $*" >>"$MOCK_LOG"\ntest ! -e "$MOCK_DIR/ardia-fail" || exit 1\nfor name in ardia cua-driver; do\n  mkdir -p "$HOME/.agents/skills/$name"\n  cp -R "$MOCK_DIR/ardia-pack/$name/." "$HOME/.agents/skills/$name/" || exit 1\ndone\n' >$root/bin/ardia
+chmod +x $root/bin/npx $root/bin/gh $root/bin/ardia
 set -gx PATH $root/bin $PATH
 
 set -g AGENT_SKILLS_TEST_MODE 1
@@ -55,6 +56,81 @@ assert_equal untracked (cat $HOME/.agents/.skill-lock.json.*.bak) 'an untracked 
 agent_skills_link_lock
 assert_equal 1 (count $HOME/.agents/.skill-lock.json.*.bak) 'a correct link is left alone'
 
+# Ardia installs one canonical bundle; each harness reads that same content.
+
+for name in ardia cua-driver
+    mkdir -p $MOCK_DIR/ardia-pack/$name/references
+    printf '%s\n' $name >$MOCK_DIR/ardia-pack/$name/SKILL.md
+    printf '{"vendor":"ardia","skill":"%s"}\n' $name >$MOCK_DIR/ardia-pack/$name/.ardia-skill
+    echo reference >$MOCK_DIR/ardia-pack/$name/references/use.md
+end
+printf '' >$MOCK_LOG
+agent_skills_ardia
+assert_equal 0 $status 'a missing Ardia bundle installs successfully'
+assert_equal 1 (calls '^ardia skills install --target codex$') 'Ardia installs only into the canonical skills directory'
+assert_equal 1 (calls '^ardia ') 'Ardia does not install separate harness copies'
+for directory in $HOME/.claude/skills $HOME/.config/opencode/skills
+    for name in ardia cua-driver
+        assert_equal $HOME/.agents/skills/$name (readlink $directory/$name) "$directory/$name links to its canonical skill"
+        rm $directory/$name
+        cp -R $HOME/.agents/skills/$name $directory/$name
+    end
+end
+agent_skills_link_ardia
+assert_equal 0 $status 'identical vendor copies migrate to links'
+for directory in $HOME/.claude/skills $HOME/.config/opencode/skills
+    for name in ardia cua-driver
+        assert_equal $HOME/.agents/skills/$name (readlink $directory/$name) "$directory/$name no longer duplicates its skill"
+        assert_equal reference (cat $directory/$name/references/use.md) 'sibling resources remain accessible'
+    end
+end
+agent_skills_link_ardia
+assert_equal 0 $status 'linking an already shared Ardia bundle succeeds'
+
+mv $HOME/.claude/skills $root/claude-skills
+ln -s $HOME/.agents/skills $HOME/.claude/skills
+agent_skills_link_ardia
+assert_equal 0 $status 'an existing link of the whole skills directory is preserved'
+for name in ardia cua-driver
+    assert_equal $name (cat $HOME/.agents/skills/$name/SKILL.md) 'a parent-directory alias never deletes canonical content'
+end
+rm $HOME/.claude/skills
+mv $root/claude-skills $HOME/.claude/skills
+
+# Conflicts stop before the vendor installer can overwrite the canonical copy.
+
+rm $HOME/.agents/skills/cua-driver/.ardia-skill
+printf '' >$MOCK_LOG
+agent_skills_ardia 2>/dev/null
+assert_equal 1 $status 'an unmanaged canonical Cua pack is not treated as the bundled version'
+assert_equal cua-driver (cat $HOME/.agents/skills/cua-driver/SKILL.md) 'an unmanaged canonical pack stays intact'
+assert_equal 0 (calls '^ardia ') 'canonical ownership conflicts stop before installing'
+cp $MOCK_DIR/ardia-pack/cua-driver/.ardia-skill $HOME/.agents/skills/cua-driver/.ardia-skill
+
+set -l duplicate $HOME/.config/opencode/skills/ardia
+rm $duplicate
+cp -R $HOME/.agents/skills/ardia $duplicate
+echo custom >$duplicate/SKILL.md
+printf '' >$MOCK_LOG
+agent_skills_ardia 2>/dev/null
+assert_equal 1 $status 'a modified harness copy blocks bundle updates'
+assert_equal custom (cat $duplicate/SKILL.md) 'a modified harness copy is preserved'
+assert_equal 0 (calls '^ardia ') 'the installer does not run after a copy conflict'
+rm -r $duplicate
+cp -R $HOME/.agents/skills/ardia $duplicate
+rm $duplicate/.ardia-skill
+agent_skills_link_ardia 2>/dev/null
+assert_equal 1 $status 'an unmarked directory is not adopted'
+test -d $duplicate; and not test -L $duplicate
+assert_equal 0 $status 'an unmarked directory remains intact'
+rm -r $duplicate
+ln -s $root/unrelated $duplicate
+agent_skills_link_ardia 2>/dev/null
+assert_equal 1 $status 'a conflicting symlink is refused'
+assert_equal $root/unrelated (readlink $duplicate) 'a conflicting symlink is preserved'
+rm $duplicate
+agent_skills_link_ardia
+
 # Antigravity: every top-level file is linked; stale links and their emptied
 # directories go, while real files stay.
 
@@ -83,6 +159,11 @@ assert_equal 1 (calls '^npx -y skills@1.7.4 add https://github.com/acme/skills.g
 assert_equal 1 (calls '^npx -y skills@1.7.4 add https://github.com/bob/solo.git -g -a claude-code codex -s solo -y$') \
     'restore installs a missing single-skill source'
 assert_equal 3 (calls '^npx ') 'restore makes one install call per source with missing skills'
+assert_equal 1 (calls '^ardia skills install --target codex$') 'restore includes the Ardia bundle'
+touch $MOCK_DIR/ardia-fail
+agent_skills_restore >/dev/null 2>&1
+assert_equal 1 $status 'restore reports a failed Ardia install'
+rm $MOCK_DIR/ardia-fail
 
 # update: only skills whose folder hash moved are re-installed.
 
@@ -97,6 +178,11 @@ assert_equal 1 (calls '^npx -y skills@1.7.4 add https://github.com/acme/skills.g
 assert_equal 0 (calls '^npx .*bob/solo') 'a root SKILL.md compares against the whole tree'
 assert_equal 1 (grep -c 'local is not a default-branch GitHub source' $root/update.err) \
     'update names skills it cannot check'
+assert_equal 1 (calls '^ardia skills install --target codex$') 'update refreshes the Ardia bundle through its owner'
+touch $MOCK_DIR/ardia-fail
+agent_skills_update >/dev/null 2>&1
+assert_equal 1 $status 'update reports a failed Ardia install'
+rm $MOCK_DIR/ardia-fail
 
 rm $MOCK_DIR/tree-bob_solo.json
 printf '%s\n' '{"sha":"rootX","tree":[]}' >$MOCK_DIR/tree-acme_skills.json

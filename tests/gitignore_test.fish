@@ -23,6 +23,7 @@ for path in \
         claude/projects/project/session.jsonl \
         claude/a-file-a-future-version-invents.json \
         opencode/opencode.json \
+        opencode/skills/ardia \
         github-copilot/apps.json \
         monid/state.json \
         herdr/session.json \

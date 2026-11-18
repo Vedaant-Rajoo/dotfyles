@@ -55,7 +55,8 @@ bin/bootstrap --with-herdr-service  # also start Herdr through brew services
 4. **Runtimes** — the language runtimes in [`mise/mise.toml`](mise/mise.toml) via mise, Rust via
    the official rustup installer, plus the npm tools this config needs, including pinned `postplan`.
 5. **Wiring** — native Claude installation, the shared agent skills listed in
-   [`agents/skill-lock.json`](agents/skill-lock.json), Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
+   [`agents/skill-lock.json`](agents/skill-lock.json) and Ardia's bundled skills when its CLI is available,
+   Legcord settings, the [`dev.newedia.t3-awake`](docs/t3-awake.md)
    LaunchAgent, repo hooks, pending [migrations](migrations/README.md), and the optional
    `--with-defaults` / `--with-herdr-service` steps.
 
@@ -97,7 +98,8 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
-| Shared agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
+| Upstream agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
+| Ardia browser and computer-use skills | Ardia CLI, through `bin/agent-skills` | Ardia cask in `Brewfile`; bundle in `bin/agent-skills` | Ardia updates and `bin/u` |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Leftovers of retired setups on existing machines | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
 | Credentials, sessions, caches | each machine | not tracked | |

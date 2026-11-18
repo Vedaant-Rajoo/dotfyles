@@ -1,15 +1,16 @@
 #!/usr/bin/env fish
-# agent-skills — keep ~/.agents/skills in step with agents/skill-lock.json.
+# agent-skills — restore shared skills and wire the configured agents.
 #
 # The skills CLI (https://skills.sh) owns that lock: `npx skills add -g` records
 # each skill's source and folder hash there. The repository tracks only that
 # install list; skill files stay machine-local and come from their sources.
+# Ardia owns its browser and computer-use skills so they match its installed tools.
 #
 # Usage:
 #   agent-skills link      Point the CLI's lock paths at the tracked lock and
-#                          link every skill into Antigravity.
-#   agent-skills restore   Install every listed skill that is missing.
-#   agent-skills update    Re-install listed skills whose upstream folder changed.
+#                          link shared skills into the configured agents.
+#   agent-skills restore   Install missing listed skills and Ardia's bundled skills.
+#   agent-skills update    Update listed skills and refresh Ardia's bundled skills.
 #
 # `npx skills update -g` is not used: it re-installs with -y and no agent list,
 # which links skills into every agent the CLI detects. Installs here name Claude
@@ -47,6 +48,42 @@ function agent_skills_link_lock
     end
 end
 
+function agent_skills_link_ardia
+    for name in ardia cua-driver
+        set -l canonical $HOME/.agents/skills/$name
+        test -f $canonical/SKILL.md; or continue
+        if test -L $canonical; or not jq -e --arg name $name '.vendor == "ardia" and (.skill // "ardia") == $name' $canonical/.ardia-skill >/dev/null 2>&1
+            echo "agent-skills: refusing unmanaged canonical skill $canonical" >&2
+            return 1
+        end
+        for parent in $HOME/.claude/skills $HOME/.config/opencode/skills
+            set -l destination $parent/$name
+            if test -e $destination; and test (path resolve $destination) = (path resolve $canonical)
+                continue
+            end
+            if test -L $destination
+                echo "agent-skills: refusing to replace conflicting link $destination" >&2
+                return 1
+            else if test -e $destination
+                if not test -f $destination/.ardia-skill; or not jq -e '.vendor == "ardia"' $destination/.ardia-skill >/dev/null; or not diff -qr $canonical $destination >/dev/null
+                    echo "agent-skills: refusing to replace modified or unmanaged skill $destination" >&2
+                    return 1
+                end
+                rm -r $destination; or return 1
+            end
+            mkdir -p $parent; or return 1
+            ln -s $canonical $destination; or return 1
+        end
+    end
+end
+
+function agent_skills_ardia
+    command -q ardia; or return 0
+    agent_skills_link_ardia; or return 1
+    ardia skills install --target codex; or return 1
+    agent_skills_link_ardia
+end
+
 # Antigravity reads ~/.gemini/config/skills/<name>/SKILL.md and may skip
 # symlinked directories, so each skill gets a real directory of file links.
 # Every top-level entry is linked because skills read their sibling files.
@@ -72,6 +109,7 @@ end
 
 function agent_skills_link
     agent_skills_link_lock; or return 1
+    agent_skills_link_ardia; or return 1
     agent_skills_link_antigravity
 end
 
@@ -101,6 +139,7 @@ function agent_skills_restore
         end
     end
 
+    agent_skills_ardia; or set restore_status 1
     agent_skills_link_antigravity; or set restore_status 1
     return $restore_status
 end
@@ -149,6 +188,7 @@ function agent_skills_update
     end
 
     rm -f $tree_file
+    agent_skills_ardia; or set update_status 1
     agent_skills_link_antigravity; or set update_status 1
     return $update_status
 end
