@@ -119,7 +119,7 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
 - Native app auth — [OpenCode](docs/setup.md#opencode),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
-  [Cursor, Codex, Raycast](docs/setup.md#cursor-codex-and-raycast).
+  [Codex and Raycast](docs/setup.md#codex-and-raycast).
 
 Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
 Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).

@@ -63,7 +63,6 @@ brew "anomalyco/tap/opencode-v2", trusted: true
 
 # Developer apps and terminal tools
 cask "codex"
-cask "cursor"
 cask "font-jetbrains-mono-nerd-font"
 cask "font-maple-mono-nf"
 cask "ghostty"

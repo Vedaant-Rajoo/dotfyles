@@ -129,15 +129,11 @@ stay machine-local. On Linux no link is needed — Electron's config directory f
 Legcord is `~/.config/legcord` itself — and the tracked `.gitignore` rules keep
 everything except `storage/settings.json` out of version control there.
 
-## Cursor, Codex, and Raycast
+## Codex and Raycast
 
-The Brewfile installs Cursor, Codex, and Raycast. Install Cursor Agent
-separately if needed, then authenticate it with `cursor-agent login`. Sign in
-to other harnesses using their native flows. Mutable native settings remain
-deliberately untracked:
+The Brewfile installs Codex and Raycast. Sign in using their native flows.
+Mutable native settings remain deliberately untracked:
 
-- Cursor editor/agent settings, MCP configuration, extension list, sessions, and
-  account-backed user rules;
 - Codex `~/.codex/config.toml`, authentication, memories, plugins, and session
   state;
 - Raycast Beta preferences, databases, and downloaded extensions.
@@ -239,7 +235,7 @@ when the standard changes.
 | `opencode/agents/` | Optional machine-local agent definitions; none are installed by bootstrap |
 | `claude/` runtime state (`sessions/`, `projects/`, `plugins/`, `security/`, `history.jsonl`, caches) | Claude Code writes it into the working tree because `~/.claude` links here; only config is tracked — see [claude/README.md](../claude/README.md) |
 | `~/.claude.json` | Stays at the home root: OAuth, per-project state, and user MCP configuration — see [claude/README.md](../claude/README.md) |
-| Harness-native auth/config (`~/.codex`, `~/.cursor`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |
+| Harness-native auth/config (`~/.codex`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |
 | `opencode/opencode.json` | Provider configuration and API credentials |
 | `github-copilot/` | OAuth and Copilot state |
 | `~/.wakatime.cfg` | WakaTime API key |
