@@ -27,6 +27,7 @@ opencode/skills/
 
 # --- Machine-local runtime state ---
 fish/fish_variables
+configstore/update-notifier-*.json
 
 # --- Fish plugins: Fisher installs into this repo, so ignore its output and
 #     whitelist hand-written config on purpose; see fish/README.md. ---
