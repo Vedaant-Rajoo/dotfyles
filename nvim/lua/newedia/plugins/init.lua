@@ -1,5 +1,6 @@
 vim.pack.add({
 	{ src = "https://github.com/catppuccin/nvim", name = "catppuccin" },
+	"https://github.com/brundagejoe/nvim-rex-themes",
 	"https://github.com/nvim-mini/mini.icons",
 	"https://github.com/nvim-lualine/lualine.nvim",
 	"https://github.com/b0o/incline.nvim",

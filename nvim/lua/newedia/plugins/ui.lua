@@ -2,7 +2,26 @@ require("catppuccin").setup({
 	flavour = "mocha",
 	transparent_background = true,
 })
-vim.cmd.colorscheme("catppuccin")
+-- Rex draws the pane background, translucent or not, per interface style.
+-- Leave the background unpainted so Neovim shows whatever the pane shows.
+vim.api.nvim_create_autocmd("ColorScheme", {
+	group = vim.api.nvim_create_augroup("newedia-rex-transparency", { clear = true }),
+	pattern = "rex",
+	callback = function()
+		for _, group in ipairs({ "Normal", "SignColumn", "FoldColumn", "EndOfBuffer", "WinBar", "WinBarNC" }) do
+			local hl = vim.api.nvim_get_hl(0, { name = group })
+			hl.bg = nil
+			vim.api.nvim_set_hl(0, group, hl)
+		end
+	end,
+})
+
+-- Inside Rex, follow its active built-in theme; elsewhere use catppuccin.
+require("rex-themes").setup({
+	fallback = function()
+		vim.cmd.colorscheme("catppuccin")
+	end,
+})
 
 require("mini.icons").setup()
 MiniIcons.mock_nvim_web_devicons()
