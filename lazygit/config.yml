@@ -3,40 +3,39 @@
 gui:
   nerdFontsVersion: "3"
   mouseEvents: false
-  # Catppuccin Mocha (blue accent), matching the Ghostty theme;
-  # from github.com/catppuccin/lazygit themes-mergable/mocha/blue.yml.
+  # Rex's Moss Cathedral theme (rex-themes palette "moss-cathedral").
   theme:
     activeBorderColor:
-      - '#89b4fa'
+      - '#8fd48f'
       - bold
     inactiveBorderColor:
-      - '#a6adc8'
+      - '#52654f'
     searchingActiveBorderColor:
-      - '#f9e2af'
+      - '#cdb35e'
     optionsTextColor:
-      - '#89b4fa'
+      - '#8fd48f'
     selectedLineBgColor:
-      - '#313244'
+      - '#27402a'
     inactiveViewSelectedLineBgColor:
-      - '#6c7086'
+      - '#1a261b'
     cherryPickedCommitFgColor:
-      - '#89b4fa'
+      - '#8fd48f'
     cherryPickedCommitBgColor:
-      - '#45475a'
+      - '#27402a'
     markedBaseCommitFgColor:
-      - '#89b4fa'
+      - '#0f1710'
     markedBaseCommitBgColor:
-      - '#f9e2af'
+      - '#cdb35e'
     unstagedChangesColor:
-      - '#f38ba8'
+      - '#d4756b'
     defaultFgColor:
-      - '#cdd6f4'
+      - '#c6d5c2'
     authorColors:
-      '*': '#b4befe'
+      '*': '#6bb8a0'
 git:
   autoFetch: false
-  # Catppuccin Mocha matches the Neovim colorscheme and the Ghostty theme; delta
-  # 0.20 ships it built in. Press | to cycle to git's raw diff.
+  # delta has no Moss Cathedral theme; Catppuccin Mocha is built into delta
+  # 0.20. Press | to cycle to git's raw diff.
   diffRenderers:
     - command: delta --dark --paging=never --syntax-theme="Catppuccin Mocha"
       name: delta
