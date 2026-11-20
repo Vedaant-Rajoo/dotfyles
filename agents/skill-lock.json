@@ -285,10 +285,10 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/blader/humanizer.git",
       "skillPath": "SKILL.md",
-      "skillFolderHash": "b48c832f0f809c1b5658edbb838c2521b72f2413",
+      "skillFolderHash": "a32f24407364c74c812b43c15926d638bee1e072",
       "pluginName": "humanizer",
       "installedAt": "2026-10-22T03:46:22.064Z",
-      "updatedAt": "2026-11-10T04:44:08.528Z"
+      "updatedAt": "2026-11-20T12:42:12.299Z"
     },
     "babysit-pr": {
       "source": "t3dotgg/tstack",
