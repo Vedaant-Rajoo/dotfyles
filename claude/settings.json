@@ -17,5 +17,18 @@
   "apiKeyHelper": "/Users/newedia/.config/bin/quotio-client-key",
   "env": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/compat/quotio"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude 2>/dev/null || true'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
