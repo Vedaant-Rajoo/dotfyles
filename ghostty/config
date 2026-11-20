@@ -15,8 +15,8 @@ window-padding-x = 2
 window-padding-balance = true
 theme = Catppuccin Mocha
 # background = #000000
-# background-blur = 30
-# background-opacity = 0.80
+background-blur = 20
+background-opacity = 0.85
 
 # macOS stuff
 macos-option-as-alt = left
