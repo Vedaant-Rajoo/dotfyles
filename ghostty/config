@@ -9,7 +9,7 @@ cursor-style-blink = true
 # Windows, colors and styles
 macos-titlebar-style = hidden
 macos-icon = custom
-macos-custom-icon = ~/.config/ghostty/mocha.icns
+macos-custom-icon = ~/.config/ghostty/black.icns
 window-padding-y = 2
 window-padding-x = 2
 window-padding-balance = true
