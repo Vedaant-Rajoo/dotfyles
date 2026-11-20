@@ -19,7 +19,7 @@
                                         "modifiers": ["left_command", "left_control", "left_option"]
                                     }
                                 ],
-                                "to_if_alone": [{ "key_code": "caps_lock" }]
+                                "to_if_alone": [{ "key_code": "caps_lock", "hold_down_milliseconds": 200 }]
                             }
                         ]
                     },
