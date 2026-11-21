@@ -90,7 +90,6 @@ cask "driceroland/tap/search"
 cask "firefox"
 cask "google-chrome"
 cask "legcord"
-cask "proton-pass"
 cask "tailscale-app"
 
 # Hardware and system utilities
@@ -105,7 +104,6 @@ cask "league-of-legends"
 
 # Mac App Store apps (requires App Store sign-in)
 mas "Hush", id: 1544743900
-mas "Proton Pass for Safari", id: 6502835663
 mas "Tampermonkey", id: 6738342400
 # NepTunes (App Store 1006739057) runs as a TestFlight beta; mas cannot see beta installs, so join it in TestFlight.
 mas "TestFlight", id: 899247664
