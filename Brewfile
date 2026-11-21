@@ -5,6 +5,7 @@
 
 # Taps
 tap "anomalyco/tap"
+tap "cristipufu/tap"
 tap "driceroland/tap"
 tap "mantrakp04/tap"
 tap "nguyenphutrong/tap"
@@ -78,6 +79,7 @@ cask "omniwm"
 cask "raycast"
 cask "rectangle-pro"
 cask "shottr"
+cask "cristipufu/tap/strata", trusted: true
 cask "vorssaint"
 cask "wallspace"
 cask "wispr-flow"

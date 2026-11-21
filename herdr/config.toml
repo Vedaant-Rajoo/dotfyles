@@ -71,8 +71,8 @@ description = "sessionizer"
 [[keys.command]]
 key = "prefix+o"
 type = "shell"
-command = 'open "$HERDR_ACTIVE_PANE_CWD"'
-description = "open folder in Finder"
+command = 'open -a Strata "$HERDR_ACTIVE_PANE_CWD"'
+description = "open folder in Strata"
 
 [[keys.command]]
 key = "prefix+e"

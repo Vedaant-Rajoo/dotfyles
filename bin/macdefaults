@@ -66,6 +66,19 @@ defaults write com.apple.finder "FXPreferredViewStyle" -string "clmv"
 defaults write com.apple.finder "NewWindowTarget" -string "PfHm"
 defaults write com.apple.finder NewWindowTargetPath -string "file://$HOME"
 
+# -------------------------- FILE MANAGER --------------------------
+
+# Strata takes over "Reveal in Finder" and opening folders. macOS rejects the
+# Launch Services API for public.folder, so write the handler directly; it
+# applies at the next login.
+if test -d /Applications/Strata.app
+    defaults write -g NSFileViewer -string dev.strata.app
+    set -l handlers com.apple.LaunchServices/com.apple.launchservices.secure
+    if not defaults read $handlers LSHandlers 2>/dev/null | string match -q '*public.folder*'
+        defaults write $handlers LSHandlers -array-add '{LSHandlerContentType="public.folder";LSHandlerRoleAll="dev.strata.app";}'
+    end
+end
+
 # -------------------------- KILL ALL --------------------------
 
 for app in cfprefsd Dock SystemUIServer Finder

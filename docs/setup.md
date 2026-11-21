@@ -181,7 +181,9 @@ reapply local IPv6/Rosetta preferences if needed.
 ## macOS defaults
 
 `bin/macdefaults` covers selected keyboard, Dock, Finder, screenshot, and
-window-dragging preferences. It is intentionally opt-in because it restarts
+window-dragging preferences. It also makes Strata the file manager for
+"Reveal in Finder" and for opening folders; the folder handler applies at the
+next login. It is intentionally opt-in because it restarts
 Dock, Finder, and related UI services:
 
 ```bash
@@ -191,7 +193,7 @@ fish bin/macdefaults
 ```
 
 It does not attempt to clone every GUI preference. Trackpad, Mission Control,
-hot corners, menu bar, energy, default-app, and many third-party plist settings
+hot corners, menu bar, energy, other default-app, and many third-party plist settings
 remain outside scope.
 
 ## Git hooks and secret scanning
