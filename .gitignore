@@ -75,6 +75,11 @@ karabiner/*
 herdr/*
 !herdr/config.toml
 
+# --- OmniWM: only settings.toml is tracked; the app unpacks its stock bar
+#     code, themes, and shaders into shell/. ---
+omniwm/*
+!omniwm/settings.toml
+
 # --- Claude Code, project-local: generated plan pages. The sensitive
 #     **/.claude runtime paths (projects, sessions, credentials, …) are NOT
 #     listed here: git/ignore — the global excludes file this repo itself

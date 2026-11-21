@@ -31,6 +31,8 @@ for path in \
         herdr/session-snapshots/session-1-1-0.json \
         karabiner/automatic_backups/karabiner_20261026.json \
         legcord/Cookies \
+        omniwm/shell/shell.toml \
+        omniwm/shell/default/widgets/workspaces/init.luau \
         .local/docs/research.md
     assert_equal ignored (ignored $path) "$path stays out of commits"
 end
@@ -47,6 +49,7 @@ for path in \
         lazygit/config.yml \
         legcord/storage/settings.json \
         mise/mise.toml \
+        omniwm/settings.toml \
         agents/skill-lock.json
     assert_equal tracked (ignored $path) "$path can be committed"
 end
