@@ -27,6 +27,7 @@ opencode/skills/
 
 # --- Machine-local runtime state ---
 fish/fish_variables
+flutter/tool_state
 configstore/update-notifier-*.json
 
 # --- Fish plugins: Fisher installs into this repo, so ignore its output and
