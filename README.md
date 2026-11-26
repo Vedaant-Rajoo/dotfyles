@@ -103,6 +103,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Upstream agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
 | Ardia browser and computer-use skills | Ardia CLI, through `bin/agent-skills` | Ardia cask in `Brewfile`; bundle in `bin/agent-skills` | Ardia updates and `bin/u` |
 | AI provider selection and authentication | each harness | native harness settings; credentials remain machine-local | each harness's settings and login flow |
+| Codex quota display through Caveman | this repo; launchd runs the reader | `bin/t3-codex-quota`, `launchd/dev.newedia.t3-codex-quota.plist`; machine-local T3 HTTP source | [quota setup](docs/setup.md#codex-usage-limits-in-t3) |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Migrations for additional machines (none ship yet) | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
 | Credentials, sessions, caches | each machine | not tracked | |

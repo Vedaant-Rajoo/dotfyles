@@ -151,6 +151,60 @@ For OpenCode V2, remove the Caveman `baseURL` overrides and
 Keep login and conversation data. Switching Git branches alone cannot undo
 package, service, or machine-local configuration changes.
 
+### Codex usage limits in T3
+
+T3 currently skips native Codex quota reads when inference uses Caveman's local
+endpoint. `bin/t3-codex-quota` supplies T3's supported HTTP quota source instead.
+It asks the native `codex app-server` for `account/rateLimits/read`, so Codex still
+owns authentication and token refresh. The feed binds to `127.0.0.1:20129`, serves
+only `/quota`, requires a private bearer token, and caches successful reads for
+60 seconds. It does not route inference. Failed reads return an error instead of
+reporting zero usage or returning an expired successful reading.
+
+Verify the native reader before installing its LaunchAgent:
+
+```bash
+bin/t3-codex-quota read
+```
+
+Create its token once; skip creation if the file already exists:
+
+```bash
+install -d -m 700 "$HOME/.local/state/t3-codex-quota"
+test -e "$HOME/.local/state/t3-codex-quota/token" || (
+  umask 077
+  set -C
+  openssl rand -hex 32 > "$HOME/.local/state/t3-codex-quota/token"
+)
+cp launchd/dev.newedia.t3-codex-quota.plist "$HOME/Library/LaunchAgents/"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.newedia.t3-codex-quota.plist"
+```
+
+Merge a `codex-native-quota` entry into `usageLimitSources` in the machine-local
+`~/.t3/userdata/settings.json`, preserving other settings and sources:
+
+```json
+{
+  "kind": "http",
+  "label": "Codex native quota",
+  "url": "http://127.0.0.1:20129/quota",
+  "managementKey": "<contents of ~/.local/state/t3-codex-quota/token>",
+  "enabled": true
+}
+```
+
+Keep that settings file private (`chmod 600`). T3 reloads it automatically. The
+feed's `providerInstanceId: "codex"` connects the windows to the Codex sidebar;
+the Usage page also lists the source. This helper targets the default Codex
+instance and home. If either changes, update the reader and its binding.
+
+After editing the reader, run
+`launchctl kickstart -k "gui/$(id -u)/dev.newedia.t3-codex-quota"`.
+Status codes are logged without headers or account identities in
+`~/.local/state/t3-codex-quota/service.log`. Remove the source and unload its
+LaunchAgent when T3 supports native quotas through Caveman directly. Bootstrap
+does not install this optional quota service.
+
 ### Ponytail
 
 Install Ponytail through each harness's own plugin manager:

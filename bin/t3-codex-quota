@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Read Codex's native quota, or serve it to T3's authenticated HTTP quota source."""
+
+import argparse
+from datetime import datetime, timezone
+import hmac
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+import math
+import os
+from pathlib import Path
+import selectors
+import signal
+import subprocess
+import sys
+import time
+
+RPC_TIMEOUT = 8
+TOKEN = Path.home() / ".local/state/t3-codex-quota/token"
+
+
+def read_quota():
+    # Let Codex own authentication and refresh; never copy or parse its credentials.
+    process = subprocess.Popen(
+        ["codex", "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, start_new_session=True,
+    )
+    pending = bytearray()
+    deadline = time.monotonic() + RPC_TIMEOUT
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+
+    def send(message):
+        process.stdin.write(json.dumps(message).encode() + b"\n")
+        process.stdin.flush()
+
+    def request(request_id, method, params):
+        send({"id": request_id, "method": method, "params": params})
+        while True:
+            while b"\n" in pending:
+                line, _, rest = pending.partition(b"\n")
+                pending[:] = rest
+                message = json.loads(line)
+                if message.get("id") == request_id:
+                    if "error" in message or not isinstance(message.get("result"), dict):
+                        raise RuntimeError("Codex quota request failed")
+                    return message["result"]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise TimeoutError("Codex quota request timed out")
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                raise RuntimeError("Codex closed the quota connection")
+            pending.extend(chunk)
+            if len(pending) > 1048576:
+                raise RuntimeError("Codex quota response is too large")
+
+    try:
+        request(1, "initialize", {
+            "clientInfo": {"name": "t3_codex_quota", "version": "1"},
+        })
+        send({"method": "initialized", "params": {}})
+        result = request(2, "account/rateLimits/read", {})
+    finally:
+        selector.close()
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        process.stdin.close()
+        process.stdout.close()
+
+    limits = (result.get("rateLimitsByLimitId") or {}).get("codex") or result.get("rateLimits") or {}
+    windows = []
+    for name in ("primary", "secondary"):
+        reading = limits.get(name)
+        if reading is None:
+            continue
+        percent = reading.get("usedPercent")
+        if type(percent) not in (int, float) or not math.isfinite(percent) or percent < 0:
+            raise RuntimeError("Codex returned an invalid quota percentage")
+        minutes = reading.get("windowDurationMins")
+        # Pro Lite can put the weekly window in primary; position does not imply duration.
+        if minutes == 10080:
+            kind, label = "weekly", "Weekly"
+        elif type(minutes) in (int, float) and 0 < minutes <= 1440:
+            kind, label = "session", "Session"
+        else:
+            kind, label = "other", name.title()
+        window = {"id": name, "kind": kind, "label": label, "usedPercent": min(100, percent)}
+        reset = reading.get("resetsAt")
+        if reset is not None:
+            if type(reset) not in (int, float) or not math.isfinite(reset) or not 0 <= reset < 253402300800:
+                raise RuntimeError("Codex returned an invalid reset time")
+            window["resetsAt"] = datetime.fromtimestamp(reset, timezone.utc).isoformat().replace("+00:00", "Z")
+        windows.append(window)
+    if not windows:
+        raise RuntimeError("Codex returned no quota windows")
+    return {"version": 1, "accounts": [{
+        "id": "codex", "label": "Codex", "providerInstanceId": "codex", "windows": windows,
+    }]}
+
+
+class QuotaHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        supplied = self.headers.get("Authorization", "").encode()
+        if not hmac.compare_digest(supplied, b"Bearer " + self.server.token):
+            return self.reply(401, {"error": "Unauthorized"})
+        if self.path != "/quota":
+            return self.reply(404, {"error": "Not found"})
+        if time.monotonic() >= self.server.expires_at:
+            try:
+                self.server.feed = read_quota()
+                self.server.expires_at = time.monotonic() + 60
+            except (OSError, ValueError, TypeError, AttributeError, RuntimeError, subprocess.SubprocessError):
+                # Never turn an unreadable account into a zero-usage or stale-success reading.
+                return self.reply(503, {"error": "Codex quota unavailable"})
+        self.reply(200, self.server.feed)
+
+    def reply(self, status, body):
+        data = json.dumps(body, allow_nan=False).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def log_message(self, message, *args):
+        pass
+
+    def log_request(self, code="-", size="-"):
+        print("quota HTTP %s" % code, file=sys.stderr, flush=True)
+
+
+def make_server(token, port=20129):
+    server = HTTPServer(("127.0.0.1", port), QuotaHandler)
+    server.token = token
+    server.expires_at = 0
+    return server
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=("read", "serve"))
+    args = parser.parse_args()
+    if args.mode == "read":
+        print(json.dumps(read_quota(), allow_nan=False))
+    else:
+        token = TOKEN.read_bytes().strip()
+        if len(token) < 32:
+            raise RuntimeError("Quota token must contain at least 32 bytes")
+        with make_server(token) as server:
+            server.serve_forever()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, TypeError, AttributeError, RuntimeError, subprocess.SubprocessError):
+        print("t3-codex-quota: unable to read quota or start service; check Codex login and quota token", file=sys.stderr)
+        sys.exit(1)

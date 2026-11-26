@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>dev.newedia.t3-codex-quota</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>cd "$HOME" &amp;&amp; PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:/usr/bin:/bin" exec "$HOME/.local/share/mise/shims/python3" "$HOME/.config/bin/t3-codex-quota" serve &gt;&gt; "$HOME/.local/state/t3-codex-quota/service.log" 2&gt;&amp;1</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
