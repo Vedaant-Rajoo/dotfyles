@@ -1,6 +1,6 @@
 # Fonts, underlines
 font-family = Maple Mono NF
-font-size = 16
+font-size = 14
 font-feature = -calt, -liga, -dlig
 adjust-cell-height = -1
 cursor-style = block
@@ -13,7 +13,8 @@ macos-custom-icon = ~/.config/ghostty/black.icns
 window-padding-y = 2
 window-padding-x = 2
 window-padding-balance = true
-theme = Catppuccin Mocha
+# Rex's themes, so Ghostty and OmniWM's quake terminal match Rex.
+theme = light:rex-merino-light,dark:rex-moss-cathedral
 # background = #000000
 background-blur = 20
 background-opacity = 0.85

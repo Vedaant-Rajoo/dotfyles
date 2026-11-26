@@ -21,6 +21,10 @@ if command -q trash
     abbr --add -g rm trash
 end
 
+if command -q btop
+    abbr --add -g top btop
+end
+
 abbr --add -g g git
 abbr --add -g ga 'git add'
 abbr --add -g gc 'git commit -v'

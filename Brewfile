@@ -14,6 +14,7 @@ brew "fish"
 
 # Core CLI tools
 brew "bat"
+brew "btop"
 brew "eza"
 brew "fd"
 brew "ffmpeg"
