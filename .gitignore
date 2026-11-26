@@ -24,6 +24,9 @@ opencode/service.json
 opencode/agents/
 # Downloaded skills and links are restored by bin/agent-skills.
 opencode/skills/
+# Native installers own generated plugins; setup lives in docs/setup.md.
+opencode/plugins/
+ponytail/
 
 # --- Machine-local runtime state ---
 fish/fish_variables

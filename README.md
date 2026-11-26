@@ -70,7 +70,7 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `agents/` | Install list of the shared agent skills, restored and updated by `bin/agent-skills` |
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
-| `launchd/` | LaunchAgents for the T3 wake hold and optional 9router quota feed |
+| `launchd/` | LaunchAgent for the T3 wake hold |
 | `migrations/` | Migration guide; no scripts ship while this setup runs on one machine |
 | `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
@@ -94,8 +94,9 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
 | Neovim's language servers and formatters | Mason, through mason-tool-installer | `nvim/lua/newedia/plugins/lsp.lua` | `:MasonToolsUpdate` in Neovim, by hand |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
-| 9router runtime dependencies, provider connections, and local state | 9router | machine-local `~/.9router/` | 9router CLI and dashboard |
-| T3's 9router quota feed | this checkout | `bin/t3-9router-quota` and its LaunchAgent | [quota feed setup](docs/setup.md#9router-quotas-in-t3-code) |
+| Caveman companion binaries, compression proxy, and local state | Caveman CLI | machine-local `~/.caveman/`; CLI in `NPM_GLOBALS` | `bin/u npm` for the CLI; `caveman setup --install` for its runtime |
+| Ponytail plugins | each harness's plugin manager | native plugin settings | each harness's plugin update flow |
+| RTK command hooks and instructions | RTK | native harness settings; CLI in `Brewfile` | `bin/u brew`, then the [RTK init commands](docs/setup.md#rtk) |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
 | Upstream agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
@@ -128,9 +129,12 @@ or application databases. Each step below is written out in [docs/setup.md](docs
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Codex and Raycast](docs/setup.md#codex-and-raycast).
 
-Codex, Claude Code, OpenCode, and Antigravity use their native providers and
-authentication. Bootstrap installs the vanilla 9router npm CLI for optional local
-routing; start it and connect providers as described in [9router](docs/setup.md#9router).
+Codex, Claude Code, OpenCode, and Antigravity use their native authentication.
+Codex and Claude requests pass through Caveman's local compression proxy;
+OpenCode's configured OpenAI, Anthropic, and OpenCode Go routes do too. Its free
+default provider stays direct. Ponytail supplies coding instructions and RTK
+compresses command output. Install their native integrations separately as
+described in [AI harness routing](docs/setup.md#ai-harness-routing).
 Shared skills are restored through `bin/agent-skills`; see [agent skills](docs/setup.md#agent-skills).
 Bootstrap does not project shared rules, subagents, or harness hooks.
 [`AGENTS.md`](AGENTS.md) holds this repository's working rules and directs agents to the

@@ -24,6 +24,8 @@ for path in \
         claude/a-file-a-future-version-invents.json \
         opencode/opencode.json \
         opencode/skills/ardia \
+        opencode/plugins/rtk.ts \
+        ponytail/state.json \
         github-copilot/apps.json \
         monid/state.json \
         herdr/session.json \
@@ -39,6 +41,7 @@ end
 
 for path in \
         claude/settings.json \
+        opencode/opencode.jsonc \
         fish/conf.d/10-env.fish \
         fish/conf.d/50-mise.fish \
         fish/functions/reload.fish \

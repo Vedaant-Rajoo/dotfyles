@@ -236,7 +236,7 @@ export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
 	"localtunnel"
-	"9router"
+	"@caveman-ai/cli@4.2.0"
 )
 NPM_GLOBAL_ENTRIES=()
 
