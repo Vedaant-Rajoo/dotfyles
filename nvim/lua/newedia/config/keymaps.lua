@@ -8,7 +8,6 @@ map({ "n", "x" }, "<leader>p", '"0p', { desc = "Paste the last yank" })
 map("n", "dw", 'vb"_d', { desc = "Delete word backwards without copying" })
 
 map("n", "+", "<C-a>", { desc = "Increment number" })
-map("n", "-", "<C-x>", { desc = "Decrement number" })
 map("n", "<C-a>", "gg<S-v>G", { desc = "Select all" })
 
 map("n", "te", "<cmd>tabedit<cr>", { desc = "New tab" })

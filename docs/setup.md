@@ -43,6 +43,11 @@ migration, `git config --global ...` writes to the tracked file; review
 `~/.wakatime.cfg`; create it through WakaTime's normal authentication flow and
 never commit its API key.
 
+In normal mode, press `-` to browse the current file’s directory in Oil.
+Press `-` again to go up, `Enter` to open an entry, `_` to open Neovim’s
+working directory, or `g?` to see Oil’s keymaps. `Space` then `-` toggles
+a floating Oil window. Use `Ctrl-x` to decrement a number.
+
 ## Moving an existing machine to mise
 
 The current machine already uses mise. On an older setup, run `brew install mise` first:

@@ -29,6 +29,8 @@ map("n", ";h", function()
 	Snacks.picker.git_diff()
 end, { desc = "Git hunks" })
 
+map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
+map("n", "<leader>-", require("oil").toggle_float, { desc = "Oil (float)" })
 map("n", "sf", function()
 	require("oil").open_float(nil, { preview = {} })
 end, { desc = "File explorer" })
