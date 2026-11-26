@@ -94,8 +94,9 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
 | Neovim's language servers and formatters | Mason, through mason-tool-installer | `nvim/lua/newedia/plugins/lsp.lua` | `:MasonToolsUpdate` in Neovim, by hand |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
-| Caveman companion binaries, compression proxy, and local state | Caveman CLI | machine-local `~/.caveman/`; CLI in `NPM_GLOBALS` | `bin/u npm` for the CLI; `caveman setup --install` for its runtime |
+| Caveman companion binaries, compression proxy, voice skills, and local state | Caveman CLI | machine-local `~/.caveman/` and native harness skill directories; CLI in `NPM_GLOBALS` | `bin/u npm` for the CLI; `caveman setup --install` for its runtime; [voice skill install commands](docs/setup.md#ultra-defaults) |
 | Ponytail plugins | each harness's plugin manager | native plugin settings | each harness's plugin update flow |
+| Ponytail and Caveman mode defaults | this repo, loaded by each harness | `ponytail/config.json`, native instruction files, `agents/antigravity-ultra.md`; [setup](docs/setup.md#ultra-defaults) | edit the defaults; restart sessions |
 | RTK command hooks and instructions | RTK | native harness settings; CLI in `Brewfile` | `bin/u brew`, then the [RTK init commands](docs/setup.md#rtk) |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |

@@ -26,7 +26,8 @@ opencode/agents/
 opencode/skills/
 # Native installers own generated plugins; setup lives in docs/setup.md.
 opencode/plugins/
-ponytail/
+ponytail/*
+!ponytail/config.json
 
 # --- Machine-local runtime state ---
 fish/fish_variables
@@ -99,5 +100,6 @@ omniwm/*
 #     config files must be whitelisted here on purpose. ---
 claude/*
 !claude/README.md
+!claude/CLAUDE.md
 !claude/settings.json
 nvim-pack-lock.json

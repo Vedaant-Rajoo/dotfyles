@@ -164,8 +164,49 @@ opencode plugin add @dietrichgebert/ponytail
 ```
 
 Restart sessions and review/trust Ponytail's Codex hooks through `/hooks`.
-Plugin caches and `~/.config/ponytail/` state stay machine-local. Update through
-native plugin managers; these plugins are separate from `agents/skill-lock.json`.
+The tracked `ponytail/config.json` sets the default to `ultra` for Codex, Claude,
+and OpenCode. `/ponytail default ultra` restores that setting through the plugin;
+`/ponytail ultra` changes the current session. `PONYTAIL_DEFAULT_MODE`, if set,
+overrides the file. Plugin caches and other `~/.config/ponytail/` state stay
+machine-local. Update through native plugin managers; these plugins are separate
+from `agents/skill-lock.json`.
+
+### Ultra defaults
+
+Ponytail Ultra questions unnecessary work before implementation. Caveman Ultra
+(`ultracave`) makes replies terse while preserving technical details; it is a
+voice setting, independent of proxy compression and RTK.
+
+Install the voice skill as plain text with Caveman's own CLI:
+
+```bash
+caveman tools skills install ultracave --agent codex --no-pixel
+caveman tools skills install ultracave --agent claude --user --no-pixel
+caveman tools skills install ultracave --dir "$HOME/.config/opencode/skills/ultracave" --no-pixel
+caveman tools skills install ultracave --dir "$HOME/.gemini/config/skills/ultracave" --no-pixel
+```
+
+The tracked `claude/CLAUDE.md` and `opencode/AGENTS.md` select that skill at session
+start. In the machine-local `~/.codex/AGENTS.md`, preserve existing instructions
+and add:
+
+```markdown
+At the start of each session, read `~/.codex/skills/ultracave/SKILL.md` and use Caveman Ultra
+(`ultracave`) for replies. Keep it active until the user changes or stops the mode.
+```
+
+For Antigravity, link the tracked rule after installing Ponytail and the voice
+skill. Preserve any existing rule at the destination before replacing it:
+
+```bash
+mkdir -p "$HOME/.gemini/config/rules"
+ln -s "$HOME/.config/agents/antigravity-ultra.md" "$HOME/.gemini/config/rules/ultra.md"
+```
+
+These native instructions persist the voice without adding a second Caveman
+hook. Caveman's `~/.config/caveman/config.json` voice default is read by its
+separate voice hooks, which this proxy setup does not install. User mode changes
+still apply for the session. Restart existing sessions to load the defaults.
 
 ### RTK
 
@@ -196,9 +237,10 @@ agy plugin list
 agy mcp list
 ```
 
-Restart Antigravity after installation. Invoke `/ponytail` for its coding rules;
-its Antigravity package supplies skills rather than the persistent lifecycle
-mode used by Codex and Claude. RTK rewrites supported commands automatically.
+Restart Antigravity after installation. Its Ponytail package supplies skills
+rather than the persistent lifecycle mode used by Codex and Claude. The
+[Ultra default rule](#ultra-defaults) selects Ponytail Ultra and Caveman Ultra
+at session start. RTK rewrites supported commands automatically.
 Caveman compression here is an explicit MCP tool call, not an inference proxy.
 The harness still applies its normal tool permissions.
 
@@ -224,6 +266,10 @@ first. These files remain machine-local; keep T3's profile authentication and
 runtime permissions under T3's ownership. Start a new T3 Antigravity session
 after changing them. Plugin updates use `agy`; regenerate RTK's plugin with its
 init command after updating the Homebrew binary.
+
+Verify that the profile's `config/rules` links to `~/.gemini/config/rules`,
+including when the global directory was created after the T3 profile. This
+lets the same Ultra rule load in both standalone Antigravity and T3.
 
 ## Agent skills
 
@@ -382,7 +428,7 @@ when the standard changes.
 | `fish/fish_variables` | Fish runtime/universal variables |
 | Fisher-installed plugin files under `fish/{functions,conf.d,completions,themes}/` | Fisher installs into this repo; `fish/fish_plugins` is the tracked source, and `fisher update` reinstalls them |
 | `opencode/agents/` | Optional machine-local agent definitions; none are installed by bootstrap |
-| `opencode/plugins/`, `ponytail/` | Native installers own the generated plugins and plugin runtime state |
+| `opencode/plugins/`, `ponytail/` except `config.json` | Native installers own the generated plugins and plugin runtime state |
 | `claude/` runtime state (`sessions/`, `projects/`, `plugins/`, `security/`, `history.jsonl`, caches) | Claude Code writes it into the working tree because `~/.claude` links here; only config is tracked — see [claude/README.md](../claude/README.md) |
 | `~/.claude.json` | Stays at the home root: OAuth, per-project state, and user MCP configuration — see [claude/README.md](../claude/README.md) |
 | Harness-native auth/config (`~/.codex`, OpenCode local override) | Credentials, provider settings, permissions, account and conversation state |

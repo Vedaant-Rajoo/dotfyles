@@ -40,8 +40,11 @@ for path in \
 end
 
 for path in \
+        claude/CLAUDE.md \
         claude/settings.json \
+        opencode/AGENTS.md \
         opencode/opencode.jsonc \
+        ponytail/config.json \
         fish/conf.d/10-env.fish \
         fish/conf.d/50-mise.fish \
         fish/functions/reload.fish \
