@@ -84,11 +84,91 @@ Postplan credentials and local draft mappings stay outside the repository.
 
 ## AI harness routing
 
-Codex, Claude Code and OpenCode send inference through the local Caveman proxy
-(`127.0.0.1:8787`), which forwards to Quotio's CLIProxyAPI (`127.0.0.1:8317`).
-Bootstrap installs Claude Code and the Quotio app, but not the Caveman binaries
-or their launch agent, so the harnesses cannot reach a model until you follow
-[Fresh machine](../caveman/README.md#fresh-machine).
+Codex, Claude Code, OpenCode, and Antigravity use their native providers and
+authentication. Bootstrap installs Claude Code; the Brewfile installs Codex
+and OpenCode. No local inference router or proxy credential is required.
+
+Sign in with `codex login`, `claude auth login`, and `opencode auth login`.
+Antigravity uses its own Google sign-in flow, including when launched through
+T3. T3's Codex and Claude providers load their native harness settings.
+Restart existing harness sessions after changing provider settings.
+
+## 9router
+
+Bootstrap installs the upstream `9router` npm CLI in `~/.node_modules`, using
+mise's default Node. `bin/u npm` updates it with the other npm globals. 9router
+maintains its own runtime dependencies, database, provider credentials, and logs
+under `~/.9router/`; keep that directory machine-local.
+
+Start the vanilla router on this machine's loopback interface:
+
+```bash
+9router --host 127.0.0.1 --skip-update
+```
+
+The dashboard is at <http://127.0.0.1:20128/dashboard>, and the API base URL is
+`http://127.0.0.1:20128/v1`. Add `--tray` to run with the menu-bar controls and
+`--no-browser` to suppress opening a browser. Quit through the tray menu. Starting
+it this way does not install a login service; bootstrap only installs the CLI.
+`--skip-update` leaves package updates to `bin/u npm`.
+
+Connect accounts in the dashboard's Providers page before selecting 9router in
+a harness. Installation leaves the harnesses on native providers; routing changes
+are a separate setup step. Upstream installation instructions:
+<https://github.com/decolua/9router/blob/master/gitbook/content/en/getting-started/installation.md>.
+
+Headroom runs as an optional local compression service on port 8787. On this
+machine its CLI and compression extras are installed in mise's Python 3.14.
+9router looks for a Python interpreter beside the Headroom executable when it
+checks or installs extras. To restore the dashboard's links after installing
+Headroom in mise Python, run:
+
+```bash
+ln -s "$HOME/.local/share/mise/installs/python/3.14/bin/headroom" "$HOME/.local/bin/headroom"
+ln -s "$HOME/.local/share/mise/shims/python" "$HOME/.local/bin/python"
+```
+
+Use **Start** in **Setup Headroom** and check `http://localhost:8787/health`.
+**Compression extras** shows the detected `code` and `ml` packages.
+
+### 9router quotas in T3 Code
+
+Open **Usage → Limits** to see native pooled bars for Codex and Claude. T3 reads
+these through its built-in quota hub protocol. The local adapter translates
+9router's primary and secondary Codex windows and Claude's five-hour, weekly,
+and model-specific weekly windows. 9router 0.5.123 omits the Codex window duration,
+so T3 supplies its usual period label. The percentage and reset time come from
+9router. Account email and Codex workspace ID, when available, let T3 count the
+same account once across environments.
+
+The **9router** HTTP source also lists per-account readings, including Antigravity
+model quotas. T3 displays these as text in **Usage → Limits**. Its hub reader
+recognizes only Codex, Claude and Grok. For Codex and Claude thread bars, enable
+**Settings → Appearance → Thread details → Usage limits**.
+
+`bin/t3-9router-quota` reads 9router's local quota API on port 20128 using its
+machine-local CLI authentication and caches polls for two minutes. Both T3 sources
+share this cache and the same local feed token. The adapter serves quota reads
+only. Check the upstream formats when upgrading 9router or T3.
+
+To restore the optional feed after installing and configuring 9router, run
+these commands in Bash or Zsh:
+
+```bash
+mkdir -p -m 700 ~/.local/state/t3-9router-quota
+(umask 077; set -C; openssl rand -hex 32 > ~/.local/state/t3-9router-quota/token) # first setup only
+ln -s ~/.config/launchd/dev.newedia.t3-9router-quota.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/dev.newedia.t3-9router-quota.plist
+pbcopy < ~/.local/state/t3-9router-quota/token
+```
+
+Under **Settings → Providers → Usage providers**, add these sources to the local
+environment. Paste the feed token copied above into each source's key field.
+
+| Action | Name | URL |
+| --- | --- | --- |
+| Add hub | 9router quota hub | `http://127.0.0.1:20129` |
+| Add HTTP source | 9router | `http://127.0.0.1:20129/quotas` |
 
 ## Agent skills
 
@@ -122,11 +202,10 @@ of preserving this setup's selected agents.
 ## OpenCode
 
 OpenCode V2 (`anomalyco/tap/opencode-v2`) uses native V2 config.
-`opencode/opencode.jsonc` routes the `openai` and `anthropic` providers through
-Caveman and registers the `caveman-mcp` recovery server. It reads the client key
-from `~/.local/state/quotio/client-key`, which stays outside the repository; see
-[quotio/README.md](../quotio/README.md). Machine-local `opencode/opencode.json`
-remains ignored for credential-bearing settings.
+`opencode/opencode.jsonc` leaves provider and model selection at their defaults.
+Use `opencode auth login` to connect a provider and `opencode auth list` to
+check connected accounts. Machine-local `opencode/opencode.json` remains
+ignored for credential-bearing settings.
 
 ## Legcord
 

@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Serve 9router readings to T3's HTTP quota source and native quota hub reader."""
+
+import hashlib
+import hmac
+import http.client
+import json
+import math
+import re
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import NamedTuple
+from urllib.parse import quote
+
+ROUTER = Path.home() / ".9router"
+TOKEN = Path.home() / ".local/state/t3-9router-quota/token"
+PORT = 20129
+TTL = 120
+HUB = "/v0/management"
+USAGE_URLS = {
+    "codex": "https://chatgpt.com/backend-api/wham/usage",
+    "claude": "https://api.anthropic.com/api/oauth/usage",
+}
+
+
+class Snapshot(NamedTuple):
+    feed: dict
+    auth_files: dict
+    readings: dict
+
+
+def router_get(path):
+    # Machine-local CLI auth as implemented in 9router/src/cli/api/client.js.
+    # The management credential is only sent to the fixed loopback destination.
+    machine = (ROUTER / "machine-id").read_text().strip()
+    secret = (ROUTER / "auth/cli-secret").read_text().strip()
+    if not machine or not secret:
+        raise ValueError("9router CLI identity unavailable")
+    token = hashlib.sha256((machine + "9r-cli-auth" + secret).encode()).hexdigest()[:16]
+    conn = http.client.HTTPConnection("127.0.0.1", 20128, timeout=12)
+    try:
+        conn.request("GET", path, headers={"x-9r-cli-token": token})
+        response = conn.getresponse()
+        if response.status != 200:
+            raise ValueError("9router quota API unavailable")
+        return json.load(response)
+    finally:
+        conn.close()
+
+
+def number(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def window(key, quota):
+    if not isinstance(quota, dict) or quota.get("unlimited"):
+        return None
+    remaining = quota.get("remainingPercentage")
+    used, total = quota.get("used"), quota.get("total")
+    if number(remaining):
+        percent = 100 - remaining
+    elif number(used) and number(total) and total > 0:
+        percent = 100 * used / total
+    else:
+        return None
+    label = quota.get("displayName") or key
+    kind = next((kind for kind in ("weekly", "monthly", "session") if kind in key.lower()), "other")
+    result = dict(id=key, label=label, kind=kind, usedPercent=round(min(100, max(0, percent)), 2))
+    reset = quota.get("resetAt")
+    if isinstance(reset, str):
+        try:
+            dt = datetime.fromisoformat(reset.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                result["resetsAt"] = dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        except ValueError:
+            pass
+    return result
+
+
+def native_usage(provider, windows, reading):
+    if provider == "codex":
+        rate_limit = {}
+        for w in windows:
+            position = {"session": "primary_window", "weekly": "secondary_window"}.get(w["id"])
+            if position:
+                entry = {"used_percent": w["usedPercent"]}
+                if "resetsAt" in w:
+                    entry["reset_at"] = int(datetime.fromisoformat(w["resetsAt"].replace("Z", "+00:00")).timestamp())
+                rate_limit[position] = entry
+        if rate_limit:
+            usage = {"rate_limit": rate_limit}
+            if isinstance(reading.get("plan"), str):
+                usage["plan_type"] = reading["plan"]
+            return usage
+    if provider == "claude":
+        usage = {}
+        for w in windows:
+            used, reset = w["usedPercent"], w.get("resetsAt")
+            base = {"session (5h)": "five_hour", "weekly (7d)": "seven_day"}.get(w["id"])
+            if base:
+                usage[base] = {"utilization": used, "resets_at": reset}
+            elif model := re.fullmatch(r"weekly (.+) \(7d\)", w["id"]):
+                usage.setdefault("limits", []).append({
+                    "kind": "weekly_scoped", "percent": used, "resets_at": reset,
+                    "scope": {"model": {"display_name": model[1].title()}},
+                })
+        return usage or None
+
+
+def account(row):
+    key, provider = row["id"], row["provider"]
+    reading = router_get("/api/usage/" + quote(key, safe=""))
+    quotas = reading.get("quotas") or {}
+    windows = [w for k, q in quotas.items() if (w := window(k, q))]
+    if not windows:
+        return None
+    # Labels are local connection names. No upstream account email/credential fields are copied.
+    label = provider.title() + (" · " + row["name"] if row.get("name") else "")
+    record = dict(id=key, label=label, windows=windows)
+    instance = {"codex": "codex", "claude": "claudeAgent"}.get(provider)
+    if instance:
+        record["providerInstanceId"] = instance
+    return record, native_usage(provider, windows, reading)
+
+
+def hub_identity(row):
+    key = row["id"]
+    identity = {"id": key, "auth_index": key, "provider": row["provider"]}
+    if row.get("email"):
+        identity["email"] = row["email"]
+    details = row.get("providerSpecificData") or {}
+    workspace = details.get("workspaceId") or details.get("accountId") or details.get("chatgptAccountId")
+    if row["provider"] == "codex" and workspace:
+        # T3 reads the workspace ID from a metadata object at this path.
+        identity["id_token"] = {"chatgpt_account_id": workspace}
+    return identity
+
+
+def snapshot():
+    rows = [r for r in router_get("/api/providers")["connections"] if r.get("isActive") is not False]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [(row, pool.submit(account, row)) for row in rows]
+        accounts = []
+        files = [hub_identity(row) for row in rows if row["provider"] in USAGE_URLS]
+        readings = {}
+        failed = False
+        for row, future in futures:
+            try:
+                entry = future.result()
+                if entry:
+                    record, native = entry
+                    accounts.append(record)
+                    if native:
+                        readings[row["id"], USAGE_URLS[row["provider"]]] = native
+            except (OSError, ValueError, http.client.HTTPException):
+                failed = True
+    if rows and not accounts and failed:
+        raise ValueError("all quota reads failed")
+    return Snapshot({"version": 1, "accounts": accounts}, {"files": files}, readings)
+
+
+class Feed(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path not in ("/quotas", HUB + "/auth-files"):
+            return self.reply(404)
+        if not self.authorized():
+            return
+        current = self.current()
+        if current is not None:
+            self.reply(200, current.feed if self.path == "/quotas" else current.auth_files)
+
+    def do_POST(self):
+        if self.path != HUB + "/api-call":
+            return self.reply(404)
+        if not self.authorized():
+            return
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 8192:
+                return self.reply(400)
+            request = json.loads(self.rfile.read(size))
+        except (ValueError, RecursionError):
+            return self.reply(400)
+        if not isinstance(request, dict):
+            return self.reply(400)
+        key, url = request.get("auth_index"), request.get("url")
+        if (request.get("method") != "GET" or not isinstance(key, str)
+                or url not in USAGE_URLS.values() or "data" in request):
+            return self.reply(404)
+        # A lookup into the snapshot; no part of the requested URL or headers is forwarded.
+        current = self.current()
+        if current is not None:
+            usage = current.readings.get((key, url))
+            if usage is None:
+                return self.reply(404)
+            self.reply(200, {"status_code": 200, "body": json.dumps(usage)})
+
+    def authorized(self):
+        auth = self.headers.get("Authorization", "").encode()
+        if not hmac.compare_digest(auth, self.server.authorization):
+            self.reply(401)
+            return False
+        return True
+
+    def current(self):
+        now = time.monotonic()
+        if self.server.refresh is None or now >= self.server.refresh_after:
+            self.server.refresh = self.server.worker.submit(snapshot)
+            self.server.refresh_after = now + TTL
+        try:
+            return self.server.refresh.result(timeout=8)
+        except TimeoutError:
+            return self.reply(503)
+        except Exception:
+            self.server.refresh_after = min(self.server.refresh_after, now + 10)
+            return self.reply(503)
+
+    def reply(self, status, data=None):
+        body = b"" if data is None else json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        print(f"quota feed HTTP {status}", flush=True)
+
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    if sys.argv[1:] == ["--help"]:
+        print("Usage: t3-9router-quota   # serve T3's quota hub and /quotas on 127.0.0.1:20129")
+        return
+    if sys.argv[1:]:
+        raise SystemExit("unexpected arguments (see --help)")
+    token = TOKEN.read_text().strip()
+    if not token or TOKEN.stat().st_mode & 0o077:
+        raise SystemExit("a private feed token (mode 0600) is required")
+    with HTTPServer(("127.0.0.1", PORT), Feed) as server, ThreadPoolExecutor(max_workers=1) as worker:
+        server.authorization = ("Bearer " + token).encode()
+        server.worker = worker
+        server.refresh = None
+        server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

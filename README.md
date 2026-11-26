@@ -70,15 +70,13 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | `agents/` | Install list of the shared agent skills, restored and updated by `bin/agent-skills` |
 | `bin/` | Bootstrap, application linkers, and maintenance tools |
 | [`docs/`](docs/setup.md) | Per-machine setup checklist and the t3-awake operating guide |
-| `launchd/` | LaunchAgent plists installed by `bin/t3_awake` |
+| `launchd/` | LaunchAgents for the T3 wake hold and optional 9router quota feed |
 | `migrations/` | Migration guide; no scripts ship while this setup runs on one machine |
 | `mise/` | Global mise config: the default language runtimes, and how projects override them |
 | `tests/` | Fish test suites and the shared harness |
 | `nvim/` | Neovim config |
 | [`fish/`](fish/README.md) | Modular Fish config and the Fisher plugin manifest |
-| [`claude/`](claude/README.md) | Claude settings routed through Caveman; private runtime state is ignored |
-| [`caveman/`](caveman/README.md) | Caveman compression proxy: config, launch agent, local patch, verification |
-| [`quotio/`](quotio/README.md) | Quotio routing and prompt-rule notes |
+| [`claude/`](claude/README.md) | Native Claude settings; private runtime state is ignored |
 | `herdr/` | Herdr workspace manager config; replaces tmux |
 | `git/` | Global XDG Git identity, ignore rules, repository hooks (secrets, commit style), and the [commit standard](git/commit-style.md) |
 | `opencode/` | Sanitized OpenCode config; provider credentials remain local |
@@ -96,10 +94,13 @@ The App Store must be signed in before `mas` installs entries; after a reported 
 | Rust toolchains | rustup | `bin/bootstrap` installs the stable toolchain | `bin/u` |
 | Neovim's language servers and formatters | Mason, through mason-tool-installer | `nvim/lua/newedia/plugins/lsp.lua` | `:MasonToolsUpdate` in Neovim, by hand |
 | Global npm CLIs | npm, prefix `~/.node_modules` | `NPM_GLOBALS` in `bin/bootstrap` | `bin/u` |
+| 9router runtime dependencies, provider connections, and local state | 9router | machine-local `~/.9router/` | 9router CLI and dashboard |
+| T3's 9router quota feed | this checkout | `bin/t3-9router-quota` and its LaunchAgent | [quota feed setup](docs/setup.md#9router-quotas-in-t3-code) |
 | Project dependencies, including prettier | npm, pnpm, Bun, pip, Cargo, CocoaPods, LuaRocks | each project's manifest and lockfile | the project |
 | Fish plugins | Fisher | `fish/fish_plugins` | `bin/u` |
 | Upstream agent skills | skills CLI, through `bin/agent-skills` | `agents/skill-lock.json` | `bin/u` |
 | Ardia browser and computer-use skills | Ardia CLI, through `bin/agent-skills` | Ardia cask in `Brewfile`; bundle in `bin/agent-skills` | Ardia updates and `bin/u` |
+| AI provider selection and authentication | each harness | native harness settings; credentials remain machine-local | each harness's settings and login flow |
 | Running apps during cask upgrades | `bin/u` | | quits them with consent, upgrades, reopens them |
 | Migrations for additional machines (none ship yet) | `bin/migrate` | `migrations/` | `bin/bootstrap`, `bin/u` |
 | Credentials, sessions, caches | each machine | not tracked | |
@@ -122,13 +123,14 @@ or application databases. Each step below is written out in [docs/setup.md](docs
 - [Git identity](docs/setup.md#git-identity-migration) — retire a shadowing `~/.gitconfig`.
 - [Neovim and WakaTime](docs/setup.md#neovim-and-wakatime) — `~/.wakatime.cfg`.
 - [Postplan](docs/setup.md#postplan) — optional `postplan login`.
-- [AI harness routing](docs/setup.md#ai-harness-routing) — Quotio accounts and the Caveman proxy.
+- [AI harness routing](docs/setup.md#ai-harness-routing) — native providers and authentication.
 - Native app auth — [OpenCode](docs/setup.md#opencode),
   [Legcord](docs/setup.md#legcord), [OrbStack and Docker](docs/setup.md#orbstack-and-docker),
   [Codex and Raycast](docs/setup.md#codex-and-raycast).
 
-Codex, Claude Code and OpenCode route inference through the local Caveman proxy to Quotio.
-Bootstrap installs Quotio but not Caveman; see [caveman/README.md](caveman/README.md#fresh-machine).
+Codex, Claude Code, OpenCode, and Antigravity use their native providers and
+authentication. Bootstrap installs the vanilla 9router npm CLI for optional local
+routing; start it and connect providers as described in [9router](docs/setup.md#9router).
 Shared skills are restored through `bin/agent-skills`; see [agent skills](docs/setup.md#agent-skills).
 Bootstrap does not project shared rules, subagents, or harness hooks.
 [`AGENTS.md`](AGENTS.md) holds this repository's working rules and directs agents to the

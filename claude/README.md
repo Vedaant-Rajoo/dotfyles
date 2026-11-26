@@ -5,9 +5,8 @@ state. `settings.json` keeps native model selection, permissions, and hook
 behavior. Existing plugins are explicitly disabled; theme and onboarding
 preferences are retained.
 
-Inference goes through the local Caveman proxy: `ANTHROPIC_BASE_URL` is
-`http://127.0.0.1:8787/compat/quotio`, and `apiKeyHelper` reads Quotio's client
-key through `bin/quotio-client-key`. See [caveman/README.md](../caveman/README.md).
+Inference uses Claude Code's native provider and authentication. Sign in with
+`claude auth login`; `claude auth status` reports the active authentication method.
 
 Shared skills are restored separately by `bin/agent-skills`; see
 [agent skills](../docs/setup.md#agent-skills). Bootstrap does not install

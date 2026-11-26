@@ -79,10 +79,8 @@ for installs, links, and updates. Updates can replace installed skill files;
 keep durable customizations in an owned source with a supported update path.
 Built-in and plugin skills retain their native owners.
 
-Codex, Claude Code, and OpenCode route inference through Caveman to Quotio.
-Before changing routing or prompt rules, read [Caveman](caveman/README.md) and
-[Quotio](quotio/README.md). Harnesses own instruction loading, permissions, and
-hooks; router prompts supply preferences. T3 coordinates sessions and delegates.
+Harnesses use their native providers and authentication. Harnesses own
+instruction loading, permissions, and hooks. T3 coordinates sessions and delegates.
 Give delegated work a narrow scope and checkable result; isolate independent
 writers in worktrees or assign one writer per file.
 

@@ -236,6 +236,7 @@ export npm_config_prefix="$HOME/.node_modules"
 NPM_GLOBALS=(
 	"postplan@$POSTPLAN_VERSION"
 	"localtunnel"
+	"9router"
 )
 NPM_GLOBAL_ENTRIES=()
 
@@ -300,13 +301,6 @@ if ! run "$FISH_BIN" "$REPO_ROOT/bin/agent-skills" restore; then
 	warn "agent skill restore failed; run bin/agent-skills restore again"
 fi
 
-printf '\n==> Caveman proxy\n'
-# Claude Code, Codex, and OpenCode route inference through Caveman, which
-# bootstrap does not build. Without it they have no reachable endpoint.
-if ! dry_run && ! curl -fsS --max-time 2 http://127.0.0.1:8787/health/ready >/dev/null 2>&1; then
-	warn "Caveman proxy is not ready; follow caveman/README.md#fresh-machine"
-fi
-
 printf '\n==> Legcord settings\n'
 if ! run "$REPO_ROOT/bin/legcord_link"; then
 	warn "Legcord settings link failed; run bin/legcord_link again after launching Legcord once"
@@ -365,7 +359,7 @@ Bootstrap complete. Remaining machine-local steps:
   - Sign in to the App Store and re-run bootstrap if any mas installs failed.
   - Run `gh auth login`, configure SSH access, and switch the remote to SSH.
   - Add ~/.wakatime.cfg, opencode/opencode.json, and fish/local/ secrets.
-  - Set up Quotio and the Caveman proxy: caveman/README.md#fresh-machine.
+  - Sign in to each AI harness using its native authentication flow.
   - Run `postplan login`.
 
 See README.md and docs/setup.md for the complete setup checklist.

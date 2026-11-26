@@ -8,7 +8,6 @@ tap "anomalyco/tap"
 tap "cristipufu/tap"
 tap "driceroland/tap"
 tap "mantrakp04/tap"
-tap "nguyenphutrong/tap"
 
 # Shell
 brew "fish"
@@ -68,7 +67,6 @@ cask "font-jetbrains-mono-nerd-font"
 cask "font-maple-mono-nf"
 cask "ghostty"
 cask "orbstack"
-cask "nguyenphutrong/tap/quotio"
 cask "t3-code@nightly"
 
 # Productivity and desktop UI
