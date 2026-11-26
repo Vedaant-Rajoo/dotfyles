@@ -5,9 +5,9 @@
 
 # Taps
 tap "anomalyco/tap"
+tap "ardia-browser/tap"
 tap "cristipufu/tap"
 tap "driceroland/tap"
-tap "mantrakp04/tap"
 
 # Shell
 brew "fish"
@@ -84,7 +84,7 @@ cask "wallspace"
 cask "wispr-flow"
 
 # Browsers, communication, and networking
-cask "mantrakp04/tap/ardia", trusted: true
+cask "ardia-browser/tap/ardia@nightly", trusted: true
 cask "driceroland/tap/search"
 cask "firefox"
 cask "google-chrome"
@@ -93,7 +93,6 @@ cask "tailscale-app"
 
 # Hardware and system utilities
 cask "logitech-g-hub"
-cask "music-presence"
 cask "wakatime"
 
 # Games
